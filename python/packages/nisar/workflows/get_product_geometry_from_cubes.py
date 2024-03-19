@@ -8,8 +8,44 @@ from nisar.products.readers import open_product
 import numpy as np
 from scipy.interpolate import RegularGridInterpolator
 
-from get_product_geometry import (geometry_datasets_dict,
-                                  get_dem_interp_method)
+# The import below was commented to make this script standalone
+# from get_product_geometry import (geometry_datasets_dict,
+#                                   get_dem_interp_method)
+
+
+def get_dem_interp_method(dem_interp_method):
+    if (dem_interp_method is None or
+            dem_interp_method == 'BIQUINTIC'):
+        return isce3.core.DataInterpMethod.BIQUINTIC
+    if (dem_interp_method == 'SINC'):
+        return isce3.core.DataInterpMethod.SINC
+    if (dem_interp_method == 'BILINEAR'):
+        return isce3.core.DataInterpMethod.BILINEAR
+    if (dem_interp_method == 'BICUBIC'):
+        return isce3.core.DataInterpMethod.BICUBIC
+    if (dem_interp_method == 'NEAREST'):
+        return isce3.core.DataInterpMethod.NEAREST
+    error_msg = f'ERROR invalid DEM interpolation method: {dem_interp_method}'
+    raise NotImplementedError(error_msg)
+
+
+geometry_datasets_dict = {
+    'interpolated_dem': 'interpolatedDem',
+    'slant_range': 'slantRange',
+    'azimuth_time': 'zeroDopplerAzimuthTime',
+    'incidence_angle': 'incidenceAngle',
+    'los_unit_vector_x': 'losUnitVectorX',
+    'los_unit_vector_y': 'losUnitVectorY',
+    'along_track_unit_vector_x': 'alongTrackUnitVectorX',
+    'along_track_unit_vector_y': 'alongTrackUnitVectorY',
+    'elevation_angle': 'elevationAngle',
+    'ground_track_velocity': 'groundTrackVelocity',
+    'local_incidence_angle': 'localIncidenceAngle',
+    'projection_angle': 'projectionAngle',
+    'simulated_radar_brightness': 'simulatedRadarBrightness',
+    'coordinate_x': 'coordinateX',
+    'coordinate_y': 'coordinateY'
+}
 
 
 def get_parser():

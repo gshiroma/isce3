@@ -6,8 +6,25 @@ import argparse
 from osgeo import gdal
 import isce3
 from nisar.products.readers import open_product
-import numpy as np
 import journal
+
+geometry_datasets_dict = {
+    'interpolated_dem': 'interpolatedDem',
+    'slant_range': 'slantRange',
+    'azimuth_time': 'zeroDopplerAzimuthTime',
+    'incidence_angle': 'incidenceAngle',
+    'los_unit_vector_x': 'losUnitVectorX',
+    'los_unit_vector_y': 'losUnitVectorY',
+    'along_track_unit_vector_x': 'alongTrackUnitVectorX',
+    'along_track_unit_vector_y': 'alongTrackUnitVectorY',
+    'elevation_angle': 'elevationAngle',
+    'ground_track_velocity': 'groundTrackVelocity',
+    'local_incidence_angle': 'localIncidenceAngle',
+    'projection_angle': 'projectionAngle',
+    'simulated_radar_brightness': 'simulatedRadarBrightness',
+    'coordinate_x': 'coordinateX',
+    'coordinate_y': 'coordinateY'
+}
 
 
 def get_parser():
@@ -256,50 +273,56 @@ def get_radar_grid(nisar_product_obj, args):
                 not args.flag_simulated_radar_brightness)
 
     interpolated_dem_raster = _get_raster(
-        args.output_dir, 'interpolatedDem', gdal.GDT_Float32, shape,
-        output_file_list, output_obj_list, args.flag_interpolated_dem or
-        flag_all)
+        args.output_dir, geometry_datasets_dict['interpolated_dem'],
+        gdal.GDT_Float32, shape, output_file_list, output_obj_list,
+        args.flag_interpolated_dem or flag_all)
     slant_range_raster = _get_raster(
-        args.output_dir, 'slantRange', gdal.GDT_Float64, shape,
-        output_file_list, output_obj_list, args.flag_slant_range or flag_all)
+        args.output_dir, geometry_datasets_dict['slant_range'],
+        gdal.GDT_Float64, shape, output_file_list, output_obj_list,
+        args.flag_slant_range or flag_all)
     azimuth_time_raster = _get_raster(
-        args.output_dir, 'zeroDopplerAzimuthTime', gdal.GDT_Float64, shape,
-        output_file_list, output_obj_list, args.flag_azimuth_time or flag_all)
+        args.output_dir, geometry_datasets_dict['azimuth_time'],
+        gdal.GDT_Float64, shape, output_file_list, output_obj_list,
+        args.flag_azimuth_time or flag_all)
     incidence_angle_raster = _get_raster(
-        args.output_dir, 'incidenceAngle', gdal.GDT_Float32, shape,
-        output_file_list, output_obj_list, args.flag_incidence_angle or
-        flag_all)
+        args.output_dir, geometry_datasets_dict['incidence_angle'],
+        gdal.GDT_Float32, shape, output_file_list, output_obj_list,
+        args.flag_incidence_angle or flag_all)
     los_unit_vector_x_raster = _get_raster(
-        args.output_dir, 'losUnitVectorX', gdal.GDT_Float32, shape,
-        output_file_list, output_obj_list, args.flag_los or flag_all)
+        args.output_dir, geometry_datasets_dict['los_unit_vector_x'],
+        gdal.GDT_Float32, shape, output_file_list, output_obj_list,
+        args.flag_los or flag_all)
     los_unit_vector_y_raster = _get_raster(
-        args.output_dir, 'losUnitVectorY', gdal.GDT_Float32, shape,
-        output_file_list, output_obj_list, args.flag_los or flag_all)
+        args.output_dir, geometry_datasets_dict['los_unit_vector_y'],
+        gdal.GDT_Float32, shape, output_file_list, output_obj_list,
+        args.flag_los or flag_all)
     along_track_unit_vector_x_raster = _get_raster(
-        args.output_dir, 'alongTrackUnitVectorX', gdal.GDT_Float32, shape,
-        output_file_list, output_obj_list, args.flag_along_track or flag_all)
+        args.output_dir, geometry_datasets_dict['along_track_unit_vector_x'],
+        gdal.GDT_Float32, shape, output_file_list, output_obj_list,
+        args.flag_along_track or flag_all)
     along_track_unit_vector_y_raster = _get_raster(
-        args.output_dir, 'alongTrackUnitVectorY', gdal.GDT_Float32, shape,
-        output_file_list, output_obj_list, args.flag_along_track or flag_all)
+        args.output_dir, geometry_datasets_dict['along_track_unit_vector_y'],
+        gdal.GDT_Float32, shape, output_file_list, output_obj_list,
+        args.flag_along_track or flag_all)
     elevation_angle_raster = _get_raster(
-        args.output_dir, 'elevationAngle', gdal.GDT_Float32, shape,
-        output_file_list, output_obj_list, args.flag_elevation_angle or
-        flag_all)
+        args.output_dir, geometry_datasets_dict['elevation_angle'],
+        gdal.GDT_Float32, shape, output_file_list, output_obj_list,
+        args.flag_elevation_angle or flag_all)
     ground_track_velocity_raster = _get_raster(
-        args.output_dir, 'groundTrackVelocity', gdal.GDT_Float64, shape,
-        output_file_list, output_obj_list, args.flag_ground_track_velocity or
-        flag_all)
+        args.output_dir, geometry_datasets_dict['ground_track_velocity'],
+        gdal.GDT_Float64, shape, output_file_list, output_obj_list,
+        args.flag_ground_track_velocity or flag_all)
     local_incidence_angle_raster = _get_raster(
-        args.output_dir, 'localIncidenceAngle', gdal.GDT_Float32, shape,
-        output_file_list, output_obj_list, args.flag_local_incidence_angle or
-        flag_all)
+        args.output_dir, geometry_datasets_dict['local_incidence_angle'],
+        gdal.GDT_Float32, shape, output_file_list, output_obj_list,
+        args.flag_local_incidence_angle or flag_all)
     projection_angle_raster = _get_raster(
-        args.output_dir, 'projectionAngle', gdal.GDT_Float32, shape,
-        output_file_list, output_obj_list, args.flag_projection_angle or
-        flag_all)
+        args.output_dir, geometry_datasets_dict['projection_angle'],
+        gdal.GDT_Float32, shape, output_file_list, output_obj_list,
+        args.flag_projection_angle or flag_all)
     simulated_radar_brightness_raster = _get_raster(
-        args.output_dir, 'simulatedRadarBrightness', gdal.GDT_Float32, shape,
-        output_file_list, output_obj_list,
+        args.output_dir, geometry_datasets_dict['simulated_radar_brightness'],
+        gdal.GDT_Float32, shape, output_file_list, output_obj_list,
         args.flag_simulated_radar_brightness or flag_all)
 
     dem_interp_method = get_dem_interp_method(args.dem_interp_method)
@@ -407,38 +430,47 @@ def get_geolocation_grid(nisar_product_obj, args,
                 not args.flag_ground_track_velocity)
 
     interpolated_dem_raster = _get_raster(
-        args.output_dir, 'interpolatedDem', gdal.GDT_Float32, shape,
-        output_file_list, output_obj_list, args.flag_interpolated_dem or
-        flag_all)
+        args.output_dir, geometry_datasets_dict['interpolated_dem'],
+        gdal.GDT_Float32, shape, output_file_list, output_obj_list,
+        args.flag_interpolated_dem or flag_all)
     coordinate_x_raster = _get_raster(
-        args.output_dir, 'coordinateX', gdal.GDT_Float64, shape,
-        output_file_list, output_obj_list,  args.flag_coordinate_x or flag_all)
+        args.output_dir, geometry_datasets_dict['coordinate_x'],
+        gdal.GDT_Float64, shape, output_file_list, output_obj_list,
+        args.flag_coordinate_x or flag_all)
     coordinate_y_raster = _get_raster(
-        args.output_dir, 'coordinateY', gdal.GDT_Float64, shape,
-        output_file_list, output_obj_list, args.flag_coordinate_y or flag_all)
+        args.output_dir, geometry_datasets_dict['coordinate_y'],
+        gdal.GDT_Float64, shape, output_file_list, output_obj_list,
+        args.flag_coordinate_y or flag_all)
     incidence_angle_raster = _get_raster(
-        args.output_dir, 'incidenceAngle', gdal.GDT_Float32, shape,
-        output_file_list, output_obj_list, args.flag_incidence_angle or
+        args.output_dir, geometry_datasets_dict['incidence_angle'],
+        gdal.GDT_Float32, shape, output_file_list, output_obj_list,
+        args.flag_incidence_angle or
         flag_all)
     los_unit_vector_x_raster = _get_raster(
-        args.output_dir, 'losUnitVectorX', gdal.GDT_Float32, shape,
-        output_file_list, output_obj_list, args.flag_los or flag_all)
+        args.output_dir, geometry_datasets_dict['los_unit_vector_x'],
+        gdal.GDT_Float32, shape, output_file_list, output_obj_list,
+        args.flag_los or flag_all)
     los_unit_vector_y_raster = _get_raster(
-        args.output_dir, 'losUnitVectorY', gdal.GDT_Float32, shape,
-        output_file_list, output_obj_list, args.flag_los or flag_all)
+        args.output_dir, geometry_datasets_dict['los_unit_vector_y'],
+        gdal.GDT_Float32, shape, output_file_list, output_obj_list,
+        args.flag_los or flag_all)
     along_track_unit_vector_x_raster = _get_raster(
-        args.output_dir, 'alongTrackUnitVectorX', gdal.GDT_Float32, shape,
-        output_file_list, output_obj_list, args.flag_along_track or flag_all)
+        args.output_dir, geometry_datasets_dict['along_track_unit_vector_x'],
+        gdal.GDT_Float32, shape, output_file_list, output_obj_list,
+        args.flag_along_track or flag_all)
     along_track_unit_vector_y_raster = _get_raster(
-        args.output_dir, 'alongTrackUnitVectorY', gdal.GDT_Float32, shape,
-        output_file_list, output_obj_list, args.flag_along_track or flag_all)
+        args.output_dir, geometry_datasets_dict['along_track_unit_vector_y'],
+        gdal.GDT_Float32, shape, output_file_list, output_obj_list,
+        args.flag_along_track or flag_all)
     elevation_angle_raster = _get_raster(
-        args.output_dir, 'elevationAngle', gdal.GDT_Float32, shape,
-        output_file_list, output_obj_list, args.flag_elevation_angle or
+        args.output_dir, geometry_datasets_dict['elevation_angle'],
+        gdal.GDT_Float32, shape, output_file_list, output_obj_list,
+        args.flag_elevation_angle or
         flag_all)
     ground_track_velocity_raster = _get_raster(
-        args.output_dir, 'groundTrackVelocity', gdal.GDT_Float64, shape,
-        output_file_list, output_obj_list, args.flag_ground_track_velocity or
+        args.output_dir, geometry_datasets_dict['ground_track_velocity'],
+        gdal.GDT_Float64, shape, output_file_list, output_obj_list,
+        args.flag_ground_track_velocity or
         flag_all)
 
     dem_interp_method = get_dem_interp_method(args.dem_interp_method)

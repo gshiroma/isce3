@@ -172,6 +172,24 @@ def get_insar_polarization_code(polarizations):
 
     return None
 
+def get_radar_band(slc_path):
+    '''
+    Get the radar band of the RSLC product given
+    the frequency code
+
+    Parameters
+    ----------
+    slc_path: str
+        Path to the SLC product file
+
+    radar_band: str
+        1 character to indicate the radar band (e.g., L)
+    '''
+    slc = SLC(hdf5file=slc_path)
+
+    with h5py.File(slc_path, 'r', libver='latest', swmr=True) as h:
+        return h[f'{slc.IdentificationPath}/radarBand'][()]
+
 
 def get_insar_granule_id(ref_slc_path, sec_slc_path, partial_granule_id,
                          pol_process, freq='A', product_type='RIFG'):
@@ -203,12 +221,18 @@ def get_insar_granule_id(ref_slc_path, sec_slc_path, partial_granule_id,
     including slant range bandwidths, polarization codes, and zero Doppler start/end times.
 
     Example of InSAR granule ID for RIFG product:
-    'NISAR_L1_PR_RIFG_034_080_A_010_2005_DVDV_A_20230619T000803_20230619T000835_D00340_P_P_J_001.h5'
+    'NISAR_L1_PR_RIFG_034_080_A_010_2005_DVDV_A_20230619T000803_20230619T000835_20230631T000803_20230631T000835_D00340_P_P_J_001.h5'
     '''
-    error_channel = journal.error('granule_id.get_insar_granule_id')
     warning_channel = journal.warning('granule_id.get_insar_granule_id')
 
-    product_level = 'L1' if product_type.startswith('R') else 'L2'
+    radar_band = get_radar_band(ref_slc_path, freq=freq)
+    if radar_band not in ['L', 'S']:
+        err_str = f"The radar band {radar_band} is not a supported NISAR radar band" \
+                  f"Assigning a dummy value of 'A' "
+        warning_channel.log(err_str)
+
+    level = '1' if product_type.startswith('R') else '2'
+    band_level = f'{radar_band}{level}'
     ref_rg_bw = get_slc_range_bandwidth(ref_slc_path, freq=freq)
     sec_rg_bw = get_slc_range_bandwidth(sec_slc_path, freq=freq)
     insar_bw_mode = determine_insar_slant_range_bandwidth(ref_rg_bw, sec_rg_bw)
@@ -234,7 +258,7 @@ def get_insar_granule_id(ref_slc_path, sec_slc_path, partial_granule_id,
     sec_start_time = get_slc_start_end_time(sec_slc_path, time_type='start')
     sec_end_time = get_slc_start_end_time(sec_slc_path, time_type='end')
 
-    info_values = [product_level, product_type, insar_bw_mode, insar_pol_mode,
+    info_values = [band_level, product_type, insar_bw_mode, insar_pol_mode,
                    ref_start_time, ref_end_time, sec_start_time, sec_end_time]
     placeholders = ['{Level}', '{ProductType}', '{MODE}', '{PO}', '{RefStartDateTime}',
                     '{RefEndDateTime}', '{SecStartDateTime}', '{SecEndDateTime}']

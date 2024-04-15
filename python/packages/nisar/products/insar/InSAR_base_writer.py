@@ -802,6 +802,7 @@ class InSARBaseWriter(h5py.File):
         processing_type = primary_exec_cfg.get("processing_type")
         partial_granule_id = primary_exec_cfg.get("partial_granule_id")
         product_version = primary_exec_cfg.get("product_version")
+        crid = primary_exec_cfg.get("composite_release_id")
 
         # Determine processingType
         if processing_type == 'PR':
@@ -815,6 +816,10 @@ class InSARBaseWriter(h5py.File):
         # if it is None, 'JPL' will be applied
         if processing_center is None:
             processing_center = "JPL"
+
+        # If the CRID identifier is None, assign a dummy crid "A10000"
+        if crid is None:
+            crid = "A10000"
 
         # Extract relevant identification from reference and secondary RSLC
         ref_id_group = self.ref_h5py_file_obj[self.ref_rslc.IdentificationPath]
@@ -951,6 +956,11 @@ class InSARBaseWriter(h5py.File):
                 self.product_info.ProductVersion
 
         id_ds_names_to_be_created = [
+            DatasetParams(
+                "compositeReleaseId",
+                np.string_(crid),
+                "Unique version identifier of the science data production system",
+            ),
             DatasetParams(
                 "granuleId",
                 granule_id,
@@ -1095,17 +1105,31 @@ class InSARBaseWriter(h5py.File):
 
     def _get_band_name(self):
         """
-        Get the band name ('L', 'S')
+        Get the band name ('L', 'S'), Raises exception if neither is found.
 
         Returns
         ----------
         str
             'L', 'S'
         """
-        identification_path = f"{self.ref_rslc.IdentificationPath}"
-        radar_band = self.ref_h5py_file_obj[f"{identification_path}/radarBand"][()]
+        freq = "A" if "A" in self.freq_pols else "B"
+        swath_frequency_path = f"{self.ref_rslc.SwathPath}/frequency{freq}/"
+        freq_group = self.ref_h5py_file_obj[swath_frequency_path]
 
-        return radar_band
+        # Center frequency in GHz
+        center_frequency = freq_group["processedCenterFrequency"][()] / 1e9
+
+        # L band if the center frequency is between 1GHz and 2 GHz
+        # S band if the center frequency is between 2GHz and 4 GHz
+        # both bands are defined by the IEEE with the reference:
+        # https://en.wikipedia.org/wiki/L_band
+        # https://en.wikipedia.org/wiki/S_band
+        if (center_frequency >= 1.0) and (center_frequency <= 2.0):
+            return "L"
+        elif (center_frequency > 2.0) and (center_frequency <= 4.0):
+            return "S"
+        else:
+            raise ValueError("Unknown frequency encountered. Not L or S band")
 
     def _get_mixed_mode(self):
         """

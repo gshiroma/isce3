@@ -197,6 +197,11 @@ def read_and_validate_rtc_anf_flags(geocode_dict, flag_apply_rtc):
     save_rtc_anf_gamma0_to_sigma0 = \
         geocode_dict['save_rtc_anf_gamma0_to_sigma0']
 
+    # if flags are not set, assign default values
+    # if RTC is enabled, save RTC ANF gamma0 to sigma0 by default
+    if save_rtc_anf_gamma0_to_sigma0 is None:
+        save_rtc_anf_gamma0_to_sigma0 = flag_apply_rtc
+
     if not flag_apply_rtc and save_rtc_anf:
         error_msg = (
             "the option `save_rtc_anf` is not available"

@@ -181,7 +181,7 @@ def read_and_validate_rtc_anf_flags(geocode_dict, flag_apply_rtc):
         Flag indicating whether the radiometric terrain correction (RTC)
         area normalization factor (ANF) layer should be created.
         This RTC ANF layer provides the conversion factor from
-        from gamma0 backscatter normalization convention 
+        from gamma0 backscatter normalization convention
         to input backscatter normalization convention
         (e.g., beta0 or sigma0-ellipsoid)
     save_rtc_anf_gamma0_to_sigma0: bool
@@ -307,6 +307,7 @@ def _run(cfg, raster_scratch_dir):
     rtc_dict = cfg['processing']['rtc']
     output_terrain_radiometry = rtc_dict['output_type_enum']
     rtc_algorithm = rtc_dict['algorithm_type_enum']
+    input_terrain_radiometry_str = rtc_dict['input_terrain_radiometry']
     input_terrain_radiometry = rtc_dict['input_terrain_radiometry_enum']
     rtc_min_value_db = rtc_dict['rtc_min_value_db']
     rtc_upsampling = rtc_dict['dem_upsampling']
@@ -381,15 +382,18 @@ def _run(cfg, raster_scratch_dir):
 
     if (flag_apply_rtc and output_terrain_radiometry ==
             isce3.geometry.RtcOutputTerrainRadiometry.SIGMA_NAUGHT):
-        output_radiometry_str = "radar backscatter sigma0"
+        output_terrain_radiometry_str = "sigma0"
     elif (flag_apply_rtc and output_terrain_radiometry ==
             isce3.geometry.RtcOutputTerrainRadiometry.GAMMA_NAUGHT):
-        output_radiometry_str = 'radar backscatter gamma0'
+        output_terrain_radiometry_str = 'gamma0'
     elif input_terrain_radiometry == \
             isce3.geometry.RtcInputTerrainRadiometry.BETA_NAUGHT:
-        output_radiometry_str = 'radar backscatter beta0'
+        output_terrain_radiometry_str = 'beta0'
     else:
-        output_radiometry_str = 'radar backscatter sigma0'
+        output_terrain_radiometry_str = 'sigma0'
+
+    output_radiometry_long_name_str = ('radar backscatter'
+                                       f' {output_terrain_radiometry_str}')
 
     # unpack pre-processing
     preprocess = cfg['processing']['pre_process']
@@ -708,7 +712,7 @@ def _run(cfg, raster_scratch_dir):
             # save GCOV imagery
             save_dataset(temp_output.name, hdf5_obj, root_ds,
                          yds, xds, cov_elements_list,
-                         long_name=output_radiometry_str,
+                         long_name=output_radiometry_long_name_str,
                          units='1',
                          valid_min=clip_min,
                          valid_max=clip_max,
@@ -732,7 +736,8 @@ def _run(cfg, raster_scratch_dir):
             if save_rtc_anf:
                 save_dataset(temp_rtc_anf.name, hdf5_obj, root_ds,
                              yds, xds,
-                             'rtcAreaNormalizationFactor',
+                             f'rtc{output_terrain_radiometry_str.title()}to'
+                             f'{input_terrain_radiometry_str.title()}Factor',
                              long_name='RTC area factor',
                              units='1',
                              valid_min=0,
@@ -793,7 +798,7 @@ def _run(cfg, raster_scratch_dir):
 
                 save_dataset(temp_off_diag.name, hdf5_obj, root_ds,
                              yds, xds, off_diag_terms_list,
-                             long_name=output_radiometry_str,
+                             long_name=output_radiometry_long_name_str,
                              units='1',
                              valid_min=clip_min,
                              valid_max=clip_max,

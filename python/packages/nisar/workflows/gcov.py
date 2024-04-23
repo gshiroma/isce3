@@ -734,10 +734,18 @@ def _run(cfg, raster_scratch_dir):
 
             # save rtc
             if save_rtc_anf:
+                # use the input and output terrain radiometry.
+                # (e.g., "rtcGammaToBetaFactor")
+                rtc_anf_dataset_name_input_str = \
+                    input_terrain_radiometry_str.replace('0', '').title()
+                rtc_anf_dataset_name_output_str = \
+                    output_terrain_radiometry_str.replace('0', '').title()
+                rtc_anf_dataset_name = (
+                    f'rtc{rtc_anf_dataset_name_input_str}to'
+                    f'{rtc_anf_dataset_name_output_str}Factor')
                 save_dataset(temp_rtc_anf.name, hdf5_obj, root_ds,
                              yds, xds,
-                             f'rtc{output_terrain_radiometry_str.title()}to'
-                             f'{input_terrain_radiometry_str.title()}Factor',
+                             rtc_anf_dataset_name,
                              long_name='RTC area factor',
                              units='1',
                              valid_min=0,

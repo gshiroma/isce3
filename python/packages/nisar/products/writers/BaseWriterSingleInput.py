@@ -389,7 +389,7 @@ def write_xml_description_to_hdf5(xml_metadata_entry, h5_dataset_obj):
         if (not existing_h5_description and
                 'description' in h5_dataset_obj.attrs.keys()):
             existing_h5_description = h5_dataset_obj.attrs[
-                'description'].tostring().decode()
+                'description'].tobytes().decode()
 
         # update the metadata field description from XML description
         xml_description = annotation_et.text
@@ -816,6 +816,8 @@ class BaseWriterSingleInput():
         # update product root attributes
         annotation_et = specs.find('./product/science/annotation')
         for key, value in annotation_et.items():
+            if key == 'app':
+                continue
             self.output_hdf5_obj.attrs[key] = np.string_(value)
 
         # iterate over all XML specs parameters

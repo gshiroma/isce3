@@ -5,6 +5,7 @@ from typing import Any, List, Optional, Union
 
 import h5py
 import numpy as np
+from isce3.core import crop_external_orbit
 from isce3.core.types import complex32, to_complex32
 from isce3.product import GeoGridParameters, RadarGridParameters
 from nisar.products.readers import SLC
@@ -114,24 +115,27 @@ class InSARBaseWriter(h5py.File):
         self.ref_orbit_epoch = ref_radargrid.ref_epoch
         self.sec_orbit_epoch = sec_radargrid.ref_epoch
 
+        self.ref_orbit = self.ref_rslc.getOrbit()
+        self.sec_orbit = self.sec_rslc.getOrbit()
+
         self.ref_h5py_file_obj = \
             h5py.File(self.ref_h5_slc_file, "r", libver="latest", swmr=True)
 
         self.sec_h5py_file_obj = \
             h5py.File(self.sec_h5_slc_file, "r", libver="latest", swmr=True)
 
-        # Create the orbit object and set their reference epochs
+        # Load the external orbits and crop them
         if self.external_ref_orbit_path is not None:
-            self.ref_orbit = load_orbit_from_xml(self.external_ref_orbit_path,
-                                                 self.ref_orbit_epoch)
-        else:
-            self.ref_orbit = self.ref_rslc.getOrbit()
+            ref_external_orbit = load_orbit_from_xml(self.external_ref_orbit_path,
+                                                     self.ref_orbit_epoch)
+            self.ref_orbit = crop_external_orbit(ref_external_orbit,
+                                                 self.ref_orbit)
 
         if self.external_sec_orbit_path is not None:
-            self.sec_orbit = load_orbit_from_xml(self.external_sec_orbit_path,
-                                                 self.sec_orbit_epoch)
-        else:
-            self.sec_orbit = self.sec_rslc.getOrbit()
+            sec_external_orbit = load_orbit_from_xml(self.external_sec_orbit_path,
+                                                     self.sec_orbit_epoch)
+            self.sec_orbit = crop_external_orbit(sec_external_orbit,
+                                                 self.sec_orbit)
 
     def add_root_attrs(self):
         """
@@ -218,6 +222,7 @@ class InSARBaseWriter(h5py.File):
             ds.attrs['description'] = np.string_(f"{baseline_name.capitalize()}"
                                                  " component of the InSAR baseline")
             ds.attrs['units'] = Units.meter
+            ds.attrs['long_name'] = np.string_(f"{baseline_name.capitalize()} baseline")
 
             # The radarGrid group to attach the x, y, and z coordinates
             if is_geogrid:
@@ -253,7 +258,7 @@ class InSARBaseWriter(h5py.File):
             # Should those also be updated in the crossmul module?
             doppler_centroid_group.copy("dopplerCentroid", common_group)
             common_group["dopplerCentroid"].attrs['description'] = \
-                np.string_("Common Doppler Centroid used for processing interferogram")
+                np.string_("Common Doppler centroid used for processing interferogram")
             common_group["dopplerCentroid"].attrs['units'] = \
                 Units.hertz
 
@@ -278,9 +283,14 @@ class InSARBaseWriter(h5py.File):
         if rslc_name.lower() == "reference":
             rslc_h5py_file_obj = self.ref_h5py_file_obj
             rslc = self.ref_rslc
+            rslc_file = self.ref_h5_slc_file
         else:
             rslc_h5py_file_obj = self.sec_h5py_file_obj
             rslc = self.sec_rslc
+            rslc_file = self.sec_h5_slc_file
+
+        # Extract relevant identification from reference and secondary RSLC
+        id_group = rslc_h5py_file_obj[rslc.IdentificationPath]
 
         rfi_mit_path = (
             f"{rslc.ProcessingInformationPath}/algorithms/rfiMitigation"
@@ -341,8 +351,10 @@ class InSARBaseWriter(h5py.File):
         for ds_param in ds_params:
             add_dataset_and_attrs(dst_param_group, ds_param)
 
-        for freq, *_ in get_cfg_freq_pols(self.cfg):
+        swath_group = rslc_h5py_file_obj[rslc.SwathPath]
 
+        for freq, *_ in get_cfg_freq_pols(self.cfg):
+            rslc_radar_grid = rslc.getRadarGrid(freq)
             rslc_group_frequency_name = \
                 f"{self.group_paths.ParametersPath}/{rslc_name}/frequency{freq}"
             rslc_frequency_group = self.require_group(rslc_group_frequency_name)
@@ -354,6 +366,7 @@ class InSARBaseWriter(h5py.File):
                                        rslc_frequency_group)
             rslc_frequency_group['slantRangeSpacing'].attrs['description'] = \
                  f"Slant range spacing of {rslc_name} RSLC"
+            rslc_frequency_group['slantRangeSpacing'].attrs['units'] = Units.meter
 
             # TODO: the rangeBandwidth and azimuthBandwidth are placeholders heres,
             # and copied from the bandpassed RSLC data.
@@ -382,6 +395,38 @@ class InSARBaseWriter(h5py.File):
                np.string_(
                    f"Time interval in the along-track direction for {rslc_name} RSLC raster layers"
                )
+            rslc_frequency_group['zeroDopplerTimeSpacing'].attrs['units'] = Units.second
+
+            # Copy the zero-Dopper information from the source RSLC to the RSLC group
+            id_group.copy('zeroDopplerStartTime', rslc_frequency_group)
+
+            # Update the description attributes of the zeroDopplerTime
+            ds_zerodopp = rslc_frequency_group[f"zeroDopplerStartTime"]
+            ds_zerodopp.attrs['description'] = \
+                np.string_(f"Azimuth start time of the {rslc_name} RSLC product")
+
+            rg_names_to_be_created = [
+                DatasetParams(
+                    "slantRangeStart",
+                    rslc_radar_grid.starting_range,
+                    f"Slant range start distance for the {rslc_name} RSLC",
+                    {'units' : Units.meter},
+                ),
+                DatasetParams(
+                    "numberOfAzimuthLines",
+                    np.uint64(rslc_radar_grid.length),
+                    f"Number of azimuth lines within the {rslc_name} RSLC",
+                    {'units' : Units.unitless},
+                ),
+                DatasetParams(
+                    "numberOfRangeSamples",
+                    np.uint64(rslc_radar_grid.width),
+                    f"Number of slant range samples for each azimuth line within the {rslc_name} RSLC",
+                    {'units' : Units.unitless},
+                ),
+            ]
+            for ds_param in rg_names_to_be_created:
+                add_dataset_and_attrs(rslc_frequency_group, ds_param)
 
             doppler_centroid_group = rslc_h5py_file_obj[
                 f"{rslc.ProcessingInformationPath}/parameters/frequency{freq}"
@@ -746,50 +791,72 @@ class InSARBaseWriter(h5py.File):
         """
         Write metadata datasets and attributes common to all InSAR products to HDF5
         """
-        # Can copy entirety of attitude
+        groups = ['reference', 'secondary']
         ref_metadata_group = self.ref_h5py_file_obj[self.ref_rslc.MetadataPath]
-        dst_metadata_group = self.require_group(self.group_paths.MetadataPath)
-        ref_metadata_group.copy("attitude", dst_metadata_group)
+        sec_metadata_group = self.sec_h5py_file_obj[self.sec_rslc.MetadataPath]
 
-        # Attitude time
-        attitude_time = dst_metadata_group["attitude"]["time"]
-        attitude_time_units = attitude_time.attrs['units']
-        attitude_time_units = extract_datetime_from_string(str(attitude_time_units),
-                                                           'seconds since ')
-        if attitude_time_units is not None:
-            attitude_time.attrs['units'] = np.string_(attitude_time_units)
+        for group, h5py_file_obj, orbit_to_save in zip(['reference', 'secondary'],
+                                                       [self.ref_h5py_file_obj,
+                                                        self.sec_h5py_file_obj],
+                                                       [self.ref_orbit,
+                                                        self.sec_orbit]):
+            # Create metadata group, copy over attitude group, and open newly create attitude group
+            metadata_group = h5py_file_obj[self.ref_rslc.MetadataPath]
+            dst_meta_data_group = self.require_group(self.group_paths.MetadataPath)
+            dst_attitude_group = self.require_group(
+                f'{self.group_paths.MetadataPath}/attitude/{group}')
+            src_attitude_group = h5py_file_obj[f'{self.ref_rslc.MetadataPath}/attitude']
+            for name, data in src_attitude_group.items():
+                src_attitude_group.copy(data, dst_attitude_group, name=name)
+            for attr_name, attr_value in src_attitude_group.attrs.items():
+                dst_attitude_group.attrs[attr_name] = attr_value  # Copy attribute
 
-        dst_metadata_group["attitude"]["quaternions"].attrs["units"] = \
-            Units.unitless
-        dst_metadata_group["attitude"]["quaternions"].attrs["eulerAngles"] = \
-            Units.radian
-        dst_metadata_group["attitude"]["quaternions"].attrs["angularVelocity"] = \
-            np.string_("radians / second")
+            # Modify description of attribute type
+            dst_attitude_group['attitudeType'].attrs['description'] = \
+                np.string_('Attitude type, either "FRP", "NRP", "PRP, or '
+                           '"Custom", where "FRP" stands for Forecast Radar Pointing, '
+                           '"NRP" is Near Real-time Pointing, and "PRP" is Precise Radar Pointing')
 
-        # Orbit population based in inputs
-        if self.external_ref_orbit_path is None:
-            ref_metadata_group.copy("orbit", dst_metadata_group)
-        else:
-            # populate orbit group with contents of external orbit file
-            orbit_group = dst_metadata_group.require_group("orbit")
-            self.ref_orbit.save_to_h5(orbit_group)
+            # Attitude time
+            attitude_time = dst_attitude_group['time']
+            attitude_time_units = attitude_time.attrs['units']
+            attitude_time_units = extract_datetime_from_string(str(attitude_time_units),
+                                                               'seconds since ')
 
-        # Orbit time
-        orbit_time = dst_metadata_group["orbit"]["time"]
-        orbit_time.attrs['description'] = \
-            np.string_("Time vector record. This record contains"
-                       " the time corresponding to position and"
-                       " velocity records"
-                       )
+            if attitude_time_units is not None:
+                attitude_time.attrs['units'] = np.string_(attitude_time_units)
 
-        orbit_time_units = orbit_time.attrs['units']
-        orbit_time_units = extract_datetime_from_string(str(orbit_time_units),
-                                                        'seconds since ')
-        if orbit_time_units is not None:
-            orbit_time.attrs['units'] = np.string_(orbit_time_units)
-        # Orbit velocity
-        dst_metadata_group["orbit"]["velocity"].attrs["units"] = \
-            np.string_("meters / second")
+            dst_attitude_group["quaternions"].attrs["units"] = \
+                Units.unitless
+            dst_attitude_group["quaternions"].attrs["eulerAngles"] = \
+                Units.radian
+            dst_attitude_group["quaternions"].attrs["angularVelocity"] = \
+                Units.rad_per_second
+
+            dst_orbit_group = self.require_group(f'{self.group_paths.MetadataPath}/orbit/{group}')
+            orbit_to_save.save_to_h5(dst_orbit_group)
+
+            # Orbit time
+            orbit_time = dst_orbit_group["time"]
+            orbit_time.attrs['description'] = np.string_(
+                "Time vector record. This record contains the time corresponding to position and velocity records")
+            orbit_time_units = orbit_time.attrs['units']
+            orbit_time_units = extract_datetime_from_string(str(orbit_time_units), 'seconds since ')
+            if orbit_time_units is not None:
+                orbit_time.attrs['units'] = np.string_(orbit_time_units)
+
+            # Orbit velocity
+            dst_orbit_group["velocity"].attrs["units"] = Units.meter_per_second
+
+            # Update orbitType description
+            dst_orbit_group['orbitType'].attrs['description'] = np.string_(
+                'Orbit product type, either "FOE", "NOE", "MOE", "POE", or "Custom", where "FOE" stands for '
+                'Forecast Orbit Ephemeris, "NOE" is Near real-time Orbit Ephemeris, "MOE" is Medium precision '
+                'Orbit Ephemeris, and "POE" is Precise Orbit Ephemeris')
+            # Add description of the orbit interpolation file
+            dst_orbit_group['interpMethod'].attrs['description'] = np.string_(
+                'Orbit interpolation method, either "Hermite" or "Legendre"'
+            )
 
     def add_identification_to_hdf5(self):
         """
@@ -919,7 +986,7 @@ class InSARBaseWriter(h5py.File):
                 ds_name.value = slc_val
             add_dataset_and_attrs(dst_id_group, ds_name)
 
-        # Copy the zero-Dopper information from both reference and secondary RSLC
+        # Copy the zero-Doppler information from both reference and secondary RSLC
         for ds_name in ["zeroDopplerStartTime", "zeroDopplerEndTime"]:
             ref_id_group.copy(ds_name, dst_id_group,
                               f"referenceZ{ds_name[1:]}")
@@ -928,7 +995,7 @@ class InSARBaseWriter(h5py.File):
                               f"secondaryZ{ds_name[1:]}")
 
         # Update the description attributes of the zeroDoppler
-        for prod in list(product(['reference','secondary'],
+        for prod in list(product(['reference', 'secondary'],
                                  ['Start', 'End'])):
             rslc_name, start_or_stop = prod
             ds = dst_id_group[f"{rslc_name}ZeroDoppler{start_or_stop}Time"]

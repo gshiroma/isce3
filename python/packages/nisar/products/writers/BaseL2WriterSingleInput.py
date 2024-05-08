@@ -6,6 +6,7 @@ import journal
 import os
 
 import isce3
+from isce3.core import crop_external_orbit
 from nisar.products.writers import BaseWriterSingleInput
 from nisar.workflows.h5_prep import set_get_geo_info
 from isce3.core.types import truncate_mantissa
@@ -464,7 +465,7 @@ def get_file_extension(format):
 
     Parameters
     ----------
-    format: str 
+    format: str
         File format: "GTiff" or "ENVI"
 
     Returns
@@ -640,15 +641,17 @@ class BaseL2WriterSingleInput(BaseWriterSingleInput):
             self.cfg["dynamic_ancillary_file_group"]['orbit_file']
         self.flag_external_orbit_file = self.orbit_file is not None
 
+        orbit_path = (f'{self.root_path}/'
+                        f'{self.input_product_hdf5_group_type}'
+                        '/metadata/orbit')
+        self.orbit = isce3.core.load_orbit_from_h5_group(
+            self.input_hdf5_obj[orbit_path])
+
         if self.flag_external_orbit_file:
             ref_epoch = self.input_product_obj.getRadarGrid().ref_epoch
-            self.orbit = load_orbit_from_xml(self.orbit_file, ref_epoch)
-        else:
-            orbit_path = (f'{self.root_path}/'
-                          f'{self.input_product_hdf5_group_type}'
-                          '/metadata/orbit')
-            self.orbit = isce3.core.load_orbit_from_h5_group(
-                self.input_hdf5_obj[orbit_path])
+            external_orbit = load_orbit_from_xml(self.orbit_file, ref_epoch)
+            self.orbit = crop_external_orbit(external_orbit, self.orbit)
+
 
     def populate_identification_l2_specific(self):
         """
@@ -671,18 +674,15 @@ class BaseL2WriterSingleInput(BaseWriterSingleInput):
             'identification/isGeocoded',
             is_geocoded)
 
-        # TODO populate attribute `epsg`
         self.copy_from_input(
             'identification/boundingPolygon')
-        'identification/boundingPolygon'
 
         bounding_polygon_path = \
             (f'{self.root_path}/identification/boundingPolygon')
 
         if ('epsg' in self.input_hdf5_obj[bounding_polygon_path].attrs.keys()):
-            polygon_epsg = self.input_hdf5_obj[bounding_polygon_path]
             self.output_hdf5_obj[bounding_polygon_path].attrs['epsg'] = \
-                polygon_epsg
+                self.input_hdf5_obj[bounding_polygon_path].attrs['epsg']
 
         self.set_value(
             'identification/listOfFrequencies',
@@ -742,11 +742,11 @@ class BaseL2WriterSingleInput(BaseWriterSingleInput):
                                 'txVerticalCrosspol',
                                 'rxHorizontalCrosspol',
                                 'rxVerticalCrosspol']
-        self.geocode_lut(
-            '{PRODUCT}/metadata/calibrationInformation/crosstalk',
-            frequency=list(self.freq_pols_dict.keys())[0],
-            output_ds_name_list=crosstalk_parameters,
-            skip_if_not_present=True)
+        for crosstalk_parameter in crosstalk_parameters:
+            self.copy_from_input(
+                '{PRODUCT}/metadata/calibrationInformation/crosstalk/'
+                f'{crosstalk_parameter}',
+                skip_if_not_present=True)
 
         luts_list = ['elevationAntennaPattern', 'nes0']
 
@@ -778,7 +778,7 @@ class BaseL2WriterSingleInput(BaseWriterSingleInput):
                     zero_doppler_time_path = (
                         f'{self.root_path}/'
                         f'{self.input_product_hdf5_group_type}/metadata/'
-                        f'calibrationInformation/frequency{frequency}/{lut}/'
+                        f'calibrationInformation/frequency{frequency}/{pol}/'
                         'zeroDopplerTime')
 
                     if zero_doppler_time_path in self.input_hdf5_obj:
@@ -789,9 +789,9 @@ class BaseL2WriterSingleInput(BaseWriterSingleInput):
                                              f'/frequency{frequency}/{lut}'),
                             input_h5_group=('{PRODUCT}/metadata/'
                                             'calibrationInformation'
-                                            f'frequency{frequency}/{lut}/'),
+                                            f'/frequency{frequency}/{pol}'),
                             frequency=list(self.freq_pols_dict.keys())[0],
-                            input_ds_name_list=pol,
+                            input_ds_name_list=[lut],
                             output_ds_name_list=pol,
                             skip_if_not_present=True)
 
@@ -812,11 +812,12 @@ class BaseL2WriterSingleInput(BaseWriterSingleInput):
 
     def populate_orbit(self):
 
-        # save the orbit ephemeris
+        # Save the orbit ephemeris
         orbit_hdf5_group = self.output_hdf5_obj[
             f'{self.output_product_path}/metadata'].require_group(
                 "orbit")
 
+        # Save the orbit into the HDF5 file
         self.orbit.save_to_h5(orbit_hdf5_group)
 
     def populate_attitude(self):
@@ -828,6 +829,188 @@ class BaseL2WriterSingleInput(BaseWriterSingleInput):
         # copy attitude information group
         self._copy_group_from_input('{PRODUCT}/metadata/attitude',
                                     excludes=excludes_list)
+
+    def populate_source_data(self):
+        """
+        Populate the `sourceData` group
+        """
+
+        self.copy_from_input(
+            '{PRODUCT}/metadata/sourceData/productVersion',
+            'identification/productVersion',
+            skip_if_not_present=True)
+
+        self.copy_from_input(
+            '{PRODUCT}/metadata/sourceData/lookDirection',
+            'identification/lookDirection',
+            format_function=str.title)
+
+        self.copy_from_input(
+            '{PRODUCT}/metadata/sourceData/productLevel',
+            'identification/productLevel',
+            default='L1')
+
+        self.copy_from_input(
+            '{PRODUCT}/metadata/sourceData/processingDateTime',
+            'identification/processingDateTime',
+            skip_if_not_present=True)
+
+        self.copy_from_input(
+            '{PRODUCT}/metadata/sourceData/processingInformation/'
+            'parameters/runConfigurationContents',
+            '{PRODUCT}/metadata/processingInformation/parameters/'
+            'runConfigurationContents',
+            skip_if_not_present=True)
+
+        self.copy_from_input(
+            '{PRODUCT}/metadata/sourceData/processingInformation/'
+            'algorithms/rfiDetection',
+            '{PRODUCT}/metadata/processingInformation/algorithms/'
+            'rfiDetection',
+            skip_if_not_present=True)
+
+        self.copy_from_input(
+            '{PRODUCT}/metadata/sourceData/processingInformation/'
+            'algorithms/rfiMitigation',
+            '{PRODUCT}/metadata/processingInformation/algorithms/'
+            'rfiMitigation',
+            skip_if_not_present=True)
+
+        self.copy_from_input(
+            '{PRODUCT}/metadata/sourceData/processingInformation/'
+            'algorithms/rangeCompression',
+            '{PRODUCT}/metadata/processingInformation/algorithms/'
+            'rangeCompression',
+            skip_if_not_present=True)
+
+        self.copy_from_input(
+            '{PRODUCT}/metadata/sourceData/processingInformation/'
+            'algorithms/elevationAntennaPatternCorrection',
+            '{PRODUCT}/metadata/processingInformation/algorithms/'
+            'elevationAntennaPatternCorrection',
+            skip_if_not_present=True)
+
+        self.copy_from_input(
+            '{PRODUCT}/metadata/sourceData/processingInformation/'
+            'algorithms/rangeSpreadingLossCorrection',
+            '{PRODUCT}/metadata/processingInformation/algorithms/'
+            'rangeSpreadingLossCorrection',
+            skip_if_not_present=True)
+
+        self.copy_from_input(
+            '{PRODUCT}/metadata/sourceData/processingInformation/'
+            'algorithms/dopplerCentroidEstimation',
+            '{PRODUCT}/metadata/processingInformation/algorithms/'
+            'dopplerCentroidEstimation',
+            skip_if_not_present=True)
+
+        self.copy_from_input(
+            '{PRODUCT}/metadata/sourceData/processingInformation/'
+            'algorithms/azimuthPresumming',
+            '{PRODUCT}/metadata/processingInformation/algorithms/'
+            'azimuthPresumming',
+            skip_if_not_present=True)
+
+        self.copy_from_input(
+            '{PRODUCT}/metadata/sourceData/processingInformation/'
+            'algorithms/azimuthCompression',
+            '{PRODUCT}/metadata/processingInformation/algorithms/'
+            'azimuthCompression',
+            skip_if_not_present=True)
+
+        self.copy_from_input(
+            '{PRODUCT}/metadata/sourceData/processingInformation/'
+            'algorithms/softwareVersion',
+            '{PRODUCT}/metadata/processingInformation/algorithms/'
+            'softwareVersion',
+            skip_if_not_present=True)
+
+        self.copy_from_input(
+            '{PRODUCT}/metadata/sourceData/swaths/zeroDopplerStartTime',
+            'identification/zeroDopplerStartTime')
+
+        self.copy_from_input(
+            '{PRODUCT}/metadata/sourceData/swaths/zeroDopplerTimeSpacing',
+            '{PRODUCT}/swaths/zeroDopplerTimeSpacing')
+
+        for i, (frequency, _) in enumerate(self.freq_pols_dict.items()):
+            radar_grid_obj = self.input_product_obj.getRadarGrid(frequency)
+
+            output_swaths_freq_path = ('{PRODUCT}/metadata/sourceData/'
+                                       f'swaths/frequency{frequency}')
+            input_swaths_freq_path = ('{PRODUCT}/swaths/'
+                                      f'frequency{frequency}')
+
+            if i == 0:
+                self.set_value(
+                    '{PRODUCT}/metadata/sourceData/swaths/'
+                    'numberOfAzimuthLines',
+                    radar_grid_obj.length,
+                    format_function=np.uint64)
+
+            self.copy_from_input(
+                f'{output_swaths_freq_path}/rangeBandwidth',
+                f'{input_swaths_freq_path}/processedRangeBandwidth')
+
+            self.copy_from_input(
+                f'{output_swaths_freq_path}/azimuthBandwidth',
+                f'{input_swaths_freq_path}/processedAzimuthBandwidth')
+
+            self.copy_from_input(
+                f'{output_swaths_freq_path}/centerFrequency',
+                f'{input_swaths_freq_path}/processedCenterFrequency')
+
+            self.set_value(
+                f'{output_swaths_freq_path}/slantRangeStart',
+                radar_grid_obj.starting_range)
+
+            self.copy_from_input(
+                f'{output_swaths_freq_path}/slantRangeSpacing',
+                f'{input_swaths_freq_path}/slantRangeSpacing')
+
+            self.set_value(
+                f'{output_swaths_freq_path}/numberOfRangeSamples',
+                radar_grid_obj.width,
+                format_function=np.uint64)
+
+            self.copy_from_input(
+                '{PRODUCT}/metadata/sourceData/processingInformation/'
+                f'parameters/frequency{frequency}/dopplerCentroid',
+                '{PRODUCT}/metadata/processingInformation/parameters/'
+                f'frequency{frequency}/dopplerCentroid',
+                skip_if_not_present=True)
+
+            # Copy range-Doppler Doppler Centroid LUT into the sourceData
+            # group.
+            # First, we look for the coordinate vectors `zeroDopplerTime`
+            # and `slantRange` in the same level of the `dopplerCentroid` LUT.
+            # If these vectors are not found, a `KeyError` exception will be
+            # raised. We catch that exception, and look for the coordinate
+            # vectors two levels below, following old RSLC specs.
+            try:
+                self.copy_from_input(
+                    '{PRODUCT}/metadata/sourceData/processingInformation/'
+                    f'parameters/frequency{frequency}/zeroDopplerTime',
+                    '{PRODUCT}/metadata/processingInformation/parameters/'
+                    f'frequency{frequency}/zeroDopplerTime')
+            except KeyError:
+                self.copy_from_input(
+                    '{PRODUCT}/metadata/sourceData/processingInformation/'
+                    f'parameters/frequency{frequency}/zeroDopplerTime',
+                    '{PRODUCT}/metadata/processingInformation/parameters/'
+                    'zeroDopplerTime')
+            try:
+                self.copy_from_input(
+                    '{PRODUCT}/metadata/sourceData/processingInformation/'
+                    f'parameters/frequency{frequency}/slantRange',
+                    '{PRODUCT}/metadata/processingInformation/parameters/'
+                    f'frequency{frequency}/slantRange')
+            except KeyError:
+                self.copy_from_input(
+                    '{PRODUCT}/metadata/sourceData/processingInformation/'
+                    f'parameters/frequency{frequency}/slantRange',
+                    '{PRODUCT}/metadata/processingInformation/parameters/'
+                    'slantRange')
 
     def populate_processing_information_l2_common(self):
 

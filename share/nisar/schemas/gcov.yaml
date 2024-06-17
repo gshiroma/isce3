@@ -48,11 +48,8 @@ runconfig:
             # Defaults to './qa'
             qa_output_dir: str(required=False)
 
-        # Output options for GCOV terms (e.g., HHHH, HVHV, VVVV)
-        output_gcov_terms: include('output_options', required=False)
-
-        # Output options for secondary layers
-        output_secondary_layers: include('output_options', required=False)
+        # Output options
+        output: include('output_options', required=False)
 
         primary_executable:
             product_type: enum('GCOV')
@@ -187,11 +184,15 @@ geo2rdr_options:
 qa_options:
     # For descriptions of all QA parameters, see template runconfig (in `defaults` directory)
     workflows: include('workflows_options', required=False)
+    validation: include('qa_validation_options', required=False)
     qa_reports: include('qa_reports_options', required=False)
 
 workflows_options:
     validate: bool(required=False)
     qa_reports: bool(required=False)
+
+qa_validation_options:
+    metadata_cubes_fail_if_all_nan: bool(required=False)
 
 qa_reports_options:
     backscatter_img:
@@ -201,6 +202,7 @@ qa_reports_options:
         longest_side_max: int(min=1, required=False)
         percentile_for_clipping: list(num(min=0.0, max=100.0), min=2, max=2, required=False)
         gamma: num(min=0.0, required=False)
+        nan_color_in_pdf: str(required=False)
         tile_shape: list(int(min=-1), min=2, max=2, required=False)
     histogram:
         decimation_ratio: list(int(min=1), min=2, max=2, required=False)
@@ -319,10 +321,13 @@ geocode_options:
     # Save the RTC area normalization factor (ANF) gamma0 to sigma0
     save_rtc_anf_gamma0_to_sigma0: bool(required=False)
 
+    # Save the mask layer
+    save_mask: bool(required=False)
+
     # PLACEHOLDER - Save interpolated DEM used to compute GCOV
     save_dem: bool(required=False)
 
-    # PLACEHOLDER - Save layover shadow mask
+    # PLACEHOLDER - Save the layover shadow mask
     save_layover_shadow_mask: bool(required=False)
 
     # PLACEHOLDER - Save the incidence angle
@@ -408,6 +413,24 @@ worker_options:
 
 output_options:
 
+    # HDF5 file space management strategy.  In our tests, the "page" strategy
+    # works well for accessing files stored on the cloud by reducing the number
+    # of high-latency REST API calls needed to read datasets and their metadata.
+    fs_strategy: enum("fsm", "page", "aggregate", "none", required=False)
+
+    # HDF5 file space page size.  Only relevant when fs_strategy="page".
+    # Ideally at least large enough to hold `chunk_size` amount of uncompressed
+    # data as well as its metadata.
+    fs_page_size: int(min=1, required=False)
+
+    # Output options for GCOV terms (e.g., HHHH, HVHV, VVVV)
+    output_gcov_terms: include('output_dataset_options', required=False)
+
+    # Output options for secondary layers
+    output_secondary_layers: include('output_dataset_options', required=False)
+
+output_dataset_options:
+
     # Output file format
     format: enum('HDF5', 'GTiff', 'ENVI', required=False)
 
@@ -418,7 +441,7 @@ output_options:
     compression_type: str(required=False)
 
     # Compression level
-    # 1 - least compression, 9 - best compresssion
+    # 1 - least compression, 9 - best compression
     compression_level: int(min=1, max=9, required=False)
 
     # Enable/disable chunking of output raster

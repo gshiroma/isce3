@@ -483,6 +483,16 @@ def compute_radar_geometry_layers(cfg, slc, hdf5_obj, root_ds,
 
     dem_raster = isce3.io.Raster(dem_file)
 
+    # geo2rdr parameters
+    geo2rdr_threshold = cfg['processing']['geo2rdr']['threshold']
+    geo2rdr_maxiter = cfg['processing']['geo2rdr']['maxiter']
+
+    geo2rdr_params = isce3.geometry.Geo2RdrParams()
+    if geo2rdr_threshold is not None:
+        geo2rdr_params.threshold = geo2rdr_threshold
+    if geo2rdr_maxiter is not None:
+        geo2rdr_params.maxiter = geo2rdr_maxiter
+
     output_obj_list = []
     files_to_save_dict = {}
 
@@ -555,8 +565,6 @@ def compute_radar_geometry_layers(cfg, slc, hdf5_obj, root_ds,
         frequency).processed_wavelength
     lookside = radar_grid.lookside
 
-    # TODO: add geo2rdr_params
-    # call get_radar_grid()
     isce3.geogrid.get_radar_grid(
         lookside,
         wavelength,
@@ -565,6 +573,7 @@ def compute_radar_geometry_layers(cfg, slc, hdf5_obj, root_ds,
         orbit,
         native_doppler,
         grid_doppler,
+        geo2rdr_params=geo2rdr_params,
         incidence_angle_raster=incidence_angle_raster,
         local_incidence_angle_raster=local_incidence_angle_raster,
         projection_angle_raster=projection_angle_raster,

@@ -324,23 +324,38 @@ geocode_options:
     # Save the mask layer
     save_mask: bool(required=False)
 
-    # PLACEHOLDER - Save interpolated DEM used to compute GCOV
+    # Save interpolated DEM used to compute GCOV
     save_dem: bool(required=False)
 
     # PLACEHOLDER - Save the layover shadow mask
     save_layover_shadow_mask: bool(required=False)
 
-    # PLACEHOLDER - Save the incidence angle
+    # Save the incidence angle
     save_incidence_angle: bool(required=False)
 
-    # PLACEHOLDER - Save the local-incidence angle
+    # Save the local-incidence angle
     save_local_inc_angle: bool(required=False)
 
-    # PLACEHOLDER - Save the projection angle
+    # Save the projection angle
     save_projection_angle: bool(required=False)
 
-    # PLACEHOLDER - Save the range slope angle
-    save_range_slope: bool(required=False)
+    # Save the elevation angle
+    save_elevation_angle: bool(required=False)
+
+    # Save the X-component of the line-of-sight unit vector
+    save_los_unit_vector_x: bool(required=False)
+
+    # Save the Y-component of the line-of-sight unit vector
+    save_los_unit_vector_y: bool(required=False)
+
+    # Save the X-component of the along-track unit vector
+    save_along_track_unit_vector_x: bool(required=False)
+
+    # Save the Y-component of the along-track unit vector
+    save_along_track_unit_vector_y: bool(required=False)
+
+    # Save the ground track velocity
+    save_ground_track_velocity: bool(required=False)
 
     # Absolute radiometric correction factor
     abs_rad_cal: num(required=False)

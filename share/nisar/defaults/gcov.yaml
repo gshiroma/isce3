@@ -297,17 +297,32 @@ runconfig:
                 # PLACEHOLDER - Save the layover shadow mask
                 save_layover_shadow_mask: False
 
-                # PLACEHOLDER - Save the incidence angle
+                # Save the incidence angle
                 save_incidence_angle: False
 
-                # PLACEHOLDER - Save the local-incidence angle
+                # Save the local-incidence angle
                 save_local_inc_angle: False
 
-                # PLACEHOLDER - Save the projection angle
+                # Save the projection angle
                 save_projection_angle: False
 
-                # PLACEHOLDER - Save the range slope angle
-                save_range_slope: False
+                # Save the elevation angle
+                save_elevation_angle: False
+
+                # Save the X-component of the line-of-sight unit vector
+                save_los_unit_vector_x: False
+
+                # Save the Y-component of the line-of-sight unit vector
+                save_los_unit_vector_y: False
+
+                # Save the X-component of the along-track unit vector
+                save_along_track_unit_vector_x: False
+
+                # Save the Y-component of the along-track unit vector
+                save_along_track_unit_vector_y: False
+
+                # Save the ground track velocity
+                save_ground_track_velocity: False
 
                 # OPTIONAL - Absolute radiometric correction
                 abs_rad_cal: 1

@@ -11,6 +11,22 @@ from nisar.products.writers import BaseL2WriterSingleInput
 from nisar.products.writers.BaseL2WriterSingleInput import save_dataset
 from nisar.workflows.h5_prep import set_get_geo_info
 
+LAYER_NAME_LAYOVER_SHADOW_MASK = 'layoverShadowMask'
+LAYER_NAME_RTC_ANF_GAMMA0_TO_BETA0 = 'rtcGammaToBetaFactor'
+LAYER_NAME_RTC_ANF_GAMMA0_TO_SIGMA0 = 'rtcGammaToSigmaFactor'
+LAYER_NAME_RTC_ANF_SIGMA0_TO_BETA0 = 'rtcSigmaToBetaFactor'
+LAYER_NAME_NUMBER_OF_LOOKS = 'numberOfLooks'
+LAYER_NAME_INCIDENCE_ANGLE = 'incidenceAngle'
+LAYER_NAME_LOCAL_INCIDENCE_ANGLE = 'localIncidenceAngle'
+LAYER_NAME_PROJECTION_ANGLE = 'projectionAngle'
+LAYER_NAME_ELEVATION_ANGLE = 'projectionAngle'
+LAYER_NAME_LOS_X = 'losUnitVectorX'
+LAYER_NAME_LOS_Y = 'losUnitVectorY'
+LAYER_NAME_ALONG_TRACK_X = 'alongTrackUnitVectorX'
+LAYER_NAME_ALONG_TRACK_Y = 'alongTrackUnitVectorY'
+LAYER_NAME_GROUND_TRACK_VELOCITY = 'groundVelocity'
+LAYER_NAME_DEM = 'interpolatedDem'
+
 
 def _save_list_cov_terms(cov_elements_list, dataset_group):
 
@@ -20,6 +36,58 @@ def _save_list_cov_terms(cov_elements_list, dataset_group):
     dset = dataset_group.create_dataset(name, data=cov_elements_array)
     desc = "List of processed covariance terms"
     dset.attrs["description"] = np.bytes_(desc)
+
+
+def _create_raster_obj(output_dir, product_id, layer_name, dtype, shape,
+                       files_to_save_dict, output_obj_list,
+                       flag_create_raster_obj, file_format,
+                       extension):
+    """Create an ISCE3 raster object (GTiff) for a radar geometry layer.
+       Parameters
+       ----------
+       output_dir: str
+              Output directory
+       layer_name: str
+              Layer name
+       product_id: str
+              Product ID
+       ds_hdf5: str
+              HDF5 dataset name
+       dtype: gdal.DataType
+              GDAL data type
+       shape: list
+              Shape of the output raster
+       files_to_save_dict: dict
+              Dictionary that will hold the name of the output file
+              referenced by the contents of `ds_hdf5` (dict key)
+       output_obj_list: list
+              Mutable list of output raster objects
+       flag_create_raster_obj: bool
+              Flag indicating if raster object should be created
+       Returns
+       -------
+       raster_obj : isce3.io.Raster
+              ISCE3 raster object
+    """
+    if flag_create_raster_obj is not True:
+        return None
+
+    ds_name = f'{product_id}_{layer_name}'
+
+    output_file = tempfile.NamedTemporaryFile(
+        dir=output_dir, suffix=f'_{ds_name}{extension}').name
+
+    # output_file = os.path.join(output_dir, ds_name) + extension
+    raster_obj = isce3.io.Raster(
+        output_file,
+        shape[2],
+        shape[1],
+        shape[0],
+        dtype,
+        file_format)
+    output_obj_list.append(raster_obj)
+    files_to_save_dict[layer_name] = output_file
+    return raster_obj
 
 
 def run_geocode_cov(cfg, hdf5_obj, root_ds,
@@ -80,7 +148,6 @@ def run_geocode_cov(cfg, hdf5_obj, root_ds,
         read_and_validate_rtc_anf_flags(geocode_dict, flag_apply_rtc,
                                         output_terrain_radiometry)
     save_mask = geocode_dict['save_mask']
-    save_dem = geocode_dict['save_dem']
 
     min_block_size_mb = cfg["processing"]["geocode"]['min_block_size']
     max_block_size_mb = cfg["processing"]["geocode"]['max_block_size']
@@ -225,28 +292,6 @@ def run_geocode_cov(cfg, hdf5_obj, root_ds,
         out_geo_rtc_gamma0_to_sigma0_obj = None
 
     # create a NamedTemporaryFile and an ISCE3 Raster object to
-    # temporarily hold the interpolated DEM layer
-    if save_dem:
-        temp_interpolated_dem = tempfile.NamedTemporaryFile(
-            dir=raster_scratch_dir,
-            suffix=secondary_layers_file_extension)
-        if (output_mode ==
-                isce3.geocode.GeocodeOutputMode.AREA_PROJECTION):
-            interpolated_dem_width = geogrid.width + 1
-            interpolated_dem_length = geogrid.length + 1
-        else:
-            interpolated_dem_width = geogrid.width
-            interpolated_dem_length = geogrid.length
-        out_geo_dem_obj = isce3.io.Raster(
-            temp_interpolated_dem.name,
-            interpolated_dem_width,
-            interpolated_dem_length, 1,
-            gdal.GDT_Float32, secondary_layer_files_raster_files_format)
-    else:
-        temp_interpolated_dem = None
-        out_geo_dem_obj = None
-
-    # create a NamedTemporaryFile and an ISCE3 Raster object to
     # temporarily hold the mask layer
     if save_mask:
         temp_mask_file = tempfile.NamedTemporaryFile(
@@ -304,9 +349,6 @@ def run_geocode_cov(cfg, hdf5_obj, root_ds,
     if save_mask:
         out_mask_obj.close_dataset()
         del out_mask_obj
-
-    if save_dem:
-        del out_geo_dem_obj
 
     if flag_fullcovariance:
         # out_off_diag_terms_obj.close_dataset()
@@ -369,36 +411,6 @@ def run_geocode_cov(cfg, hdf5_obj, root_ds,
                      'rtcGammaToSigmaFactor',
                      **output_secondary_layers_kwargs)
 
-    # save interpolated DEM
-    if save_dem:
-
-        '''
-        The DEM is interpolated over the geogrid pixels vertices
-        rather than the pixels centers.
-        '''
-        if (output_mode ==
-                isce3.geocode.GeocodeOutputMode.AREA_PROJECTION):
-            dem_geogrid = isce3.product.GeoGridParameters(
-                start_x=geogrid.start_x - geogrid.spacing_x / 2,
-                start_y=geogrid.start_y - geogrid.spacing_y / 2,
-                spacing_x=geogrid.spacing_x,
-                spacing_y=geogrid.spacing_y,
-                width=int(geogrid.width) + 1,
-                length=int(geogrid.length) + 1,
-                epsg=geogrid.epsg)
-            yds_dem, xds_dem = \
-                set_get_geo_info(hdf5_obj, root_ds, dem_geogrid)
-        else:
-            yds_dem = yds
-            xds_dem = xds
-
-        save_dataset(temp_interpolated_dem.name, hdf5_obj,
-                     root_ds, yds_dem, xds_dem,
-                     'interpolatedDem',
-                     long_name='Interpolated DEM',
-                     units='1',
-                     **output_secondary_layers_kwargs)
-
     # save GCOV off-diagonal elements
     if flag_fullcovariance:
         off_diag_terms_list = []
@@ -425,6 +437,161 @@ def run_geocode_cov(cfg, hdf5_obj, root_ds,
                      long_name=output_radiometry_str,
                      hdf5_data_type=complex_type,
                      **output_gcov_terms_kwargs)
+
+
+def compute_radar_geometry_layers(cfg, slc, hdf5_obj, root_ds,
+                                  frequency,
+                                  radar_grid,
+                                  grid_doppler, native_doppler,
+                                  raster_scratch_dir,
+                                  geogrid, orbit,
+                                  secondary_layers_file_extension,
+                                  secondary_layer_files_raster_files_format,
+                                  output_secondary_layers_kwargs):
+
+    dem_interp_method_enum = cfg['processing']['dem_interpolation_method_enum']
+
+    # unpack geocode run parameters
+    geocode_dict = cfg['processing']['geocode']
+
+    save_local_inc_angle = geocode_dict['save_local_inc_angle']
+    save_incidence_angle = geocode_dict['save_incidence_angle']
+    save_projection_angle = geocode_dict['save_projection_angle']
+    save_elevation_angle = geocode_dict['save_elevation_angle']
+    save_los_unit_vector_x = geocode_dict['save_los_unit_vector_x']
+    save_los_unit_vector_y = geocode_dict['save_los_unit_vector_y']
+    save_along_track_unit_vector_x = \
+        geocode_dict['save_along_track_unit_vector_x']
+    save_along_track_unit_vector_y = \
+        geocode_dict['save_along_track_unit_vector_y']
+    save_ground_track_velocity = geocode_dict['save_ground_track_velocity']
+
+    if (not save_local_inc_angle and
+        not save_incidence_angle and
+        not save_projection_angle and
+        not save_elevation_angle and
+        not save_los_unit_vector_x and
+        not save_los_unit_vector_y and
+        not save_along_track_unit_vector_x and
+        not save_along_track_unit_vector_y and
+            not save_ground_track_velocity):
+        return
+
+    # DEM parameters
+    dem_file = cfg['dynamic_ancillary_file_group']['dem_file']
+    save_dem = geocode_dict['save_dem']
+
+    dem_raster = isce3.io.Raster(dem_file)
+
+    output_obj_list = []
+    files_to_save_dict = {}
+
+    layers_nbands = 1
+    shape = [layers_nbands, geogrid.length, geogrid.width]
+    product_id = 'temp'
+
+    local_incidence_angle_raster = _create_raster_obj(
+        raster_scratch_dir, product_id, LAYER_NAME_LOCAL_INCIDENCE_ANGLE,
+        gdal.GDT_Float32, shape,
+        files_to_save_dict, output_obj_list, save_local_inc_angle,
+        secondary_layer_files_raster_files_format,
+        secondary_layers_file_extension)
+    incidence_angle_raster = _create_raster_obj(
+        raster_scratch_dir, product_id, LAYER_NAME_INCIDENCE_ANGLE,
+        gdal.GDT_Float32, shape, files_to_save_dict,
+        output_obj_list, save_incidence_angle,
+        secondary_layer_files_raster_files_format,
+        secondary_layers_file_extension)
+    projection_angle_raster = _create_raster_obj(
+        raster_scratch_dir, product_id, LAYER_NAME_PROJECTION_ANGLE,
+        gdal.GDT_Float32, shape, files_to_save_dict,
+        output_obj_list, save_projection_angle,
+        secondary_layer_files_raster_files_format,
+        secondary_layers_file_extension)
+    elevation_angle_raster = _create_raster_obj(
+        raster_scratch_dir, product_id, LAYER_NAME_ELEVATION_ANGLE,
+        gdal.GDT_Float32, shape, files_to_save_dict,
+        output_obj_list, save_elevation_angle,
+        secondary_layer_files_raster_files_format,
+        secondary_layers_file_extension)
+    los_unit_vector_x_raster = _create_raster_obj(
+        raster_scratch_dir, product_id, LAYER_NAME_LOS_X,
+        gdal.GDT_Float32, shape, files_to_save_dict,
+        output_obj_list, save_los_unit_vector_x,
+        secondary_layer_files_raster_files_format,
+        secondary_layers_file_extension)
+    los_unit_vector_y_raster = _create_raster_obj(
+        raster_scratch_dir, product_id, LAYER_NAME_LOS_Y,
+        gdal.GDT_Float32, shape, files_to_save_dict,
+        output_obj_list, save_los_unit_vector_y,
+        secondary_layer_files_raster_files_format,
+        secondary_layers_file_extension)
+    along_track_unit_vector_x_raster = _create_raster_obj(
+        raster_scratch_dir, product_id, LAYER_NAME_ALONG_TRACK_X,
+        gdal.GDT_Float32, shape, files_to_save_dict,
+        output_obj_list, save_along_track_unit_vector_x,
+        secondary_layer_files_raster_files_format,
+        secondary_layers_file_extension)
+    along_track_unit_vector_y_raster = _create_raster_obj(
+        raster_scratch_dir, product_id, LAYER_NAME_ALONG_TRACK_Y,
+        gdal.GDT_Float32, shape, files_to_save_dict,
+        output_obj_list, save_along_track_unit_vector_y,
+        secondary_layer_files_raster_files_format,
+        secondary_layers_file_extension)
+    ground_track_velocity_raster = _create_raster_obj(
+        raster_scratch_dir, product_id, LAYER_NAME_GROUND_TRACK_VELOCITY,
+        gdal.GDT_Float64, shape, files_to_save_dict,
+        output_obj_list, save_ground_track_velocity,
+        secondary_layer_files_raster_files_format,
+        secondary_layers_file_extension)
+    interpolated_dem_raster = _create_raster_obj(
+        raster_scratch_dir, product_id, LAYER_NAME_DEM,
+        gdal.GDT_Float32, shape, files_to_save_dict,
+        output_obj_list, save_dem,
+        secondary_layer_files_raster_files_format,
+        secondary_layers_file_extension)
+
+    wavelength = slc.getSwathMetadata(
+        frequency).processed_wavelength
+    lookside = radar_grid.lookside
+
+    # TODO: add geo2rdr_params
+    # call get_radar_grid()
+    isce3.geogrid.get_radar_grid(
+        lookside,
+        wavelength,
+        dem_raster,
+        geogrid,
+        orbit,
+        native_doppler,
+        grid_doppler,
+        incidence_angle_raster=incidence_angle_raster,
+        local_incidence_angle_raster=local_incidence_angle_raster,
+        projection_angle_raster=projection_angle_raster,
+        elevation_angle_raster=elevation_angle_raster,
+        los_unit_vector_x_raster=los_unit_vector_x_raster,
+        los_unit_vector_y_raster=los_unit_vector_y_raster,
+        along_track_unit_vector_x_raster=along_track_unit_vector_x_raster,
+        along_track_unit_vector_y_raster=along_track_unit_vector_y_raster,
+        ground_track_velocity_raster=ground_track_velocity_raster,
+        # simulated_radar_brightness_raster=
+        #     rtc_anf_projection_angle_raster,
+        interpolated_dem_raster=interpolated_dem_raster,
+        dem_interp_method=dem_interp_method_enum)
+
+    # Flush data
+    for obj in output_obj_list:
+        obj.close_dataset()
+        del obj
+
+    yds, xds = set_get_geo_info(hdf5_obj,
+                                root_ds, geogrid)
+
+    for ds_hdf5, filename in files_to_save_dict.items():
+        save_dataset(filename, hdf5_obj,
+                     root_ds, yds, xds,
+                     ds_hdf5, long_name='', units='',
+                     **output_secondary_layers_kwargs)
 
 
 def read_and_validate_rtc_anf_flags(geocode_dict, flag_apply_rtc,

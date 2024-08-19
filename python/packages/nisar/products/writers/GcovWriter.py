@@ -439,15 +439,14 @@ def run_geocode_cov(cfg, hdf5_obj, root_ds,
                      **output_gcov_terms_kwargs)
 
 
-def compute_radar_geometry_layers(cfg, slc, hdf5_obj, root_ds,
+def compute_radar_geometry_layers(cfg, slc,
                                   frequency,
                                   radar_grid,
                                   grid_doppler, native_doppler,
                                   raster_scratch_dir,
                                   geogrid, orbit,
                                   secondary_layers_file_extension,
-                                  secondary_layer_files_raster_files_format,
-                                  output_secondary_layers_kwargs):
+                                  secondary_layer_files_raster_files_format):
 
     dem_interp_method_enum = cfg['processing']['dem_interpolation_method_enum']
 
@@ -593,14 +592,7 @@ def compute_radar_geometry_layers(cfg, slc, hdf5_obj, root_ds,
         obj.close_dataset()
         del obj
 
-    yds, xds = set_get_geo_info(hdf5_obj,
-                                root_ds, geogrid)
-
-    for ds_hdf5, filename in files_to_save_dict.items():
-        save_dataset(filename, hdf5_obj,
-                     root_ds, yds, xds,
-                     ds_hdf5, long_name='', units='',
-                     **output_secondary_layers_kwargs)
+    return files_to_save_dict
 
 
 def read_and_validate_rtc_anf_flags(geocode_dict, flag_apply_rtc,

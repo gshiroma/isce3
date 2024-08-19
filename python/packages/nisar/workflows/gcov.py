@@ -24,7 +24,8 @@ from nisar.workflows.yaml_argparse import YamlArgparse
 from nisar.workflows.gcov_runconfig import GCOVRunConfig
 import nisar.workflows.helpers as helpers
 from nisar.products.readers.orbit import load_orbit_from_xml
-from nisar.products.writers.BaseL2WriterSingleInput import get_file_extension
+from nisar.products.writers.BaseL2WriterSingleInput import (get_file_extension,
+                                                            save_dataset)
 from nisar.products.writers.GcovWriter import (GcovWriter, run_geocode_cov,
                                                compute_radar_geometry_layers)
 
@@ -539,16 +540,25 @@ def _run(cfg, raster_scratch_dir):
                             output_secondary_layers_kwargs,
                             optional_geo_kwargs)
 
-            compute_radar_geometry_layers(
-                cfg, slc, hdf5_obj, root_ds,
-                frequency,
-                radar_grid,
-                zero_doppler, native_doppler,
-                raster_scratch_dir,
-                geogrid, orbit,
-                secondary_layers_file_extension,
-                secondary_layer_files_raster_files_format,
-                output_secondary_layers_kwargs)
+            files_to_save_dict = \
+                compute_radar_geometry_layers(
+                    cfg, slc, hdf5_obj, root_ds,
+                    frequency,
+                    radar_grid,
+                    zero_doppler, native_doppler,
+                    raster_scratch_dir,
+                    geogrid, orbit,
+                    secondary_layers_file_extension,
+                    secondary_layer_files_raster_files_format)
+
+            xds = hdf5_obj[f'{root_ds}/xCoordinates']
+            yds = hdf5_obj[f'{root_ds}/yCoordinates']
+
+            for ds_hdf5, filename in files_to_save_dict.items():
+                save_dataset(filename, hdf5_obj,
+                             root_ds, yds, xds,
+                             ds_hdf5, long_name='', units='',
+                             **output_secondary_layers_kwargs)
 
             t_freq_elapsed = time.time() - t_freq
             info_channel.log(f'frequency {frequency} ran in {t_freq_elapsed:.3f} seconds')

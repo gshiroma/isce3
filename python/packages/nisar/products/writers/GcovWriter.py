@@ -465,6 +465,8 @@ def compute_radar_geometry_layers(cfg, slc,
         geocode_dict['save_along_track_unit_vector_y']
     save_ground_track_velocity = geocode_dict['save_ground_track_velocity']
 
+    files_to_save_dict = {}
+
     if (not save_local_inc_angle and
         not save_incidence_angle and
         not save_projection_angle and
@@ -474,7 +476,7 @@ def compute_radar_geometry_layers(cfg, slc,
         not save_along_track_unit_vector_x and
         not save_along_track_unit_vector_y and
             not save_ground_track_velocity):
-        return
+        return files_to_save_dict
 
     # DEM parameters
     dem_file = cfg['dynamic_ancillary_file_group']['dem_file']

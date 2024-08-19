@@ -542,9 +542,7 @@ def _run(cfg, raster_scratch_dir):
 
             files_to_save_dict = \
                 compute_radar_geometry_layers(
-                    cfg, slc, hdf5_obj, root_ds,
-                    frequency,
-                    radar_grid,
+                    cfg, slc, frequency, radar_grid,
                     zero_doppler, native_doppler,
                     raster_scratch_dir,
                     geogrid, orbit,

@@ -46,6 +46,7 @@ def run_geocode_cov(cfg, hdf5_obj, root_ds,
     rtc_dict = cfg['processing']['rtc']
     output_terrain_radiometry = rtc_dict['output_type_enum']
     rtc_algorithm = rtc_dict['algorithm_type_enum']
+    input_terrain_radiometry_str = rtc_dict['input_terrain_radiometry']
     input_terrain_radiometry = rtc_dict['input_terrain_radiometry_enum']
     rtc_min_value_db = rtc_dict['rtc_min_value_db']
     rtc_upsampling = rtc_dict['dem_upsampling']
@@ -102,15 +103,15 @@ def run_geocode_cov(cfg, hdf5_obj, root_ds,
 
     if (flag_apply_rtc and output_terrain_radiometry ==
             isce3.geometry.RtcOutputTerrainRadiometry.SIGMA_NAUGHT):
-        output_radiometry_str = "radar backscatter sigma0"
+        output_terrain_radiometry_str = "sigma0"
     elif (flag_apply_rtc and output_terrain_radiometry ==
             isce3.geometry.RtcOutputTerrainRadiometry.GAMMA_NAUGHT):
-        output_radiometry_str = 'radar backscatter gamma0'
+        output_terrain_radiometry_str = 'gamma0'
     elif input_terrain_radiometry == \
             isce3.geometry.RtcInputTerrainRadiometry.BETA_NAUGHT:
-        output_radiometry_str = 'radar backscatter beta0'
+        output_terrain_radiometry_str = 'beta0'
     else:
-        output_radiometry_str = 'radar backscatter sigma0'
+        output_terrain_radiometry_str = 'sigma0'
 
     dem_raster = isce3.io.Raster(dem_file)
     epsg = dem_raster.get_epsg()
@@ -357,9 +358,19 @@ def run_geocode_cov(cfg, hdf5_obj, root_ds,
 
     # save rtc
     if save_rtc_anf:
+        # use the input and output terrain radiometry.
+        # (e.g., "rtcGammaToBetaFactor")
+        rtc_anf_dataset_name_input_str = \
+            input_terrain_radiometry_str.replace('0', '').title()
+        rtc_anf_dataset_name_output_str = \
+            output_terrain_radiometry_str.replace('0', '').title()
+        rtc_anf_dataset_name = (
+            f'rtc{rtc_anf_dataset_name_input_str}to'
+            f'{rtc_anf_dataset_name_output_str}Factor')
+
         save_dataset(temp_rtc_anf.name, hdf5_obj, root_ds,
                      yds, xds,
-                     'rtcAreaNormalizationFactor',
+                     rtc_anf_dataset_name,
                      **output_secondary_layers_kwargs)
 
     # save rtc
@@ -423,7 +434,6 @@ def run_geocode_cov(cfg, hdf5_obj, root_ds,
 
         save_dataset(temp_off_diag.name, hdf5_obj, root_ds,
                      yds, xds, off_diag_terms_list,
-                     long_name=output_radiometry_str,
                      hdf5_data_type=complex_type,
                      **output_gcov_terms_kwargs)
 

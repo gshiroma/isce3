@@ -439,6 +439,13 @@ def run_geocode_cov(cfg, hdf5_obj, root_ds,
                      **output_gcov_terms_kwargs)
 
 
+def _read_runconfig_flag(geocode_dict, layer):
+    if layer not in geocode_dict.keys():
+        return False
+
+    return geocode_dict[layer]
+
+
 def compute_radar_geometry_layers(cfg, slc,
                                   frequency,
                                   radar_grid,
@@ -453,17 +460,24 @@ def compute_radar_geometry_layers(cfg, slc,
     # unpack geocode run parameters
     geocode_dict = cfg['processing']['geocode']
 
-    save_local_inc_angle = geocode_dict['save_local_inc_angle']
-    save_incidence_angle = geocode_dict['save_incidence_angle']
-    save_projection_angle = geocode_dict['save_projection_angle']
-    save_elevation_angle = geocode_dict['save_elevation_angle']
-    save_los_unit_vector_x = geocode_dict['save_los_unit_vector_x']
-    save_los_unit_vector_y = geocode_dict['save_los_unit_vector_y']
-    save_along_track_unit_vector_x = \
-        geocode_dict['save_along_track_unit_vector_x']
-    save_along_track_unit_vector_y = \
-        geocode_dict['save_along_track_unit_vector_y']
-    save_ground_track_velocity = geocode_dict['save_ground_track_velocity']
+    save_local_inc_angle = _read_runconfig_flag(geocode_dict,
+                                                'save_local_inc_angle')
+    save_incidence_angle = _read_runconfig_flag(geocode_dict,
+                                                'save_incidence_angle')
+    save_projection_angle = _read_runconfig_flag(geocode_dict,
+                                                 'save_projection_angle')
+    save_elevation_angle = _read_runconfig_flag(geocode_dict,
+                                                'save_elevation_angle')
+    save_los_unit_vector_x = _read_runconfig_flag(geocode_dict,
+                                                  'save_los_unit_vector_x')
+    save_los_unit_vector_y = _read_runconfig_flag(geocode_dict,
+                                                  'save_los_unit_vector_y')
+    save_along_track_unit_vector_x = _read_runconfig_flag(
+        geocode_dict,  'save_along_track_unit_vector_x')
+    save_along_track_unit_vector_y = _read_runconfig_flag(
+        geocode_dict,  'save_along_track_unit_vector_y')
+    save_ground_track_velocity = _read_runconfig_flag(
+        geocode_dict,  'save_ground_track_velocity')
 
     files_to_save_dict = {}
 

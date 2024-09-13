@@ -17,12 +17,12 @@ isce3/io/gdal/gdal_raster.py
 isce3/io/background.py
 isce3/matchtemplate/import_ampcor.py
 isce3/matchtemplate/test_ampcor.py
+isce3/product/cf_conventions.py
 isce3/signal/doppler_est_func.py
 isce3/signal/fir_filter_func.py
 isce3/signal/rfi_freq_null.py
 isce3/signal/rfi_process_evd.py
 isce3/solid_earth_tides/solid_earth_tides.py
-isce3/unwrap/snaphu.py
 nisar/antenna/beamformer.py
 nisar/antenna/pattern.py
 nisar/cal/corner_reflector_slc_func.py
@@ -53,6 +53,7 @@ nisar/workflows/geocode_insar.py
 #nisar/workflows/gen_el_null_range_product.py
 nisar/workflows/gen_el_rising_edge_product.py
 nisar/workflows/gslc.py
+nisar/workflows/gslc_point_target_analysis.py
 nisar/workflows/helpers.py
 nisar/workflows/insar.py
 nisar/workflows/filter_interferogram.py

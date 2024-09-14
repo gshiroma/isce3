@@ -9,9 +9,8 @@ import isce3
 from isce3.core import crop_external_orbit
 from nisar.products.writers import BaseWriterSingleInput
 from nisar.workflows.h5_prep import set_get_geo_info
-from isce3.core import Ellipsoid
 from isce3.core.types import truncate_mantissa
-from isce3.geometry import compute_incidence_angle
+from isce3.geometry import get_near_and_far_range_incidence_angles
 from nisar.products.readers.orbit import load_orbit_from_xml
 
 
@@ -1173,6 +1172,21 @@ class BaseL2WriterSingleInput(BaseWriterSingleInput):
             input_swaths_freq_path = ('{PRODUCT}/swaths/'
                                       f'frequency{frequency}')
 
+            near_range_inc_angle_rad, far_range_inc_angle_rad = \
+                get_near_and_far_range_incidence_angles(radar_grid_obj,
+                                                        self.orbit)
+            
+            near_range_inc_angle_deg = np.rad2deg(near_range_inc_angle_rad)
+            far_range_inc_angle_deg = np.rad2deg(far_range_inc_angle_rad)
+
+            self.set_value(
+                f'{output_swaths_freq_path}/nearRangeIncidenceAngle',
+                near_range_inc_angle_deg)
+
+            self.set_value(
+                f'{output_swaths_freq_path}/farRangeIncidenceAngle',
+                far_range_inc_angle_deg)
+
             self.copy_from_input(
                 f'{output_swaths_freq_path}/listOfPolarizations',
                 f'{input_swaths_freq_path}/listOfPolarizations')
@@ -1299,7 +1313,7 @@ class BaseL2WriterSingleInput(BaseWriterSingleInput):
 
     def populate_processing_information_l2_common(self):
 
-        # Since the flag "rfiCorrectionApplied" is not present in the RSLC
+        # Since the flag "rfiMitigationApplied" is not present in the RSLC
         # metadata, we populate it by reading the name of the
         # RFI mitigation algorithm from the RSLC metadata. The flag
         # is only True if the name of the algorithm is present in the metadata,
@@ -1324,7 +1338,7 @@ class BaseL2WriterSingleInput(BaseWriterSingleInput):
                 format_function=np.float64)
 
         self.set_value(
-            f'{parameters_group}/rfiCorrectionApplied',
+            f'{parameters_group}/rfiMitigationApplied',
             flag_rfi_mitigation_applied)
 
         self.set_value(

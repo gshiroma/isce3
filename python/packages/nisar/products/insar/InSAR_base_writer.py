@@ -145,10 +145,16 @@ class InSARBaseWriter(h5py.File):
         self.sec_orbit = self.sec_rslc.getOrbit()
 
         self.ref_h5py_file_obj = \
-            HDF5OptimizedReader(name=self.ref_h5_slc_file, mode="r", libver="latest", swmr=True)
+            HDF5OptimizedReader(name=self.ref_h5_slc_file,
+                                mode="r",
+                                libver="latest",
+                                swmr=True)
 
         self.sec_h5py_file_obj = \
-            HDF5OptimizedReader(name=self.sec_h5_slc_file, mode="r", libver="latest", swmr=True)
+            HDF5OptimizedReader(name=self.sec_h5_slc_file,
+                                mode="r",
+                                libver="latest",
+                                swmr=True)
 
         # Load the external orbits and crop them
         if self.external_ref_orbit_path is not None:
@@ -353,10 +359,10 @@ class InSARBaseWriter(h5py.File):
                                   ' radar modes, "False" otherwise')
         ds_params = [
             DatasetParams(
-                "rfiCorrectionApplied",
+                "rfiMitigationApplied",
                 rfi_mitigation_flag,
                 (
-                    "Flag to indicate if RFI correction has been applied"
+                    "Flag to indicate if RFI mitigation has been applied"
                     f" to {rslc_name} RSLC"
                 ),
             ),
@@ -528,9 +534,6 @@ class InSARBaseWriter(h5py.File):
                 "coregistrationMethod",
                 coreg_method,
                 "RSLC coregistration method",
-                {
-                    "algorithm_type": "RSLC coregistration",
-                },
             ),
             DatasetParams(
                 "crossCorrelation",
@@ -539,50 +542,32 @@ class InSARBaseWriter(h5py.File):
                     "Cross-correlation algorithm for"
                     " sub-pixel offsets computation"
                 ),
-                {
-                    "algorithm_type": "RSLC coregistration",
-                },
             ),
             DatasetParams(
                 "crossCorrelationFilling",
                 outlier_filling_method,
                 "Outliers data filling algorithm for"
                 " cross-correlation offsets",
-                {
-                    "algorithm_type": "RSLC coregistration",
-                },
             ),
             DatasetParams(
                 "crossCorrelationFilterKernel",
                 filter_kernel_algorithm,
                 "Filtering algorithm for cross-correlation offsets",
-                {
-                    "algorithm_type": "RSLC coregistration",
-                },
             ),
             DatasetParams(
                 "crossCorrelationOutliers",
                 culling_metric,
                 "Outliers identification algorithm",
-                {
-                    "algorithm_type": "RSLC coregistration",
-                },
             ),
             DatasetParams(
                 "geometryCoregistration",
                 "Range doppler to geogrid then geogrid to range doppler",
                 "Geometry coregistration algorithm",
-                {
-                    "algorithm_type": "RSLC coregistration",
-                },
             ),
             DatasetParams(
                 "resampling",
                 "sinc",
                 "Secondary RSLC resampling algorithm",
-                {
-                    "algorithm_type": "RSLC coregistration",
-                },
             ),
         ]
 
@@ -611,17 +596,11 @@ class InSARBaseWriter(h5py.File):
                 "flatteningMethod",
                 flatten_method,
                 "Algorithm used to flatten the wrapped interferogram",
-                {
-                    "algorithm_type": "Interferogram formation",
-                },
             ),
             DatasetParams(
                 "multilooking",
                 multilooking_method,
                 "Multilooking algorithm",
-                {
-                    "algorithm_type": "Interferogram formation",
-                },
             ),
             DatasetParams(
                 "wrappedInterferogramFiltering",
@@ -629,9 +608,6 @@ class InSARBaseWriter(h5py.File):
                 (
                     "Algorithm used to filter the wrapped interferogram prior to phase unwrapping"
                 ),
-                {
-                    "algorithm_type": "Interferogram formation",
-                },
             ),
         ]
 

@@ -541,6 +541,8 @@ class GcovWriter(BaseL2WriterSingleInput):
         self.populate_identification_common()
         self.populate_identification_l2_specific()
         self.populate_data_parameters()
+        self.populate_ceos_analysis_ready_data_parameters_l2_common()
+        self.populate_ceos_analysis_ready_data_parameters()
         self.populate_calibration_information()
         self.populate_source_data()
         self.populate_processing_information_l2_common()
@@ -555,16 +557,32 @@ class GcovWriter(BaseL2WriterSingleInput):
 
         self.check_and_decorate_product_using_specs_xml(specs_xml_file)
 
+    def populate_ceos_analysis_ready_data_parameters(self):
+        # Note: CEOS ARD documentation uses the British spelling "Normalised"
+        # rather than the American (US) spelling "Normalized"
+        self.set_value(
+            'metadata/ceosAnalysisReadyData/ceosAnalysisReadyDataProductType',
+            'Normalised Radar Backscatter (NRB)')
+
+        self.set_value(
+            'metadata/ceosAnalysisReadyData/'
+            'outputBackscatterDecibelConversionFormula',
+            '10*log10(<GCOV_TERM>)')
+ 
     def populate_data_parameters(self):
         """
         Populate the data group `grids` of the GCOV product
         """
         for frequency in self.freq_pols_dict.keys():
+
+            input_swaths_freq_path = ('{PRODUCT}/swaths/'
+                                      f'frequency{frequency}')
+            output_grids_freq_path = ('{PRODUCT}/grids/'
+                                       f'frequency{frequency}')
+
             self.copy_from_input(
-                '{PRODUCT}/grids/'
-                f'frequency{frequency}/numberOfSubSwaths',
-                '{PRODUCT}/swaths/'
-                f'frequency{frequency}/numberOfSubSwaths',
+                f'{output_grids_freq_path}/numberOfSubSwaths',
+                f'{input_swaths_freq_path}/numberOfSubSwaths',
                 skip_if_not_present=True)
 
     def populate_processing_information(self):
@@ -576,10 +594,9 @@ class GcovWriter(BaseL2WriterSingleInput):
         parameters_group = \
             '{PRODUCT}/metadata/processingInformation/parameters'
 
-        # TODO review this
         self.set_value(
             f'{parameters_group}/noiseCorrectionApplied',
-            True)
+            False)
 
         self.set_value(
             f'{parameters_group}/preprocessingMultilookingApplied',
@@ -792,10 +809,11 @@ class GcovWriter(BaseL2WriterSingleInput):
                 'outputBackscatterNormalizationConvention',
                 'beta0')
 
+        # CEOS ARD convention is 'Linear amplitude' or 'Linear power'.
         self.set_value(
             f'{parameters_group}/rtc/'
             'outputBackscatterExpressionConvention',
-            'backscatter intensity (linear)')
+            'Linear power')
 
         self.copy_from_runconfig(
             f'{parameters_group}/rtc/memoryMode',
@@ -876,7 +894,3 @@ class GcovWriter(BaseL2WriterSingleInput):
             self.set_value(
                 '{PRODUCT}/metadata/orbit/interpMethod',
                 orbit_interp_method_str)
-
-        self.set_value(
-            '{PRODUCT}/metadata/orbit/referenceEpoch',
-            self.orbit.reference_epoch.isoformat_usec())

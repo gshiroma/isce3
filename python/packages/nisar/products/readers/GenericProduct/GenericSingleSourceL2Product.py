@@ -7,13 +7,13 @@ import pyre
 import numpy as np
 
 import isce3
-from isce3.core import speed_of_light
-from isce3.ext.isce3.core import DateTime, LookSide
+from isce3.core import DateTime, LookSide, speed_of_light
 from isce3.product import GeoGridParameters, RadarGridParameters
 from nisar.products.readers.GenericProduct import (
     GenericProduct,
     get_hdf5_file_product_type,
 )
+
 
 class GenericSingleSourceL2Product(
     GenericProduct,
@@ -142,26 +142,85 @@ class GenericSingleSourceL2Product(
     @property
     def sourceDataPath(self) -> str:
         return self.MetadataPath + "/sourceData"
-    
+
     @property
     def sourceDataSwathsPath(self) -> str:
         return self.sourceDataPath + "/swaths"
-    
+
     @property
     def sourceDataProcessingInfoPath(self) -> str:
         return self.sourceDataPath + "/processingInformation"
-    
+
+    def centerFrequencyPath(self, frequency: str) -> str:
+        """
+        Return the path to the center frequency dataset.
+
+        Parameters
+        ----------
+        frequency : "A" or "B"
+            The frequency letter (either "A" or "B").
+
+        Returns
+        -------
+        str
+            The path to the center frequency dataset of this frequency on the product.
+        """
+        return (f"{self.sourceDataSwathsPath}/frequency{frequency}/"
+                "centerFrequency")
+
+    def getCenterFrequency(self, frequency: str) -> np.float64:
+        """
+        Return the value at the center frequency dataset.
+
+        Parameters
+        ----------
+        frequency : "A" or "B"
+            The frequency letter (either "A" or "B").
+
+        Returns
+        -------
+        np.float64
+            The center frequency of this frequency on the product, in Hertz.
+        """
+        dataset_path = self.centerFrequencyPath(frequency=frequency)
+
+        # open H5 with swmr mode enabled
+        with h5py.File(self.filename, 'r', libver='latest', swmr=True) as fid:
+            # get dataset
+            frequency_dataset: h5py.Dataset = fid[dataset_path]
+            frequency_val = frequency_dataset[()]
+
+        return frequency_val
+
+    def getWavelength(self, frequency: str) -> np.float64:
+        """
+        Return the center wavelength.
+
+        Parameters
+        ----------
+        frequency : "A" or "B"
+            The frequency letter (either "A" or "B").
+
+        Returns
+        -------
+        np.float64
+            The wavelength of this frequency on the product, in meters.
+        """
+        freq = self.getCenterFrequency(frequency=frequency)
+        return speed_of_light / freq
+
     def getSourceRadarGridParameters(
         self,
-        frequency: str,
+        frequency: str | None = None,
     ) -> RadarGridParameters:
         """
         Create a RadarGridParameters from the source data for this product.
 
         Parameters
         ----------
-        frequency : "A" or "B"
-            The frequency letter.
+        frequency : "A" or "B", or None
+            The frequency letter (either "A" or "B"). If None, will use A if present
+            on the product, or B otherwise. Defaults to None.
 
         Returns
         -------
@@ -169,6 +228,9 @@ class GenericSingleSourceL2Product(
             A RadarGridParameters object representing the properties of the source
             data radar grid.
         """
+        if frequency is None:
+            frequency = self._getFirstFrequency()
+
         if frequency not in {"A", "B"}:
             raise ValueError("Frequency must be 'A' or 'B'.")
 
@@ -215,30 +277,35 @@ class GenericSingleSourceL2Product(
             ref_epoch=ref_epoch,
         )
 
-    def projectionPath(self, frequency: str) -> str:
+    def projectionPath(self, frequency: str | None = None) -> str:
         """
         Get the path to the HDF5 projection dataset for the given frequency.
 
         Parameters
         ----------
-        frequency : "A" or "B"
-            The frequency letter (either "A" or "B").
+        frequency : "A" or "B", or None
+            The frequency letter (either "A" or "B"). If None, will use A if present
+            on the product, or B otherwise. Defaults to None.
 
         Returns
         -------
         dataset_path : str
             The path to the dataset containing the projection on the product.
         """
+        if frequency is None:
+            frequency = self._getFirstFrequency()
+
         return f"{self.GridPath}/frequency{frequency}/projection"
 
-    def getProjectionEpsg(self, frequency: str) -> np.int32:
+    def getProjectionEpsg(self, frequency: str | None = None) -> np.int32:
         """
         Return the HDF5 EPSG projection dataset of the given frequency.
 
         Parameters
         ----------
-        frequency : "A" or "B"
-            The frequency letter (either "A" or "B").
+        frequency : "A" or "B", or None
+            The frequency letter (either "A" or "B"). If None, will use A if present
+            on the product, or B otherwise. Defaults to None.
 
         Returns
         -------
@@ -259,87 +326,105 @@ class GenericSingleSourceL2Product(
         # return EPSG projection
         return epsg
 
-    def xCoordinatesPath(self, frequency: str) -> str:
+    def xCoordinatesPath(self, frequency: str | None = None) -> str:
         """
         Return path to HDF5 xCoordinates dataset of given frequency.
 
         Parameters
         ----------
-        frequency : "A" or "B"
-            The frequency letter (either "A" or "B").
+        frequency : "A" or "B", or None
+            The frequency letter (either "A" or "B"). If None, will use A if present
+            on the product, or B otherwise. Defaults to None.
 
         Returns
         -------
         dataset_path : str
             The path to the dataset containing the X coordinates on the product.
         """
+        if frequency is None:
+            frequency = self._getFirstFrequency()
+
         return f"{self.GridPath}/frequency{frequency}/xCoordinates"
 
-    def xCoordinateSpacingPath(self, frequency: str ) -> str:
+    def xCoordinateSpacingPath(self, frequency: str | None = None) -> str:
         """
         Return path to HDF5 xCoordinates spacing dataset of given frequency.
 
         Parameters
         ----------
-        frequency : "A" or "B"
-            The frequency letter (either "A" or "B").
+        frequency : "A" or "B", or None
+            The frequency letter (either "A" or "B"). If None, will use A if present
+            on the product, or B otherwise. Defaults to None.
 
         Returns
         -------
         dataset_path : str
             The path to the dataset containing the X spacing value on the product.
         """
+        if frequency is None:
+            frequency = self._getFirstFrequency()
+
         return f"{self.GridPath}/frequency{frequency}/xCoordinateSpacing"
 
-    def yCoordinatesPath(self, frequency: str) -> str:
+    def yCoordinatesPath(self, frequency: str | None = None) -> str:
         """
         Return path to HDF5 yCoordinates dataset of given frequency.
 
         Parameters
         ----------
-        frequency : "A" or "B"
-            The frequency letter (either "A" or "B").
+        frequency : "A" or "B", or None
+            The frequency letter (either "A" or "B"). If None, will use A if present
+            on the product, or B otherwise. Defaults to None.
 
         Returns
         -------
         dataset_path : str
             The path to the dataset containing the Y coordinates on the product.
         """
+        if frequency is None:
+            frequency = self._getFirstFrequency()
+
         return f"{self.GridPath}/frequency{frequency}/yCoordinates"
 
-    def yCoordinateSpacingPath(self, frequency: str) -> str:
+    def yCoordinateSpacingPath(self, frequency: str | None = None) -> str:
         """
         Return path to HDF5 yCoordinates spacing dataset of given frequency.
 
         Parameters
         ----------
-        frequency : "A" or "B"
-            The frequency letter (either "A" or "B").
+        frequency : "A" or "B", or None
+            The frequency letter (either "A" or "B"). If None, will use A if present
+            on the product, or B otherwise. Defaults to None.
 
         Returns
         -------
         dataset_path : str
             The path to the dataset containing the Y spacing value on the product.
         """
+        if frequency is None:
+            frequency = self._getFirstFrequency()
+
         return f"{self.GridPath}/frequency{frequency}/yCoordinateSpacing"
     
     def getGeoGridCoordinateDatasets(
         self,
-        frequency: str,
+        frequency: str | None = None,
     ) -> tuple[h5py.Dataset, h5py.Dataset]:
         """
         Return HDF5 coordinates datasets of given frequency.
 
         Parameters
         ----------
-        frequency : "A" or "B"
-            The frequency letter (either "A" or "B").
+        frequency : "A" or "B", or None
+            The frequency letter (either "A" or "B"). If None, will use A if present
+            on the product, or B otherwise. Defaults to None.
 
         Returns
         -------
         x_dataset, y_dataset : h5py.Dataset
             The datasets containing the X and Y coordinates of the image grid.
         """
+
         # build path the desired datasets
         x_dataset_path = self.xCoordinatesPath(frequency=frequency)
         y_dataset_path = self.yCoordinatesPath(frequency=frequency)
@@ -356,15 +441,16 @@ class GenericSingleSourceL2Product(
     
     def getGeoGridCoordinateSpacing(
         self,
-        frequency: str,
+        frequency: str | None = None,
     ) -> tuple[np.float64, np.float64]:
         """
         Return coordinate spacing values of the given frequency.
 
         Parameters
         ----------
-        frequency : "A" or "B"
-            The frequency letter (either "A" or "B").
+        frequency : "A" or "B", or None
+            The frequency letter (either "A" or "B"). If None, will use A if present
+            on the product, or B otherwise. Defaults to None.
 
         Returns
         -------
@@ -415,7 +501,7 @@ class GenericSingleSourceL2Product(
         x_coords, y_coords = self.getGeoGridCoordinateDatasets(frequency=frequency)
         x_spacing, y_spacing = self.getGeoGridCoordinateSpacing(frequency=frequency)
 
-        width, length = self.getImageDataset(
+        length, width = self.getImageDataset(
             frequency=frequency,
             polarization=polarization
         ).shape

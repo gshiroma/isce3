@@ -9,6 +9,7 @@ import os
 from warnings import warn
 from isce3.stripmap.readers.l0raw.ALOS.CEOS import ImageFile, LeaderFile
 from nisar.antenna import CalPath
+from nisar.products import descriptions
 from nisar.products.readers.Raw import Raw
 from nisar.products.readers.Raw.Raw import get_rcs2body
 from nisar.workflows.focus import make_doppler_lut
@@ -29,6 +30,11 @@ def cmdLineParse():
     parser.add_argument('-d', '--debug', dest='debug', action='store_true',
                         help="Use more rigorous parser to check magic bytes aggresively",
                         default=False)
+    parser.add_argument("--simulate-gap", dest="gap_width_usec", type=float,
+                        help="Simulate a transmit gap of the given width in microseconds",
+                        default=0.0)
+    parser.add_argument("--gap-location", type=float, default=0.5,
+                        help="Location of simulated gap given as a fraction of the swath.")
 
     inps = parser.parse_args()
     if not os.path.isdir(inps.indir):
@@ -134,13 +140,12 @@ def get_alos_orbit(ldr: LeaderFile.LeaderFile) -> isce3.core.Orbit:
             velocity = [sv.VelocityXInmpers, sv.VelocityYInmpers, sv.VelocityZInmpers]
         ))
     # Use tref as epoch, not time of first sample.
-    return isce3.core.Orbit(svs, isce3.core.DateTime(tref))
+    return isce3.core.Orbit(svs, isce3.core.DateTime(tref), type='DOE')
 
 
 def set_h5_orbit(group: h5py.Group, orbit: isce3.core.Orbit):
     orbit.save_to_h5(group)
-    # orbitType and acceleration not used/contained in Orbit object
-    group.create_dataset('orbitType', data=numpy.string_('DOE'))
+    # acceleration not used/contained in Orbit object
     dset = group.create_dataset("acceleration",
                                 data=numpy.zeros_like(orbit.velocity))
     dset.attrs["units"] = numpy.string_("meters per second squared")
@@ -190,10 +195,14 @@ def getset_attitude(group: h5py.Group, ldr: LeaderFile.LeaderFile,
     ds.attrs["units"] = numpy.string_("radians per second")
 
     ds = group.create_dataset("attitudeType", data=numpy.string_("Custom"))
-    ds.attrs["description"] = numpy.string_("PrOE (or) NOE (or) MOE (or) Custom")
+    ds.attrs["description"] = numpy.string_(
+        'Attitude type, either "FRP", "NRP", "PRP, or "Custom", where "FRP"'
+        ' stands for Forecast Radar Pointing, "NRP" is Near Real-time'
+        ' Pointing, and "PRP" is Precise Radar Pointing')
 
     ds = group.create_dataset("eulerAngles", data=numpy.array(rpys))
-    ds.attrs["description"] = numpy.string_("Attitude Euler angles (roll, pitch, yaw")
+    ds.attrs["description"] = numpy.string_(
+        "Attitude Euler angles (roll, pitch, yaw)")
     ds.attrs["units"] = numpy.string_("degrees")
 
     ds = group.create_dataset("quaternions", data=numpy.array(qs))
@@ -202,15 +211,15 @@ def getset_attitude(group: h5py.Group, ldr: LeaderFile.LeaderFile,
 
     ds = group.create_dataset("time", data=numpy.array(times))
     ds.attrs["description"] = numpy.string_(
-        "Time vector record. This record contains the time")
+        "Time vector record. This record contains the time corresponding to"
+        " attitude and quaternion records")
     ds.attrs["units"] = numpy.string_(
         f"seconds since {orbit.reference_epoch.isoformat()}")
 
 
 ident_descriptions = {
   'absoluteOrbitNumber': 'Absolute orbit number',
-  'boundingPolygon': 'OGR compatible WKT representation of bounding polygon of '
-                     'the image',
+  'boundingPolygon': descriptions.bounding_polygon,
   'diagnosticModeFlag': 'Indicates if the radar operation mode is a diagnostic '
                         'mode (1-2) or DBFed science (0): 0, 1, or 2',
   'granuleId': 'Unique granule identification name',
@@ -224,10 +233,13 @@ ident_descriptions = {
                  'multiple radar modes, "False" otherwise.',
   'isUrgentObservation': 'Flag indicating if observation is nominal ("False") '
                          'or urgent ("True")',
+  'isJointObservation': '"True" if any portion of this product was acquired in '
+                        'a joint observation mode (e.g., L-band and S-band '
+                        'simultaneously), "False" otherwise',
   'listOfFrequencies': 'List of frequency layers available in the product',
-  'lookDirection': 'Look direction can be left or right',
+  'lookDirection': 'Look direction, either "Left" or "Right"',
   'missionId': 'Mission identifier',
-  'orbitPassDirection': 'Orbit direction can be ascending or descending',
+  'orbitPassDirection': 'Orbit direction, either "Ascending" or "Descending"',
   'plannedDatatakeId': 'List of planned datatakes included in the product',
   'plannedObservationId': 'List of planned observations included in the '
                           'product',
@@ -260,15 +272,16 @@ def populateIdentification(ident: h5py.Group, ldr: LeaderFile.LeaderFile):
     ident.create_dataset('diagnosticModeFlag', data=numpy.uint8(0))
     ident.create_dataset('isGeocoded', data=numpy.string_("False"))
     ident.create_dataset('listOfFrequencies', data=numpy.string_(["A"]))
-    ident.create_dataset('lookDirection', data = numpy.string_("right"))
+    ident.create_dataset('lookDirection', data = numpy.string_("Right"))
     ident.create_dataset('missionId', data=numpy.string_("ALOS"))
-    direction = "ascending" if ldr.summary.TimeDirectionIndicatorAlongLine[0] == "A" else "descending"
+    direction = "Ascending" if ldr.summary.TimeDirectionIndicatorAlongLine[0] == "A" else "Descending"
     ident.create_dataset('orbitPassDirection', data=numpy.string_(direction))
     ident.create_dataset('processingType', data=numpy.string_("repackaging"))
     ident.create_dataset('productType', data=numpy.string_("RRSD"))
     ident.create_dataset('productVersion', data=numpy.string_("0.1.0"))
     ident.create_dataset('absoluteOrbitNumber', data=numpy.array(0, dtype='u4'))
     ident.create_dataset("isUrgentObservation", data=numpy.string_("False"))
+    ident.create_dataset("isJointObservation", data=numpy.bytes_("False"))
     # shape = numberOfObservations
     ident.create_dataset("plannedObservationId", data=numpy.string_(["0"]))
     # shape = numberOfDatatakes
@@ -286,7 +299,7 @@ def populateIdentification(ident: h5py.Group, ldr: LeaderFile.LeaderFile):
     ident.create_dataset("isMixedMode", data=numpy.string_("False"))
     ident.create_dataset("processingCenter", data=numpy.string_("JPL"))
     ident.create_dataset("processingDateTime",
-        data=numpy.string_(datetime.datetime.now().isoformat()))
+        data=numpy.string_(datetime.datetime.now(datetime.timezone.utc).isoformat()[:19]))
     ident.create_dataset("productLevel", data=numpy.string_("L0B"))
     ident.create_dataset("productSpecificationVersion",
         data=numpy.string_("0.9.0"))
@@ -344,7 +357,7 @@ def getNominalSpacing(prf, dr, orbit, look_angle, i=0):
     return ds, dg
 
 
-def addImagery(h5file, ldr, imgfile, pol):
+def addImagery(h5file, ldr, imgfile, pol, gap_width_usec=0.0, gap_location=0.5):
     '''
     Populate swaths segment of HDF5 file.
     ''' 
@@ -369,6 +382,20 @@ def addImagery(h5file, ldr, imgfile, pol):
     dr = speed_of_light / (2 * fsamp)
     nPixels = image.description.NumberOfBytesOfSARDataPerRecord // image.description.NumberOfSamplesPerDataGroup
     nLines = image.description.NumberOfSARDataRecords
+
+    sub_swaths = [[0, nPixels]]
+    if gap_width_usec > 0.0:
+        print(f"Chirp length is {firstrec.ChirpLengthInns * 1e3} usec")
+        print(f"Simulating {gap_width_usec} usec gap")
+        ngap = round(gap_width_usec * 1e-6 * fsamp)
+        icenter = round(gap_location * nPixels)
+        istop1 = icenter - ngap // 2
+        istart2 = istop1 + ngap
+        print(f"Gap located between pixels [{istop1}, {istart2})")
+        # Need at least one valid sample on each side of gap.
+        if (istop1 < 1) or (istart2 >= nPixels):
+            raise ValueError(f"Gap parameters do not leave two valid subswaths")
+        sub_swaths = [[0, istop1], [istart2, nPixels]]
 
     # Figure out nominal ground spacing
     prf = firstrec.PRFInmHz / 1000./ (1 + (ldr.summary.NumberOfSARChannels == 4))
@@ -400,11 +427,13 @@ def addImagery(h5file, ldr, imgfile, pol):
                  datetime.timedelta(days=int(firstrec.SensorAcquisitionDayOfYear-1))
         txgrp = fid.create_group(txgrpstr)
         time = txgrp.create_dataset('UTCtime', dtype='f8', shape=(nLines,))
-        time.attrs['units'] = "seconds since {0} 00:00:00".format(tstart.strftime('%Y-%m-%d'))
-        txgrp.create_dataset('numberOfSubSwaths', data=1)
+        time.attrs['units'] = numpy.bytes_("seconds since {0}T00:00:00".format(tstart.strftime('%Y-%m-%d')))
+        txgrp.create_dataset('numberOfSubSwaths', data=len(sub_swaths))
         txgrp.create_dataset('radarTime', dtype='f8', shape=(nLines,))
         txgrp.create_dataset('rangeLineIndex', dtype='i8', shape=(nLines,))
-        txgrp.create_dataset('validSamplesSubSwath1', dtype='i8', shape=(nLines,2))
+        for i in range(len(sub_swaths)):
+            key = f"validSamplesSubSwath{i + 1}"
+            txgrp.create_dataset(key, dtype='i8', shape=(nLines, 2))
         txgrp.create_dataset('centerFrequency', data=speed_of_light / (ldr.summary.RadarWavelengthInm))
         txgrp.create_dataset('rangeBandwidth', data=ldr.calibration.header.BandwidthInMHz * 1.0e6)
         txgrp.create_dataset('chirpDuration', data=firstrec.ChirpLengthInns * 1.0e-9)
@@ -486,13 +515,19 @@ def addImagery(h5file, ldr, imgfile, pol):
         else:
             write_arr[:2*rshift] = inarr[-2*rshift:]
 
+        for i in range(len(sub_swaths) - 1):
+            gap_start, gap_stop = 2 * sub_swaths[i][1], 2 * sub_swaths[i + 1][0]
+            write_arr[gap_start:gap_stop] = BAD_VALUE
+
         if firstInPol:
             # check if any samples at the very start of RX window are missing.
             inds = numpy.where(write_arr != BAD_VALUE)[0]
             if (len(inds) > 0 and inds[0] > 0):
                 warn(f'The first {inds[0] // 2} range samples are missing. '
                       f'They are filled with {BAD_VALUE}!')
-            txgrp['validSamplesSubSwath1'][linnum-1] = [0, nPixels]
+            for i in range(len(sub_swaths)):
+                key = f"validSamplesSubSwath{i + 1}"
+                txgrp[key][linnum-1] = sub_swaths[i]
 
         #Complex float 16 writes work with write_direct only
         rximg.write_direct(write_arr.view(cpxtype), dest_sel=numpy.s_[linnum-1])
@@ -557,8 +592,7 @@ def finalizeIdentification(h5file: str):
         def additem(name, value, description):
             ds = ident.create_dataset(name, data=numpy.string_(value))
             ds.attrs["description"] = numpy.string_(description)
-        additem("boundingPolygon", poly,
-            "OGR compatible WKT representation of bounding polygon of the image")
+        additem("boundingPolygon", poly, descriptions.bounding_polygon)
         additem("zeroDopplerStartTime", t0, "Azimuth start time of product")
         additem("zeroDopplerEndTime", t1, "Azimuth stop time of product")
 
@@ -588,7 +622,8 @@ def process(args=None):
     #Iterate over polarizations for imagery layers
     for pol in ['HH', 'HV', 'VV', 'VH']:
         if pol in filenames:
-            addImagery(args.outh5, leader, filenames[pol], pol)
+            addImagery(args.outh5, leader, filenames[pol], pol,
+                args.gap_width_usec, args.gap_location)
 
     finalizeIdentification(args.outh5)
 

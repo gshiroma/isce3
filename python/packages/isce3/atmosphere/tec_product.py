@@ -158,7 +158,7 @@ def tec_lut2d_from_json_srg(json_path: str, center_freq: float,
     ellipsoid = proj.ellipsoid
 
     # Using zero DEM in current implementation to account for TEC file bounds
-    # being larget than that of the scene DEM
+    # being larger than that of the scene DEM
     dem_interp = isce3.geometry.DEMInterpolator()
 
     # Compute near and far delta range for near and far TEC
@@ -221,12 +221,12 @@ def tec_lut2d_from_json_az(json_path: str, center_freq: float,
     # get the UTC time and mask for tec_data that covers
     # sensing start / stop with margin applied
     t_since_epoch_masked = _get_tec_time(tec_json_dict, radar_grid, orbit,
-                                         margin)
+                                         margin,
+                                         staggered_tec_grid=True)
 
     # Load the TEC information from IMAGEN parsed as dictionary
     # Use radar grid start/end range for near/far range
     # Transpose stacked output to get shape to be consistent with coordinates
-    rg_vec = [radar_grid.starting_range, radar_grid.end_range]
     tec_suborbital = np.vstack([_get_suborbital_tec(tec_json_dict,
                                                     nr_fr,
                                                     t_since_epoch_masked.mask)
@@ -236,27 +236,34 @@ def tec_lut2d_from_json_az(json_path: str, center_freq: float,
     t_since_epoch = t_since_epoch_masked.compressed()
     tec_gradient_az_spacing = (t_since_epoch[-1] - t_since_epoch[0]) / (len(t_since_epoch) - 1)
 
-    # staggered grid to compute TEC gradient
-    tec_gradient_t_since_epoch = t_since_epoch[1:] - tec_gradient_az_spacing / 2
+    # Form a staggered grid.
+    # The staggered grid is a grid with the same spacing as the original grid but
+    # shifted by half the grid spacing. This grid is necessary because
+    # the azimuth TEC gradient (TEC difference divided by azimuth time diff) has
+    # the timing at the center of the two TEC samples used for the computation.
+    t_since_epoch = t_since_epoch[1:] - tec_gradient_az_spacing / 2
 
     tec_gradient = np.diff(tec_suborbital, axis=0) / tec_gradient_az_spacing
 
     speed_vec_lut = np.array([np.linalg.norm(orbit.interpolate(t)[1]) for t in
-                              tec_gradient_t_since_epoch])
+                              t_since_epoch])
+    rg_vec = [radar_grid.starting_range, radar_grid.end_range]
     az_fm_rate = np.outer(-2 * speed_vec_lut**2 * (center_freq / isce3.core.speed_of_light),
                           1 / np.array(rg_vec))
 
     t_az_delay = (-2 * K
                   / (isce3.core.speed_of_light * az_fm_rate * center_freq)
                   * tec_gradient * TECU)
-    return isce3.core.LUT2d(rg_vec, tec_gradient_t_since_epoch, t_az_delay)
+
+    return isce3.core.LUT2d(rg_vec, t_since_epoch, t_az_delay)
 
 
 def _get_tec_time(tec_json_dict: dict,
                   radar_grid: isce3.product.RadarGridParameters,
                   orbit: isce3.core.Orbit,
                   margin: float,
-                  doppler_lut: isce3.core.LUT2d=isce3.core.LUT2d()
+                  doppler_lut: isce3.core.LUT2d=isce3.core.LUT2d(),
+                  staggered_tec_grid: bool=False,
                   ) -> np.ma.MaskedArray:
     '''
     Extract the TEC UTC times masked so that valid times lie within the radar
@@ -276,6 +283,11 @@ def _get_tec_time(tec_json_dict: dict,
         to ensure sufficient TEC data is assembled.
     doppler_lut: isce3.core.LUT2d
         Doppler centroid of SLC
+    staggered_tec_grid: bool
+        Indicates if the TEC grid is staggered or not.
+        A staggered TEC grid is a grid that is shifted by half the spacing of the
+        original TEC grid, which is used for azimuth TEC gradient.
+        Default: False
 
     Returns
     -------
@@ -287,6 +299,19 @@ def _get_tec_time(tec_json_dict: dict,
     # Get string UTC times from JSON as isce3.core.DateTime objects.
     json_utc_datetimes = [isce3.core.DateTime(iso_t_str)
                           for iso_t_str in tec_json_dict['utc']]
+    
+    # Adjust the radar grid margin in case of the staggered grid.
+    # The staggered grid needs at least half of the TEC spacing at each side.
+    # When `margin` is not big enough, then increase it to half the spacing.
+    staggered_grid_margin_sec = 0.0
+    if staggered_tec_grid:
+        tec_grid_spacing = ((json_utc_datetimes[-1] - json_utc_datetimes[0]).total_seconds()
+                            / (len(json_utc_datetimes) - 1))
+
+        staggered_grid_margin_sec = tec_grid_spacing / 2.0
+        margin = max(margin, staggered_grid_margin_sec)
+
+    staggered_grid_margin = isce3.core.TimeDelta(staggered_grid_margin_sec)
 
     # Compute lower and upper bounds as datetime objects to filter JSON UTC
     # datetime objects based on radar grid start and stop with margin applied.
@@ -299,11 +324,13 @@ def _get_tec_time(tec_json_dict: dict,
 
     # Determine mask start based on larger between orbit start,
     # rdr grid start - margin
-    mask_start = max(orbit.start_datetime, rdr_grid_start_minus_margin)
+    mask_start = max(orbit.start_datetime - staggered_grid_margin,
+                     rdr_grid_start_minus_margin)
 
     # Determine mask start based on smaller between orbit stop,
     # rdr grid start + margin
-    mask_stop = min(orbit.end_datetime, rdr_grid_end_plus_margin)
+    mask_stop = min(orbit.end_datetime + staggered_grid_margin,
+                    rdr_grid_end_plus_margin)
 
     # If correct doppler LUT provided, check LUT start/stop against mask
     # start/stop.
@@ -319,14 +346,71 @@ def _get_tec_time(tec_json_dict: dict,
     time_mask = [mask_start <= t <= mask_stop
                  for t in json_utc_datetimes]
 
-    # Compute JSON UTC times as deltatime total seconds since reference epoch.
+    # Compute JSON UTC times as delta-time total seconds since reference epoch.
     t_since_ref_epoch = [(t - radar_grid.ref_epoch).total_seconds()
                          for t in json_utc_datetimes]
 
     t_since_ref_epoch = np.ma.MaskedArray(data=t_since_ref_epoch,
                                           mask=np.logical_not(time_mask))
+    
+    _check_tec_grid_contains_radargrid(radar_grid, t_since_ref_epoch,
+                                       staggered_tec_grid)
 
     return t_since_ref_epoch
+
+
+def _check_tec_grid_contains_radargrid(radar_grid: isce3.product.RadarGridParameters,
+                                       t_since_ref_epoch: np.ma.MaskedArray,
+                                       staggered: bool=False):
+    '''
+    Helper function to check if the TEC grid contains the radargrid
+
+    Parameters
+    ----------
+    radar_grid: isce3.product.RadarGridParameters
+        Radar grid of SLC
+    t_since_ref_epoch: np.ma.MaskedArray
+        Masked array of the TEC time grid
+    staggered: bool
+        Flag to indicate if the TEC grid will be staggered.
+        A staggered TEC grid is a grid that is shifted by half the spacing of the
+        original TEC grid, which is used for azimuth TEC gradient.
+        Default: False
+
+    Raises
+    ------
+    ValueError: When the TEC grid does not contain the radar grid.
+    '''
+    tec_t = t_since_ref_epoch.compressed()
+    tec_grid_start = tec_t[0]
+    tec_grid_end = tec_t[-1]
+
+    rdr_grid_start = radar_grid.sensing_start
+    rdr_grid_stop = radar_grid.sensing_stop
+
+    tec_grid_spacing = (tec_grid_end - tec_grid_start) / (len(tec_t) - 1)
+
+    # Adjust the radar grid start / stop time when staggered grid is used    
+    if staggered:
+        rdr_grid_start -= tec_grid_spacing / 2
+        rdr_grid_stop += tec_grid_spacing / 2
+
+    if tec_grid_start < rdr_grid_start and rdr_grid_stop < tec_grid_end:
+        return
+
+    error_channel = journal.error(
+            "tec_product._check_tec_grid_contains_radargrid")
+    err_msg = ('Cropped TEC grid does not contain the radargrid.\n'
+               f'tec_start={tec_t[0]}, tec_end={tec_t[-1]}\n'
+               f'radargrid start={radar_grid.sensing_start}, radargrid stop={radar_grid.sensing_stop}\n'
+               f'staggered: {staggered}\n'
+               f'TEC grid spacing: {tec_grid_spacing}\n\n'
+               f'Relative timing w.r.t. Sensing start:\ntec_start={tec_t[0] - radar_grid.sensing_start}, '
+               f'tec_end={tec_t[-1] - radar_grid.sensing_start}\n'
+               f'radargrid start={0}, radargrid_stop={radar_grid.sensing_stop - radar_grid.sensing_start}')
+
+    error_channel.log(err_msg)
+    raise ValueError(err_msg)
 
 
 def _check_orbit_contains_radar_grid(radar_grid: isce3.product.RadarGridParameters,

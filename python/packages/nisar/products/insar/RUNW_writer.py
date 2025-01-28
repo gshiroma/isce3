@@ -2,6 +2,7 @@ import numpy as np
 from nisar.workflows.helpers import get_cfg_freq_pols
 
 from .dataset_params import DatasetParams, add_dataset_and_attrs
+from .InSAR_HDF5_optimizer_config import get_InSAR_output_options
 from .InSAR_L1_writer import L1InSARWriter
 from .InSAR_products_info import InSARProductsInfo
 from .product_paths import RUNWGroupsPaths
@@ -17,7 +18,12 @@ class RUNWWriter(L1InSARWriter):
         Constructor for RUNW class with additional range and azimuth
         looks variables for the phase unwrapping
         """
+        hdf5_opt_config, kwds = get_InSAR_output_options(kwds, 'RUNW')
+
         super().__init__(**kwds)
+
+        # HDF5 IO optimizer configuration
+        self.hdf5_optimizer_config = hdf5_opt_config
 
         # group paths are RUNW group paths
         self.group_paths = RUNWGroupsPaths()
@@ -47,9 +53,9 @@ class RUNWWriter(L1InSARWriter):
         """
         super().add_root_attrs()
 
-        self.attrs["title"] = np.string_("NISAR L1 RUNW Product")
+        self.attrs["title"] = np.bytes_("NISAR L1 RUNW Product")
         self.attrs["reference_document"] = \
-            np.string_("D-102271 NISAR NASA SDS Product Specification"
+            np.bytes_("D-102271 NISAR NASA SDS Product Specification"
                        " L1 Range Doppler UnWrapped Interferogram")
 
     def add_ionosphere_to_procinfo_params_group(self):
@@ -69,7 +75,7 @@ class RUNWWriter(L1InSARWriter):
         ds_params = [
             DatasetParams(
                 "highBandBandwidth",
-                np.float64(high_bandwidth),
+                np.float32(high_bandwidth),
                 "Slant range bandwidth of the high sub-band image",
                 {
                     "units": Units.hertz,
@@ -77,7 +83,7 @@ class RUNWWriter(L1InSARWriter):
             ),
             DatasetParams(
                 "lowBandBandwidth",
-                np.float64(low_bandwidth),
+                np.float32(low_bandwidth),
                 "Slant range bandwidth of the low sub-band image",
                 {
                     "units": Units.hertz,
@@ -138,9 +144,6 @@ class RUNWWriter(L1InSARWriter):
                 "ionosphereAlgorithm",
                 iono_algorithm,
                 "Algorithm used to estimate ionosphere phase screen",
-                {
-                    "algorithm_type": "Ionosphere estimation",
-                },
             ),
             DatasetParams(
                 "ionosphereFilling",
@@ -148,17 +151,11 @@ class RUNWWriter(L1InSARWriter):
                 "Outliers data filling algorithm"
                 " for ionosphere phase estimation"
                 ,
-                {
-                    "algorithm_type": "Ionosphere estimation",
-                },
             ),
             DatasetParams(
                 "ionosphereFiltering",
                 iono_filtering,
                 f"Filtering algorithm for ionosphere phase screen computation",
-                {
-                    "algorithm_type": "Ionosphere estimation",
-                },
             ),
             DatasetParams(
                 "ionosphereOutliers",
@@ -166,19 +163,13 @@ class RUNWWriter(L1InSARWriter):
                 "Algorithm identifying outliers in unfiltered ionosphere"
                 " phase screen"
                 ,
-                {
-                    "algorithm_type": "Ionosphere estimation",
-                },
             ),
             DatasetParams(
                 "unwrappingErrorCorrection",
-                np.bool_(unwrap_correction),
+                np.bytes_(unwrap_correction),
                 "Algorithm correcting unwrapping errors in sub-band"
                 " unwrapped interferograms"
                 ,
-                {
-                    "algorithm_type": "Ionosphere estimation",
-                },
             ),
         ]
 
@@ -225,25 +216,16 @@ class RUNWWriter(L1InSARWriter):
                 "costMode",
                 cost_mode,
                 "Cost mode algorithm for phase unwrapping",
-                {
-                    "algorithm_type": "Unwrapping",
-                },
             ),
             DatasetParams(
                 "unwrappingAlgorithm",
                 unwrapping_algorithm,
                 "Algorithm used for phase unwrapping",
-                {
-                    "algorithm_type": "Unwrapping",
-                },
             ),
             DatasetParams(
                 "unwrappingInitializer",
                 unwrapping_initializer,
                 "Algorithm used to initialize phase unwrapping",
-                {
-                    "algorithm_type": "Unwrapping",
-                },
             ),
         ]
 
@@ -257,23 +239,13 @@ class RUNWWriter(L1InSARWriter):
                 "wrappedPhaseFilling",
                 phase_filling,
                 "Outliers data filling algorithm for phase unwrapping"
-                " preprocessing"
-                ,
-                {
-                    "algorithm_type": "Unwrapping",
-                },
-            ),
+                " preprocessing"),
             DatasetParams(
                 "wrappedPhaseOutliers",
                 phase_outliers,
                 "Algorithm identifying outliers in the wrapped"
-                " interferogram"
-                ,
-                {
-                    "algorithm_type": "Unwrapping",
-                },
-            ),
-        ]
+                " interferogram")]
+        
         unwrap_prep_group = self.require_group(
             f"{self.group_paths.AlgorithmsPath}/unwrapping/preprocessing")
         for ds_param in ds_params:
@@ -327,9 +299,9 @@ class RUNWWriter(L1InSARWriter):
                 igram_ds_params = [
                     (
                         "connectedComponents",
-                        np.uint32,
+                        np.uint16,
                         f"Connected components for {pol} layer",
-                        Units.dn,
+                        Units.unitless,
                     ),
                     (
                         "ionospherePhaseScreen",
@@ -361,10 +333,6 @@ class RUNWWriter(L1InSARWriter):
                         ds_dtype,
                         ds_description,
                         units=ds_unit,
-                        compression_enabled=self.cfg['output']['compression_enabled'],
-                        compression_level=self.cfg['output']['compression_level'],
-                        chunk_size=self.cfg['output']['chunk_size'],
-                        shuffle_filter=self.cfg['output']['shuffle']
                     )
 
     def add_swaths_to_hdf5(self):
@@ -373,6 +341,4 @@ class RUNWWriter(L1InSARWriter):
         """
         super().add_swaths_to_hdf5()
 
-        # add subswaths and interferogram to swaths group
-        self.add_subswaths_to_swaths_group()
         self.add_interferogram_to_swaths_group()

@@ -2,13 +2,13 @@ import numpy as np
 from nisar.workflows.h5_prep import set_get_geo_info
 from nisar.workflows.helpers import get_cfg_freq_pols
 
-from .InSAR_products_info import InSARProductsInfo
 from .InSAR_base_writer import InSARBaseWriter
+from .InSAR_HDF5_optimizer_config import get_InSAR_output_options
 from .InSAR_L2_writer import L2InSARWriter
+from .InSAR_products_info import InSARProductsInfo
 from .product_paths import GOFFGroupsPaths
 from .ROFF_writer import ROFFWriter
 from .units import Units
-
 
 class GOFFWriter(ROFFWriter, L2InSARWriter):
     """
@@ -20,8 +20,12 @@ class GOFFWriter(ROFFWriter, L2InSARWriter):
         """
         Constructor for GOFF class
         """
+        hdf5_opt_config, kwds = get_InSAR_output_options(kwds, 'GOFF')
 
         super().__init__(**kwds)
+
+        # HDF5 IO optimizer configuration
+        self.hdf5_optimizer_config = hdf5_opt_config
 
         # group paths are GOFF group paths
         self.group_paths = GOFFGroupsPaths()
@@ -43,7 +47,7 @@ class GOFFWriter(ROFFWriter, L2InSARWriter):
 
         self.attrs["title"] = "NISAR L2 GOFF Product"
         self.attrs["reference_document"] = \
-            np.string_("D-105010 NISAR NASA SDS Product Specification"
+            np.bytes_("D-105010 NISAR NASA SDS Product Specification"
                        " L2 Geocoded Pixel Offsets")
 
     def add_algorithms_to_procinfo_group(self):
@@ -65,7 +69,7 @@ class GOFFWriter(ROFFWriter, L2InSARWriter):
         for rslc_name in ['reference', 'secondary']:
             rslc = self[self.group_paths.ParametersPath][rslc_name]
             rslc['referenceTerrainHeight'].attrs['description'] = \
-                np.string_("Reference Terrain Height as a function of"
+                np.bytes_("Reference Terrain Height as a function of"
                            f" map coordinates for {rslc_name} RSLC")
             rslc['referenceTerrainHeight'].attrs['units'] = \
                 Units.meter
@@ -79,7 +83,7 @@ class GOFFWriter(ROFFWriter, L2InSARWriter):
 
         proc_cfg = self.cfg["processing"]
         geogrids = proc_cfg["geocode"]["geogrids"]
-        grids_val = np.string_("projection")
+        grids_val = np.bytes_("projection")
 
         # Extract offset layer names for later processing
         layers = [
@@ -96,10 +100,38 @@ class GOFFWriter(ROFFWriter, L2InSARWriter):
             grids_freq_group = self.require_group(grids_freq_group_name)
 
             offset_group_name = f"{grids_freq_group_name}/pixelOffsets"
-            self.require_group(offset_group_name)
+            offset_group = self.require_group(offset_group_name)
 
             goff_geogrids = geogrids[freq]
             goff_shape = (goff_geogrids.length,goff_geogrids.width)
+
+            # set the geo information for the mask
+            yds, xds = set_get_geo_info(
+                self,
+                offset_group_name,
+                goff_geogrids,
+            )
+
+            self._create_2d_dataset(
+                offset_group,
+                "mask",
+                goff_shape,
+                np.uint8,
+                ("Combination of water mask and a mask of subswaths of valid samples"
+                 " in the reference RSLC and geometrically-coregistered secondary RSLC."
+                 " Each pixel value is a three-digit number:"
+                 " the most significant digit represents the water flag of that pixel in the reference RSLC,"
+                 " where 1 is water and 0 is non-water;"
+                 " the second digit represents the subswath number of that pixel in the reference RSLC;"
+                 " the least-significant digit represents the subswath number of that pixel in the secondary RSLC."
+                 " A value of '0' in either subswath digit indicates an invalid sample in the corresponding RSLC"),
+                grid_mapping=grids_val,
+                xds=xds,
+                yds=yds,
+                fill_value=255,
+            )
+            offset_group['mask'].attrs['valid_min'] = 0
+            offset_group['mask'].attrs['percentage_water'] = 0.0
 
             pixeloffsets_group_name = \
                 f"{grids_freq_group_name}/pixelOffsets"
@@ -123,54 +155,50 @@ class GOFFWriter(ROFFWriter, L2InSARWriter):
                     pixeloffsets_pol_layer_group['projection'][...] = \
                         pixeloffsets_pol_layer_group['projection'][()].astype(np.uint32)
                     pixeloffsets_pol_layer_group['yCoordinateSpacing'].attrs['long_name'] = \
-                        np.string_("Y coordinates spacing")
+                        np.bytes_("Y coordinates spacing")
                     pixeloffsets_pol_layer_group['xCoordinateSpacing'].attrs['long_name'] = \
-                        np.string_("X coordinates spacing")
+                        np.bytes_("X coordinates spacing")
                     pixeloffsets_pol_layer_group['xCoordinates'].attrs['long_name'] = \
-                        np.string_("X coordinates of projection")
+                        np.bytes_("X coordinates of projection")
                     pixeloffsets_pol_layer_group['yCoordinates'].attrs['long_name'] = \
-                        np.string_("Y coordinates of projection")
+                        np.bytes_("Y coordinates of projection")
 
                     #pixeloffsets dataset parameters as tuples in the following
                     #order: dataset name, description, and units
                     pixeloffsets_ds_params = [
-                        ("alongTrackOffset",
+                        ("alongTrackOffset", np.float32,
                          "Raw (unculled, unfiltered) along-track pixel offsets",
                          Units.meter),
-                        ("slantRangeOffset",
+                        ("slantRangeOffset",  np.float32,
                          "Raw (unculled, unfiltered) slant range pixel offsets",
                          Units.meter),
-                        ("alongTrackOffsetVariance",
+                        ("alongTrackOffsetVariance", np.float32,
                          "Along-track pixel offsets variance",
-                         Units.unitless),
-                        ("slantRangeOffsetVariance",
+                         Units.meter2),
+                        ("slantRangeOffsetVariance", np.float32,
                          "Slant range pixel offsets variance",
-                         Units.unitless),
-                        ("crossOffsetVariance",
+                         Units.meter2),
+                        ("crossOffsetVariance", np.float32,
                          "Off-diagonal term of the pixel offsets covariance matrix",
-                         Units.unitless),
-                        ("correlationSurfacePeak",
+                         Units.meter2),
+                        ("correlationSurfacePeak", np.float32,
                          "Normalized correlation surface peak",
                          Units.unitless),
-                        ("snr",
+                        ("snr", np.float32,
                          "Pixel offsets signal-to-noise ratio",
                          Units.unitless),
                     ]
 
                     for ds_params in pixeloffsets_ds_params:
-                        ds_name, ds_description, ds_units = ds_params
+                        ds_name, ds_type, ds_description, ds_units = ds_params
                         self._create_2d_dataset(
                             pixeloffsets_pol_layer_group,
                             ds_name,
                             goff_shape,
-                            np.float32,
+                            ds_type,
                             ds_description,
                             ds_units,
                             grids_val,
                             xds=xds,
                             yds=yds,
-                            compression_enabled=self.cfg['output']['compression_enabled'],
-                            compression_level=self.cfg['output']['compression_level'],
-                            chunk_size=self.cfg['output']['chunk_size'],
-                            shuffle_filter=self.cfg['output']['shuffle']
                         )

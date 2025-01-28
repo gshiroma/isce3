@@ -4,13 +4,14 @@ import copy
 import os
 import time
 
-import h5py
 import isce3
 import journal
 import numpy as np
 from osgeo import gdal
 from scipy.interpolate import griddata
 
+from isce3.core import crop_external_orbit
+from isce3.io import HDF5OptimizedReader
 from nisar.products.insar.product_paths import CommonPaths
 from nisar.products.readers import SLC
 from nisar.products.readers.orbit import load_orbit_from_xml
@@ -208,10 +209,10 @@ def _get_rgrid_dopp_orbit(slc_obj, orbit_path=None):
     radargrid = slc_obj.getRadarGrid(freq)
 
     # import external orbit if file exists
+    orbit = slc_obj.getOrbit()
     if orbit_path is not None:
-        orbit = load_orbit_from_xml(orbit_path, radargrid.ref_epoch)
-    else:
-        orbit = slc_obj.getOrbit()
+        external_orbit = load_orbit_from_xml(orbit_path, radargrid.ref_epoch)
+        orbit = crop_external_orbit(external_orbit, orbit)
 
     # baseline is estimated assuming native-doppler
     doppler = slc_obj.getDopplerCentroid(frequency=freq)
@@ -509,7 +510,7 @@ def add_baseline(output_paths,
         cube_ref_dataset = f'{grid_path}/coordinateX'
     else:
         grid_path = f"{dst_meta_path}/radarGrid"
-        cube_ref_dataset = f'{grid_path}/slantRange'
+        cube_ref_dataset = f'{grid_path}/referenceSlantRange'
 
     # Remove product_id from copy of output_paths to track
     # other products to insert baseline into.
@@ -518,7 +519,7 @@ def add_baseline(output_paths,
     residual_output_paths = copy.deepcopy(output_paths)
     del residual_output_paths[product_id]
 
-    with h5py.File(output_hdf5, "a") as dst_h5:
+    with HDF5OptimizedReader(name=output_hdf5, mode="a") as dst_h5:
 
         height_levels = dst_h5[metadata_path_dict["heights"]][:]
         coord_x = dst_h5[metadata_path_dict["coordX"]][:]
@@ -668,7 +669,7 @@ def add_baseline(output_paths,
                                                           residual_key)
             grid_path_resi = grid_path.replace(product_id, residual_key)
 
-            with h5py.File(output_paths[residual_key], "r+") as h5_resi:
+            with HDF5OptimizedReader(name=output_paths[residual_key], mode="r+") as h5_resi:
 
                 _prepare_baseline_datasets(h5_resi,
                                            perp_base_path,
@@ -772,8 +773,8 @@ def run(cfg: dict, output_paths):
         grid_path = f"{dst_meta_path}/radarGrid"
         metadata_path_dict = {
             "heights": f"{grid_path}/heightAboveEllipsoid",
-            "azimuthTime": f"{grid_path}/zeroDopplerAzimuthTime",
-            "slantRange": f"{grid_path}/slantRange",
+            "azimuthTime": f"{grid_path}/referenceZeroDopplerAzimuthTime",
+            "slantRange": f"{grid_path}/referenceSlantRange",
             "coordX": f"{grid_path}/xCoordinates",
             "coordY": f"{grid_path}/yCoordinates",
             "perpendicularBaseline": f"{grid_path}/perpendicularBaseline",

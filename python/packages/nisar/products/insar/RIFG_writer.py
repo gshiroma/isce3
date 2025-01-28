@@ -2,6 +2,7 @@ import h5py
 import numpy as np
 from nisar.workflows.helpers import get_cfg_freq_pols
 
+from .InSAR_HDF5_optimizer_config import get_InSAR_output_options
 from .InSAR_L1_writer import L1InSARWriter
 from .InSAR_products_info import InSARProductsInfo
 from .product_paths import RIFGGroupsPaths
@@ -17,7 +18,12 @@ class RIFGWriter(L1InSARWriter):
         Constructor for RIFG class with additional range and azimuth looks
         variables for the interferogram multilooking
         """
+        hdf5_opt_config, kwds = get_InSAR_output_options(kwds, 'RIFG')
+
         super().__init__(**kwds)
+
+        # HDF5 IO optimizer configuration
+        self.hdf5_optimizer_config = hdf5_opt_config
 
         # RIFG group paths
         self.group_paths = RIFGGroupsPaths()
@@ -37,13 +43,13 @@ class RIFGWriter(L1InSARWriter):
         super().add_root_attrs()
 
         # Add additional attributes
-        self.attrs["title"] = np.string_("NISAR L1 RIFG Product")
+        self.attrs["title"] = np.bytes_("NISAR L1 RIFG Product")
         self.attrs["reference_document"] = \
-            np.string_("D-102270 NISAR NASA SDS Product Specification"
+            np.bytes_("D-102270 NISAR NASA SDS Product Specification"
                        " L1 Range Doppler Wrapped Interferogram")
 
         ctype = h5py.h5t.py_create(np.complex64)
-        ctype.commit(self["/"].id, np.string_("complex64"))
+        ctype.commit(self["/"].id, np.bytes_("complex64"))
 
     def add_parameters_to_procinfo_group(self):
         """
@@ -105,10 +111,6 @@ class RIFGWriter(L1InSARWriter):
                         ds_dtype,
                         ds_description,
                         units=ds_unit,
-                        compression_enabled=self.cfg['output']['compression_enabled'],
-                        compression_level=self.cfg['output']['compression_level'],
-                        chunk_size=self.cfg['output']['chunk_size'],
-                        shuffle_filter=self.cfg['output']['shuffle']
                     )
 
     def add_swaths_to_hdf5(self):
@@ -117,6 +119,4 @@ class RIFGWriter(L1InSARWriter):
         """
         super().add_swaths_to_hdf5()
 
-        # add subswaths to swaths group
-        self.add_subswaths_to_swaths_group()
         self.add_interferogram_to_swaths_group()

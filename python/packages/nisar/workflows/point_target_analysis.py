@@ -7,21 +7,26 @@ from __future__ import annotations
 import os
 import traceback
 from collections.abc import Iterable
+from datetime import datetime
 from pathlib import Path
-from typing import Any, Union
+from typing import Any, Iterator, Union
 
+import argparse
+import json
+import numpy as np
 import shapely
+import warnings
+
+import isce3
+from isce3.cal import (
+    parse_triangular_trihedral_cr_csv,
+    point_target_info as pti,
+    TriangularTrihedralCornerReflector as CornerReflector,
+)
 
 import nisar
-from nisar.cal import CRValidity
-
-import numpy as np
-import argparse
-import isce3
-from nisar.products.readers import SLC
-from isce3.cal import point_target_info as pti
-import warnings
-import json
+from nisar.cal import CRValidity, parse_and_filter_corner_reflector_csv
+from nisar.products.readers import GSLC, RSLC
 from nisar.products.readers.GenericProduct import get_hdf5_file_product_type
 try:
     import matplotlib.pyplot as plt
@@ -37,30 +42,12 @@ def cmd_line_parse():
         fromfile_prefix_chars="@",
     )
     parser.add_argument(
-        "-i", 
-        "--input", 
-        dest="input_file", 
-        type=str, 
-        required=True, 
+        "-i",
+        "--input",
+        dest="input_file",
+        type=str,
+        required=True,
         help="Input RSLC directory+filename"
-    )
-    parser.add_argument(
-        "-f",
-        "--freq",
-        dest="freq_group",
-        type=str,
-        required=True,
-        choices=["A", "B"],
-        help="Frequency group in RSLC H5 file: A or B",
-    )
-    parser.add_argument(
-        "-p",
-        "--polarization",
-        dest="pol",
-        type=str,
-        required=True,
-        choices=["HH", "HV", "VH", "VV", "LH", "LV", "RH", "RV"],
-        help="Tx and Rx polarizations in RSLC H5 file: HH, HV, VH, VV",
     )
 
     # Add a required XOR group for the `corner_reflector_csv` and `geo_llh` parameters
@@ -102,77 +89,121 @@ def cmd_line_parse():
             " ignored if --csv was not specified."
         ),
     )
-    parser.add_argument(
-        "--fs-bw-ratio",
-        type=float,
-        default=1.2,
-        required=False,
-        help="Sampling Frequency to bandwidth ratio. Only used when --predict-null requested.",
-    )
-    parser.add_argument(
-        "--num-sidelobes",
-        type=int,
-        default=10,
-        required=False,
-        help="number of sidelobes to be included for ISLR and PSLR computation"
-    )
+    add_pta_args(parser=parser, predict_null_option=True)
     parser.add_argument(
         "--plots",
         action='store_true',
         help="Generate interactive plots"
     )
+
+    return parser.parse_args()
+
+def add_pta_args(
+    parser: argparse.ArgumentParser, predict_null_option: bool
+):
+    parser.add_argument(
+        "-f",
+        "--freq",
+        "--frequency",
+        dest="freq",
+        type=str,
+        required=True,
+        choices=["A", "B"],
+        help="Frequency group in SLC H5 file: A or B",
+    )
+    parser.add_argument(
+        "-p",
+        "--pol",
+        "--polarization",
+        dest="pol",
+        type=str,
+        required=True,
+        choices=["HH", "HV", "VH", "VV", "LH", "LV", "RH", "RV"],
+        help=(
+            "Tx and Rx polarizations in SLC H5 file: HH, HV, VH, VV, LH, LV, RH, RV"
+        ),
+    )
+    parser.add_argument(
+        "--chipsize",
+        type=int,
+        default=64,
+        dest="nchip",
+        help="Point target chip size",
+    )
+    parser.add_argument(
+        "--nov",
+        type=int,
+        default=32,
+        dest="upsample_factor",
+        help="Point target samples upsampling factor",
+    )
+    parser.add_argument(
+        "--shift-domain",
+        choices=("time", "frequency"),
+        default="time",
+        dest="peak_find_domain",
+        help="Estimate shift in time domain or frequency domain."
+    )
+    parser.add_argument(
+        "--num-sidelobes",
+        metavar="NUM",
+        type=int,
+        default=10,
+        help="number of sidelobes to be included for ISLR and PSLR computation"
+    )
+    if predict_null_option:
+        parser.add_argument(
+            "-n",
+            "--predict-null",
+            action="store_true",
+            help=(
+                "If true, locate mainlobe nulls based on Fs/BW ratio instead of search"
+            ),
+        )
+        parser.add_argument(
+            "--fs-bw-ratio",
+            metavar="RATIO",
+            type=float,
+            default=1.2,
+            help=(
+                "Sampling Frequency to bandwidth ratio. Only used when --predict-null"
+                " requested."
+            ),
+        )
+        parser.add_argument(
+            "--window_type",
+            metavar="TYPE",
+            type=str,
+            default='rect',
+            help=(
+                "Point target impulse reponse window tapering type: rect, kaiser,"
+                " cosine. Only used when --predict-null requested."
+            ),
+        )
+        parser.add_argument(
+            "--window_parameter",
+            metavar="PARAMETER",
+            type=float,
+            default=0.0,
+            help="Point target impulse reponse window tapering parameter."
+        )
     parser.add_argument(
         "--cuts",
         action="store_true",
         help="Add range/azimuth slices to output JSON."
     )
     parser.add_argument(
-        "--nov", 
-        type=int, 
-        default=32, 
-        help="Point target samples upsampling factor"
-    )
-    parser.add_argument(
-        "--chipsize", 
-        type=int, 
-        default=64, 
-        help="Point target chip size"
-    )
-    parser.add_argument(
-        "-n",
-        "--predict-null",
-        action="store_true",
-        help="If true, locate mainlobe nulls based on Fs/BW ratio instead of search",
-    )
-    parser.add_argument(
-        "--window_type", 
-        type=str, 
-        default='rect', 
-        help="Point target impulse reponse window tapering type: rect, kaiser, cosine. Only used when --predict-null requested."
-    )
-    parser.add_argument(
-        "--window_parameter", 
-        type=float,
-        default=0.0,
-        help="Point target impulse reponse window tapering parameter."
-    )
-    parser.add_argument(
-        "--shift-domain",
-        choices=("time", "frequency"),
-        default="time",
-        help="Estimate shift in time domain or frequency domain."
-    )
-    parser.add_argument(
         "-o",
         "--output",
         dest="output_file",
-        type=str,
+        type=Path,
         default=None,
-        help="Output directory+filename of JSON file to which performance metrics are written. "
-             "If None, then print performance metrics to screen.",
+        help=(
+            "Output directory and filename of JSON file to which performance metrics"
+            " are written. If None, then print performance metrics to screen."
+        ),
     )
 
-    return parser.parse_args()
 
 def get_radar_grid_coords(llh_deg, slc, freq_group):
     """Perform geo2rdr conversion of longitude, latitude, and
@@ -184,8 +215,8 @@ def get_radar_grid_coords(llh_deg, slc, freq_group):
     llh_deg: array of 3 floats
         Corner reflector geodetic coordinates in lon (deg), lat (deg), and height (m)
         array size = 3
-    slc: nisar.products.readers.SLC
-        NISAR RSLC HDF5 product data 
+    slc: nisar.products.readers.RSLC
+        NISAR RSLC HDF5 product data
     freq_group: str
        RSLC data file frequency selection 'A' or 'B'
 
@@ -199,7 +230,7 @@ def get_radar_grid_coords(llh_deg, slc, freq_group):
 
     llh = np.array([np.deg2rad(llh_deg[0]), np.deg2rad(llh_deg[1]), llh_deg[2]])
 
-    # Assume we want the WGS84 ellipsoid (a common assumption in isce3) 
+    # Assume we want the WGS84 ellipsoid (a common assumption in isce3)
     # and the radar grid is zero Doppler (always the case for NISAR products).
     ellipsoid = isce3.core.Ellipsoid()
     doppler = isce3.core.LUT2d()
@@ -211,7 +242,7 @@ def get_radar_grid_coords(llh_deg, slc, freq_group):
         raise ValueError('Reference epoch of radar grid and orbit are different!')
 
     xyz = ellipsoid.lon_lat_to_xyz(llh)
-        
+
     aztime, slant_range = isce3.geometry.geo2rdr_bracket(
         xyz=xyz,
         orbit=orbit,
@@ -317,14 +348,14 @@ def slc_pt_performance(
     num_sidelobes: int
         total number of sidelobes to be included in ISLR computation
     predict_null: bool
-        optional, if predict_null is True, mainlobe null locations are computed based 
+        optional, if predict_null is True, mainlobe null locations are computed based
         on Fs/bandwidth ratio and mainlobe broadening factor for ISLR calculations.
         i.e, mainlobe null is located at Fs/B samples * broadening factor from the peak of mainlobe
         Otherwise, mainlobe null locations are computed based on null search algorithm.
         PSLR Exception: mainlobe does not include first sidelobes, search is always
         conducted to find the locations of first null regardless of predict_null parameter.
     nov: int
-        Point target samples upsampling factor   
+        Point target samples upsampling factor
     chipsize: int
         Width in pixels of the square block, centered on the point target,
         used to estimate point target properties
@@ -334,12 +365,12 @@ def slc_pt_performance(
         Store range/azimuth cuts data to output JSON file
     window_type: str
         optional, user provided window types used for tapering
-        
-        'rect': 
+
+        'rect':
                 Rectangular window is applied
-        'cosine': 
+        'cosine':
                 Raised-Cosine window
-        'kaiser': 
+        'kaiser':
                 Kaiser Window
     window_parameter: float
         optional window parameter. For a Kaiser window, this is the beta
@@ -353,47 +384,41 @@ def slc_pt_performance(
         (often the case in point target simulations).
     pta_output: str
         point target metrics output JSON file (directory+filename)
-
-    Returns:
-    --------
-    performance_dict: dict
-        Corner reflector performance output dictionary: -3dB resolution (in samples), 
-        PSLR (dB), ISLR (dB), slant range offset (in samples), and azimuth offset
-        (in samples).
     """
-  
+
     # Raise an exception if input is a GSLC HDF5 file
     product_type = get_hdf5_file_product_type(slc_input)
     if product_type == "GSLC":
-        raise NotImplementedError("support for GSLC products is not yet implemented") 
+        raise ValueError(
+            "slc_pt_performance only supports RSLC products."
+            " GSLC product was given. For GSLC products, use"
+            " gslc_point_target_analysis.analyze_gslc_point_target_llh()"
+        )
 
     # Open RSLC data
-    slc = SLC(hdf5file=slc_input)
+    slc = RSLC(hdf5file=slc_input)
     slc_data = slc.getSlcDatasetAsNativeComplex(freq_group, polarization)
 
     #Convert input LLH (lat, lon, height) coordinates into (slant range, azimuth)
     slc_pixel, slc_line = get_radar_grid_coords(cr_llh, slc, freq_group)
 
     #compute point target performance metrics
-    performance_dict = pti.analyze_point_target(
+    performance_dict, _ = pti.analyze_point_target(
         slc_data,
         slc_line,
         slc_pixel,
-        nov,
-        plots,
-        cuts,
-        chipsize,
-        fs_bw_ratio,
-        num_sidelobes,
-        predict_null,
-        window_type,
-        window_parameter,
+        nov=nov,
+        plot=plots,
+        cuts=cuts,
+        chipsize=chipsize,
+        fs_bw_ratio=fs_bw_ratio,
+        num_sidelobes=num_sidelobes,
+        predict_null=predict_null,
+        window_type=window_type,
+        window_parameter=window_parameter,
         shift_domain=shift_domain,
     )
-   
-    if plots:
-        performance_dict = performance_dict[0] 
-    
+
     # Write dictionary content to a json file if output is requested by user
     to_json(performance_dict, pta_output, encoder=CustomJSONEncoder)
 
@@ -406,9 +431,81 @@ CornerReflectorIterable = Union[
 ]
 
 
+def check_slc_freq_pols(
+    slc: RSLC | GSLC,
+    freq: str | None,
+    pol: str | None,
+) -> tuple[str, str]:
+    """
+    Checks the given frequency and polarization against what it available in the given
+    SLC product.
+
+    Parameters
+    ----------
+    slc : nisar.product.readers.RSLC or nisar.product.readers.GSLC
+        The SLC product reader.
+    freq : {"A", "B", None}
+        The frequency to check. If None, will find the first available frequency on
+        the product and return it.
+    pol : {"HH", "HV", "VH", "VV", "LH", "LV", "RH", "RV", None}
+        The polarization to check. If None, will find the first available polarization
+        on the product and return it.
+
+    Returns
+    -------
+    freq, pol : str
+        If freq/pol given, return the given value.
+        If freq is None, find the first available frequency on the product and
+        return it.
+        If pol is None, find the first available polarization on the product and
+        return it.
+
+    Raises
+    ------
+    ValueError
+        If either freq or pol are given but are not recognized as possible frequency
+        or polarization values, or if they do not exist on the given SLC product.
+    """
+    # Get frequency sub-band.
+    if freq is None:
+        freq = "A" if ("A" in slc.frequencies) else "B"
+    else:
+        if freq not in {"A", "B"}:
+            raise ValueError(f"freq must be 'A' or 'B' (or None), got {freq!r}")
+        if freq not in slc.frequencies:
+            raise ValueError(
+                f"freq {freq!r} not found in RSLC product. Available frequencies are"
+                f" {set(slc.frequencies)}"
+            )
+
+    # Get TxRx polarization.
+    available_pols = slc.polarizations[freq]
+    if pol is None:
+        for p in ["HH", "VV", "LH", "LV", "RH", "RV"]:
+            if p in available_pols:
+                pol = p
+                break
+        else:
+            raise ValueError(
+                f"no co-pols or compact pols found in freq {freq!r} of RSLC product."
+                f" Available polarizations are {set(available_pols)}"
+            )
+    else:
+        possible_pols = {"HH", "HV", "VH", "VV", "LH", "LV", "RH", "RV"}
+        if pol not in possible_pols:
+            raise ValueError(f"pol must be in {possible_pols} (or None), got {pol!r}")
+        if pol not in available_pols:
+            raise ValueError(
+                f"pol {pol!r} not found in freq {freq!r} of RSLC product. Available"
+                f" polarizations are {set(available_pols)}"
+            )
+
+    return (freq, pol)
+
+
 def analyze_corner_reflectors(
     corner_reflectors: CornerReflectorIterable,
-    rslc: nisar.products.readers.SLC,
+    rslc: nisar.products.readers.RSLC,
     freq: str | None = None,
     pol: str | None = None,
     *,
@@ -438,7 +535,7 @@ def analyze_corner_reflectors(
         `isce3.cal.TriangularTrihedralCornerReflector` or `nisar.cal.CornerReflector`.
         In the latter case, additional information about the survey date, validity, and
         plate motion velocity of each corner reflector is populated in the output.
-    rslc : nisar.products.readers.SLC
+    rslc : nisar.products.readers.RSLC
         The input RSLC product.
     freq : {'A', 'B'} or None, optional
         The frequency sub-band of the data. Defaults to the science band in the RSLC
@@ -519,43 +616,52 @@ def analyze_corner_reflectors(
         scene. The dict of results for each corner reflector consists of the following
         keys:
 
-        'id':
+        'id': str
           The unique identifier of the corner reflector.
 
-        'frequency':
+        'frequency': str
           The frequency sub-band of the data.
 
-        'polarization':
+        'polarization': str
           The transmit and receive polarization of the data.
 
-        'magnitude':
+        'elevation_angle': float
+          The elevation angle of the corner reflector, in radians. Elevation is measured
+          in the cross-track direction w.r.t antenna boresight, increasing toward
+          far-range.
+
+        'timestamp': str
+          The corner reflector zero-Doppler observation time. A UTC datetime string in
+          ISO 8601 format with nanosecond precision.
+
+        'magnitude': float
           The peak magnitude of the impulse response.
 
-        'phase':
+        'phase': float
           The phase at the peak location, in radians.
 
         'azimuth':
           A dict containing info about the azimuth impulse response function, consisting
           of the following keys:
 
-            'index':
+            'index': float
               The real-valued azimuth index, in samples, of the estimated peak location
               of the IRF within the RSLC image grid.
 
-            'offset':
+            'offset': float
               The error in the predicted target location in the azimuth direction, in
               samples. Equal to the signed difference between the measured location of
               the IRF peak in the RSLC data and the predicted location of
               the peak based on the surveyed corner reflector location.
 
-            'phase ramp':
+            'phase ramp': float
               The estimated azimuth phase slope at the target location, in radians per
               sample.
 
-            'resolution':
+            'resolution': float
               The measured 3dB width of the azimuth IRF, in samples.
 
-            'ISLR':
+            'ISLR': float
               The integrated sidelobe ratio of the azimuth IRF, in decibels (dB). A
               measure of the ratio of energy in the sidelobes to the energy in the main
               lobe. If `predict_null` was true, the first sidelobe will be considered
@@ -563,7 +669,7 @@ def analyze_corner_reflectors(
               energy in the remaining sidelobes to the energy in the main lobe + first
               sidelobe.
 
-            'PSLR':
+            'PSLR': float
               The peak-to-sidelobe ratio of the azimuth IRF, in decibels (dB). A measure
               of the ratio of peak sidelobe power to the peak main lobe power.
 
@@ -574,28 +680,29 @@ def analyze_corner_reflectors(
         If `cuts` was true, the 'azimuth' and 'range' dicts each contain additional
         keys:
 
-        'magnitude cut':
+        'magnitude cut': list of float
           The magnitude of the (upsampled) impulse response function in azimuth/range.
 
-        'phase cut':
+        'phase cut': list of float
           The phase of the (upsampled) impulse response function in azimuth/range.
 
-        'cut':
+        'cut': list of float
           The azimuth/range sample indices of the magnitude and phase cut values.
 
         If the input corner reflectors were instances of `nisar.cal.CornerReflector`,
         the following additional keys are also populated in the top-level dict for each
         corner reflector:
 
-        'survey_date':
+        'survey_date': str
           The date (and time) when the corner reflector was surveyed most recently prior
-          to the radar observation.
+          to the radar observation. A UTC datetime string in ISO 8601 format with
+          nanosecond precision.
 
-        'validity':
+        'validity': int
           The integer validity code of the corner reflector. Refer to the NISAR Corner
           Reflector Software Interface Specification (SIS) document\ [1]_ for details.
 
-        'velocity':
+        'velocity': [float, float, float]
           The corner reflector velocity due to tectonic plate motion, as an
           East-North-Up (ENU) vector in meters per second (m/s). The velocity components
           are provided in local ENU coordinates with respect to the WGS 84 reference
@@ -611,39 +718,9 @@ def analyze_corner_reflectors(
     .. [1] B. Hawkins, "Corner Reflector Software Interface Specification," JPL
        D-107698 (2023).
     """
-    # Get frequency sub-band.
-    if freq is None:
-        freq = "A" if ("A" in rslc.frequencies) else "B"
-    else:
-        if freq not in {"A", "B"}:
-            raise ValueError(f"freq must be 'A' or 'B' (or None), got {freq!r}")
-        if freq not in rslc.frequencies:
-            raise ValueError(
-                f"freq {freq!r} not found in RSLC product. Available frequencies are"
-                f" {set(rslc.frequencies)}"
-            )
-
-    # Get TxRx polarization.
-    available_pols = rslc.polarizations[freq]
-    if pol is None:
-        for p in ["HH", "VV", "LH", "LV", "RH", "RV"]:
-            if p in available_pols:
-                pol = p
-                break
-        else:
-            raise ValueError(
-                f"no co-pols or compact pols found in freq {freq!r} of RSLC product."
-                f" Available polarizations are {set(available_pols)}"
-            )
-    else:
-        possible_pols = {"HH", "HV", "VH", "VV", "LH", "LV", "RH", "RV"}
-        if pol not in possible_pols:
-            raise ValueError(f"pol must be in {possible_pols} (or None), got {pol!r}")
-        if pol not in available_pols:
-            raise ValueError(
-                f"pol {pol!r} not found in freq {freq!r} of RSLC product. Available"
-                f" polarizations are {set(available_pols)}"
-            )
+    # Check and acquire valid frequency and polarization values based on the given
+    # inputs.
+    freq, pol = check_slc_freq_pols(slc=rslc, freq=freq, pol=pol)
 
     # Get the RSLC image data for the specified frequency sub-band & polarization.
     img_data = rslc.getSlcDatasetAsNativeComplex(freq, pol)
@@ -673,7 +750,7 @@ def analyze_corner_reflectors(
             window_type=window_type,
             window_parameter=window_parameter,
             shift_domain=peak_find_domain,
-        )
+        )[0]
 
     orbit = rslc.getOrbit()
     attitude = rslc.getAttitude()
@@ -697,12 +774,13 @@ def analyze_corner_reflectors(
         assert "frequency" not in cr_info
         assert "polarization" not in cr_info
         assert "elevation_angle" not in cr_info
+        assert "timestamp" not in cr_info
         assert "survey_date" not in cr_info
         assert "validity" not in cr_info
         assert "velocity" not in cr_info
 
-        # Get the target's zero-Doppler elevation angle.
-        _, elevation_angle = isce3.cal.get_target_observation_time_and_elevation(
+        # Get the target's zero-Doppler UTC time and elevation angle.
+        az_datetime, el_angle = isce3.cal.get_target_observation_time_and_elevation(
             target_llh=cr.llh,
             orbit=orbit,
             attitude=attitude,
@@ -716,7 +794,8 @@ def analyze_corner_reflectors(
                 "id": cr.id,
                 "frequency": freq,
                 "polarization": pol,
-                "elevation_angle": elevation_angle,
+                "elevation_angle": el_angle,
+                "timestamp": az_datetime,
             }
         )
 
@@ -733,6 +812,50 @@ def analyze_corner_reflectors(
         results.append(cr_info)
 
     return results
+
+
+def get_corner_reflectors_from_csv(
+    filename: str | os.PathLike,
+    format: str,
+    *,
+    observation_date: datetime | None = None,
+) -> Iterator[CornerReflector]:
+    """
+    Given a corner reflector CSV filename and format, return an iterator over
+    valid corner reflectors in the file.
+
+    Parameters
+    ----------
+    filename : path-like
+        The corner reflector CSV filename.
+    format : {"nisar", "uavsar"}
+        The format of the file.
+    observation_date : datetime or None, optional
+        The date/time of the radar observation. Required if `format` is "nisar",
+        otherwise ignored.
+
+    Returns
+    ------
+    Iterator of isce3.cal.TriangularTrihedralCornerReflector
+        An iterator over the set of corner reflectors.
+    """
+    if format == "nisar":
+        if observation_date is None:
+            raise ValueError(
+                "NISAR-formatted corner reflector file given with no observation date."
+                " NISAR-formatted CR files cannot be read without an observation date."
+            )
+        # Parse the input corner reflector CSV file. Filter out unusable corner
+        # reflector data based on survey date and validity flags.
+        return parse_and_filter_corner_reflector_csv(
+                filename,
+                observation_date=observation_date,
+                validity_flags=(CRValidity.IPR | CRValidity.GEOM),
+            )
+    if format == "uavsar":
+        # Parse the input corner reflector CSV file. No filtering is performed.
+        return parse_triangular_trihedral_cr_csv(filename)
+    raise ValueError(f"unexpected csv format: {format!r}")
 
 
 def process_corner_reflector_csv(
@@ -842,7 +965,7 @@ def process_corner_reflector_csv(
     """
     # Read input RSLC product.
     rslc_hdf5 = os.fspath(rslc_hdf5)
-    rslc = nisar.products.readers.SLC(hdf5file=rslc_hdf5)
+    rslc = nisar.products.readers.RSLC(hdf5file=rslc_hdf5)
 
     # Get corner reflector data.
     if csv_format == "nisar":
@@ -896,7 +1019,7 @@ if __name__ == "__main__":
     inputs = cmd_line_parse()
     slc_input = inputs.input_file
     pta_output = inputs.output_file
-    freq_group = inputs.freq_group
+    freq = inputs.freq
     pol = inputs.pol
     corner_reflector_csv = inputs.corner_reflector_csv
     cr_llh = inputs.geo_llh
@@ -904,12 +1027,13 @@ if __name__ == "__main__":
     fs_bw_ratio = inputs.fs_bw_ratio
     predict_null = inputs.predict_null
     num_sidelobes = inputs.num_sidelobes
-    nov = inputs.nov
-    chipsize = inputs.chipsize
+    upsample_factor = inputs.upsample_factor
+    chipsize = inputs.nchip
     plots = inputs.plots
     cuts = inputs.cuts
     window_type = inputs.window_type
     window_parameter = inputs.window_parameter
+    shift_domain = inputs.peak_find_domain
 
     if (corner_reflector_csv is not None) and (cr_llh is None):
         # The user provided a corner reflector CSV file.
@@ -918,11 +1042,11 @@ if __name__ == "__main__":
             csv_format=csv_format,
             rslc_hdf5=slc_input,
             output_json=pta_output,
-            freq=freq_group,
+            freq=freq,
             pol=pol,
             nchip=chipsize,
-            upsample_factor=nov,
-            peak_find_domain=inputs.shift_domain,
+            upsample_factor=upsample_factor,
+            peak_find_domain=shift_domain,
             num_sidelobes=num_sidelobes,
             predict_null=predict_null,
             fs_bw_ratio=fs_bw_ratio,
@@ -932,21 +1056,21 @@ if __name__ == "__main__":
         )
     elif (cr_llh is not None) and (corner_reflector_csv is None):
         # The user provided LLH coordinates for a single corner reflector.
-        performance_dict = slc_pt_performance(
+        slc_pt_performance(
             slc_input,
-            freq_group,
+            freq,
             pol,
             cr_llh,
             fs_bw_ratio,
             num_sidelobes,
             predict_null,
-            nov,
+            upsample_factor,
             chipsize,
             plots,
             cuts,
             window_type,
             window_parameter,
-            shift_domain = inputs.shift_domain,
+            shift_domain = shift_domain,
             pta_output = pta_output,
         )
 

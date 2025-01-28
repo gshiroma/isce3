@@ -7,7 +7,7 @@ import numpy as np
 import time
 import argparse as argp
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from scipy.interpolate import interp1d
 try:
     import matplotlib.pyplot as plt
@@ -17,6 +17,7 @@ except ImportError:
 from nisar.products.readers.SLC import SLC
 from nisar.log import set_logger
 from nisar.workflows.gen_el_null_range_product import dt2str
+from nisar.workflows.helpers import JsonNumpyEncoder
 from nisar.cal import (
     PolChannelImbalanceSlc, parse_and_filter_corner_reflector_csv, CRValidity,
     est_cr_az_mid_swath_from_slc, filter_crs_per_az_heading
@@ -26,31 +27,6 @@ from isce3.geometry import DEMInterpolator
 from isce3.io import Raster
 from isce3.core import DateTime
 from isce3.cal import parse_triangular_trihedral_cr_csv
-
-
-class JsonNumpyEncoder(json.JSONEncoder):
-    """
-    A thin wrapper around JSONEncoder w/ augmented default method to support
-    various numpy array and complex data types
-    """
-
-    def default(self, obj):
-        if isinstance(obj, np.integer):
-            return int(obj)
-
-        elif isinstance(obj, np.floating):
-            return float(obj)
-
-        elif isinstance(obj, (complex, np.complexfloating)):
-            return {'real': obj.real, 'imag': obj.imag}
-
-        elif isinstance(obj, np.ndarray):
-            return obj.tolist()
-
-        elif isinstance(obj, np.bool_):
-            return bool(obj)
-
-        return super().default(obj)
 
 
 def cr_llh_from_csv(filename, epoch=None, az_heading=None,
@@ -110,7 +86,7 @@ def cr_llh_from_csv(filename, epoch=None, az_heading=None,
 
         else:  # NISAR format
             if epoch is None:
-                epoch = DateTime(datetime.now())
+                epoch = DateTime(datetime.now(timezone.utc))
             crs = parse_and_filter_corner_reflector_csv(
                 filename, epoch, CRValidity.RAD_POL)
 
@@ -369,7 +345,7 @@ def pol_channel_imbalance_from_rslc(args):
     dt_utc_last = dt2str(imb_prod_slc.az_datetime[-1])
     # get current time w/o fractional seconds in "%Y%m%dT%H%M%S" format
     # used as part of JSON product filename
-    dt_utc_cur = datetime.now().strftime('%Y%m%dT%H%M%S')
+    dt_utc_cur = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S')
     # form filename of the JSON product
     name_json = (
         f'PolChannelImbSlc_{dt_utc_cur}_{dt_utc_first}_{dt_utc_last}.json'

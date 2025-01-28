@@ -70,7 +70,8 @@ runconfig:
         primary_executable:
             # RIFG_RUNW_GUNW will produce all three InSAR products
             product_type: enum('GUNW', 'RIFG', 'RUNW', 'RIFG_RUNW_GUNW', 'ROFF_RIFG_RUNW_GOFF_GUNW', 'ROFF', 'GOFF', 'ROFF_GOFF')
-            product_version: str('^\d+\.\d+\.\d+$', required=False)
+            product_version: include('product_version_options', required=False)
+            product_doi: include('product_doi_options', required=False)
             composite_release_id: regex(r'\w\d\d\d\d\d', name='CRID', required=False)
             processing_type: enum('PR', 'UR', required=False)
             product_accuracy: enum('P','M','N','F', required=False)
@@ -141,6 +142,9 @@ runconfig:
             # Baseline estimation options
             baseline: include('baseline_options', required=False)
 
+            # Options to generate model-based slant range and azimuth correction LUTs
+            correction_luts: include('lut_options', required=False)
+
         # To setup type of worker
         worker: include('worker_options', required=False)
 
@@ -207,57 +211,18 @@ phass_options:
 
 snaphu_options:
     nlooks: num(min=1, required=False)
-    cost_mode: enum('defo', 'smooth', 'p-norm', required=False)
-    cost_mode_parameters: include('cost_mode_options', required=False)
+    cost_mode: enum('defo', 'smooth', required=False)
     mask: str(required=False)
-    unwrapped_phase_estimate: str(required=False)
     initialization_method: enum('mst', 'mcf', required=False)
-    solver_parameters: include('solver_options', required=False)
-    connected_components_parameters: include('connected_components_options', required=False)
-    verbose: bool(required=False)
-    debug: bool(required=False)
-
-cost_mode_options:
-    deformation_parameters: include('deformation_cost_options', required=False)
-    smooth_parameters: include('smooth_cost_options', required=False)
-    pnorm_parameters: include('pnorm_cost_options', required=False)
-
-deformation_cost_options:
-    azdz_factor: num(required=False)
-    defo_max: num(min=0, required=False)
-    sigsq_corr: num(min=0, required=False)
-    defo_const: num(min=0, max=1, required=False)
-    lay_falloff_const: num(required=False)
-    kpar_dpsi: int(min=1, required=False)
-    kperp_dpsi: int(min=1, required=False)
-
-smooth_cost_options:
-    kpar_dpsi: int(min=1, required=False)
-    kperp_dpsi: int(min=1, required=False)
-
-pnorm_cost_options:
-    p: num(min=0, required=False)
-    bidir: bool(required=False)
-
-solver_options:
-    max_flow_inc: int(min=0, required=False)
-    init_max_flow: int(min=0, max=9999, required=False)
-    arc_max_flow_const: int(required=False)
-    threshold: num(required=False)
-    max_cost: num(required=False)
-    cost_scale: num(required=False)
-    n_cycle: int(required=False)
-    max_new_node_const: num(required=False)
-    max_n_flow_cycles: num(required=False)
-    max_cycle_frac: num(required=False)
-    n_conn_node_min: int(min=0, required=False)
-    n_major_prune: int(required=False)
-    prune_cost_thresh: int(required=False)
-
-connected_components_options:
-    min_frac_area: num(required=False)
-    cost_thresh: int(required=False)
-    max_ncomps: int(required=False)
+    min_conncomp_frac: num(required=False)
+    phase_grad_window: list(int(min=1), min=2, max=2, required=False)
+    ntiles: list(int(min=0), min=2, max=2, required=False)
+    tile_overlap: list(int(min=4), min=2, max=2, required=False)
+    nproc: int(required=False)
+    tile_cost_thresh: int(min=1, required=False)
+    min_region_size: int(min=1, required=False)
+    single_tile_reoptimize: bool(required=False)
+    regrow_conncomps: bool(required=False)
 
 preprocess_wrapped_phase_options:
     enabled: bool(required=False)
@@ -284,6 +249,10 @@ coarse_resample_options:
     # Number of lines per tile to resample in batch
     lines_per_tile: int(min=1, required=False)
 
+    # Number of columns per tile to resample in batch. If 0, the tiles will span across
+    # all columns of the raster.
+    columns_per_tile: int(min=0, required=False)
+
 fine_resample_options:
     # Flag to switch on/off fine resampling
     enabled: bool(required=False)
@@ -293,6 +262,10 @@ fine_resample_options:
 
     # Number of lines per tile to resample in batch
     lines_per_tile: int(min=1, required=False)
+
+    # Number of columns per tile to resample in batch. If 0, the tiles will span across
+    # all columns of the raster.
+    columns_per_tile: int(min=0, required=False)
 
 dense_offsets_options:
     # Flag to enable/disable dense offsets estimation. Default: True
@@ -670,7 +643,7 @@ radar_grid_cubes_options:
     output_epsg: int(min=1024, max=32767, required=False)
 
     # Output posting in same units as output EPSG.
-    # If not provided, spacing values will be taken from provided DEM.
+    # If not provided, default spacing values will be applied based on the output EPSG.
     output_posting:
         x_posting: num(min=0, required=False)
         y_posting: num(min=0, required=False)
@@ -843,50 +816,98 @@ qa_options:
 
 rifg_options:
     workflows: include('workflows_options', required=False)
+    validation: include('qa_validation_options', required=False)
     qa_reports: include('rifg_qa_reports_options', required=False)
 
 rifg_qa_reports_options:
-    hsi_img: include('qa_hsi_img_wrapped_options', required=False)
+    wrapped_igram: include('qa_threshold_options', required=False)
+    coh_mag: include('qa_threshold_options', required=False)
+    az_and_range_offsets: include('qa_threshold_options', required=False)
+    correlation_surface_peak: include('qa_threshold_options', required=False)
+    browse_png: include('qa_browse_png_wrapped_options', required=False)
 
 runw_options:
     workflows: include('workflows_options', required=False)
+    validation: include('qa_validation_options', required=False)
     qa_reports: include('runw_qa_reports_options', required=False)
 
 runw_qa_reports_options:
     phase_img: include('qa_phase_img_options', required=False)
-    hsi_img: include('qa_hsi_img_unwrapped_options', required=False)
+    coh_mag: include('qa_threshold_options', required=False)
+    connected_components: include('qa_cc_options', required=False)
+    ionosphere_phase_screen: include('qa_threshold_options', required=False)
+    ionosphere_phase_screen_uncertainty: include('qa_threshold_options', required=False)
+    az_and_range_offsets: include('qa_threshold_options', required=False)
+    correlation_surface_peak: include('qa_threshold_options', required=False)
+    browse_png: include('qa_browse_png_unwrapped_options', required=False)
 
 gunw_options:
     workflows: include('workflows_options', required=False)
+    validation: include('qa_validation_options', required=False)
     qa_reports: include('gunw_qa_reports_options', required=False)
 
 gunw_qa_reports_options:
     phase_img: include('qa_phase_img_options', required=False)
-    hsi_img: include('qa_hsi_img_unwrapped_options', required=False)
+    wrapped_igram: include('qa_threshold_options', required=False)
+    coh_mag: include('qa_threshold_options', required=False)
+    connected_components: include('qa_cc_options', required=False)
+    ionosphere_phase_screen: include('qa_threshold_options', required=False)
+    ionosphere_phase_screen_uncertainty: include('qa_threshold_options', required=False)
+    az_and_range_offsets: include('qa_threshold_options', required=False)
+    correlation_surface_peak: include('qa_threshold_options', required=False)
+    browse_png: include('qa_browse_png_unwrapped_options', required=False)
 
 roff_options:
     workflows: include('workflows_options', required=False)
+    validation: include('qa_validation_options', required=False)
     qa_reports: include('offsets_qa_reports_options', required=False)
 
 goff_options:
     workflows: include('workflows_options', required=False)
+    validation: include('qa_validation_options', required=False)
     qa_reports: include('offsets_qa_reports_options', required=False)
 
 offsets_qa_reports_options:
+    az_and_range_offsets: include('qa_threshold_options', required=False)
     quiver_plots: include('qa_quiver_plots_options', required=False)
+    az_and_rg_variance: include('az_rg_var_options', required=False)
+    cross_offset_variance: include('cross_offset_var_options', required=False)
+    correlation_surface_peak: include('qa_threshold_options', required=False)
 
 workflows_options:
     validate: bool(required=False)
     qa_reports: bool(required=False)
 
+qa_validation_options:
+    metadata_cubes_fail_if_all_nan: bool(required=False)
+
 qa_phase_img_options:
     rewrap: num(min=0.0, required=False)
+    nan_threshold: num(min=-1.0, max=100.0, required=False)
+    inf_threshold: num(min=-1.0, max=100.0, required=False)
+    fill_threshold: num(min=-1.0, max=100.0, required=False)
+    near_zero_threshold: num(min=-1.0, max=100.0, required=False)
+    total_invalid_threshold: num(min=-1.0, max=100.0, required=False)
+    epsilon: num(min=0.0, required=False)
+    zero_is_invalid: bool(required=False)
 
-qa_hsi_img_wrapped_options:
+qa_cc_options:
+    nan_threshold: num(min=-1.0, max=100.0, required=False)
+    inf_threshold: num(min=-1.0, max=100.0, required=False)
+    fill_threshold: num(min=-1.0, max=100.0, required=False)
+    near_zero_threshold: num(min=-1.0, max=100.0, required=False)
+    total_invalid_threshold: num(min=-1.0, max=100.0, required=False)
+    epsilon: num(min=0.0, required=False)
+    zero_is_invalid: bool(required=False)
+    max_num_cc: int(min=0.0, required=False)
+
+qa_browse_png_wrapped_options:
+    browse_image: enum('phase', 'hsi', required=False)
     equalize_browse: bool(required=False)
     longest_side_max: int(min=1, required=False)
 
-qa_hsi_img_unwrapped_options:
+qa_browse_png_unwrapped_options:
+    browse_image: enum('phase', 'hsi', required=False)
     equalize_browse: bool(required=False)
     longest_side_max: int(min=1, required=False)
     rewrap: num(min=0.0, required=False)
@@ -899,6 +920,35 @@ qa_quiver_plots_options:
     arrow_scaling: num(min=0.0, required=False)
     longest_side_max: int(min=1, required=False)
 
+az_rg_var_options:
+    colorbar_min_max: list(num, min=2, max=2, required=False)
+    nan_threshold: num(min=-1.0, max=100.0, required=False)
+    inf_threshold: num(min=-1.0, max=100.0, required=False)
+    fill_threshold: num(min=-1.0, max=100.0, required=False)
+    near_zero_threshold: num(min=-1.0, max=100.0, required=False)
+    total_invalid_threshold: num(min=-1.0, max=100.0, required=False)
+    epsilon: num(min=0.0, required=False)
+    zero_is_invalid: bool(required=False)
+
+cross_offset_var_options:
+    colorbar_min_max: list(num, min=2, max=2, required=False)
+    percentile_for_clipping: list(num(min=0.0, max=100.0), min=2, max=2, required=False)
+    nan_threshold: num(min=-1.0, max=100.0, required=False)
+    inf_threshold: num(min=-1.0, max=100.0, required=False)
+    fill_threshold: num(min=-1.0, max=100.0, required=False)
+    near_zero_threshold: num(min=-1.0, max=100.0, required=False)
+    total_invalid_threshold: num(min=-1.0, max=100.0, required=False)
+    epsilon: num(min=0.0, required=False)
+    zero_is_invalid: bool(required=False)
+
+qa_threshold_options:
+    nan_threshold: num(min=-1.0, max=100.0, required=False)
+    inf_threshold: num(min=-1.0, max=100.0, required=False)
+    fill_threshold: num(min=-1.0, max=100.0, required=False)
+    near_zero_threshold: num(min=-1.0, max=100.0, required=False)
+    total_invalid_threshold: num(min=-1.0, max=100.0, required=False)
+    epsilon: num(min=0.0, required=False)
+    zero_is_invalid: bool(required=False)
 
 dem_download_options:
     # s3 bucket / curl URL / local file
@@ -1013,7 +1063,26 @@ worker_options:
     gpu_id: int(min=0, required=False)
 
 output_options:
+    page_enabled: bool(required=False)
     compression_enabled: bool(required=False)
     compression_level: int(min=1, max=9, required=False)
     chunk_size: list(int(min=4), min=2, max=2, required=False)
     shuffle: bool(required=False)
+
+lut_options:
+    # Boolean flag to activate/deactivate model-based solid earth tide corrections
+    solid_earth_tides_enabled: bool(required=False)
+
+product_version_options:
+    rifg_version: str('^\d+\.\d+\.\d+$', required=False)
+    roff_version: str('^\d+\.\d+\.\d+$', required=False)
+    runw_version: str('^\d+\.\d+\.\d+$', required=False)
+    goff_version: str('^\d+\.\d+\.\d+$', required=False)
+    gunw_version: str('^\d+\.\d+\.\d+$', required=False)
+
+product_doi_options:
+    rifg_doi: str(required=False)
+    roff_doi: str(required=False)
+    runw_doi: str(required=False)
+    goff_doi: str(required=False)
+    gunw_doi: str(required=False)

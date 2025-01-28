@@ -20,7 +20,7 @@ runconfig:
             # REQUIRED - Digital elevation model
             dem_file: str()
 
-            # PLACEHOLDER - Digital elevation model file description, optional
+            # OPTIONAL - Digital elevation model file description, optional
             dem_file_description: str(required=False)
 
             # External orbit file
@@ -29,6 +29,16 @@ runconfig:
             # TEC file used for geolocation correction. If no file present, no
             # TEC correction is applied
             tec_file: str(required=False)
+
+            # List of GSLCs from previous cycles.
+            # Data driven GSLC will be activated when this field has a valid value.
+            # In this case the model driven corrections will be applied first, and
+            # the residual relative geolocation error will be estimated with
+            # data driven approch.
+            # When refernce_gslc is empty, only the model driven correction will be applied.
+            reference_gslc: list(str(), min=1, required=False)
+
+            corner_reflector_file: str(required=False)
 
         product_path_group:
             # Directory where PGE will place results
@@ -52,6 +62,7 @@ runconfig:
         primary_executable:
             product_type: enum('GSLC')
             product_version: str('^\d+\.\d+\.\d+$', required=False)
+            product_doi: str(required=False)
             composite_release_id: regex(r'\w\d\d\d\d\d', name='CRID', required=False)
             processing_type: enum('PR', 'UR', required=False)
             product_accuracy: enum('P', 'M', 'N', 'F', required=False)
@@ -89,14 +100,23 @@ runconfig:
             # Geo2rdr options
             geo2rdr: include('geo2rdr_options', required=False)
 
+            ampcor: include('ampcor_options', required=False)
+
             blocksize:
                 x: int(min=100, max=100000)
                 y: int(min=100, max=10000)
 
             flatten: bool()
 
+            # Options to generate model-based slant range and azimuth correction LUTs
+            correction_luts: include('lut_options', required=False)
+
         # Output options for GSLC raster (e.g. compression, chunking, shuffle filter)
         output: include('output_options', required=False)
+
+        # Group containing CEOS Analysis Ready Data (CARD) parameters
+        # to populate the output product's metadata
+        ceos_analysis_ready_data: include('ceos_analysis_ready_data_options', required=False)
 
         # Worker options (e.g. enable/disable GPU processing, select GPU device ID)
         worker: include('worker_options', required=False)
@@ -183,11 +203,18 @@ logging_options:
 qa_options:
     # For descriptions of all QA parameters, see template runconfig (in `defaults` directory)
     workflows: include('workflows_options', required=False)
+    validation: include('qa_validation_options', required=False)
     qa_reports: include('qa_reports_options', required=False)
+    point_target_analyzer: include('point_target_analyzer_options', required=False)
+
 
 workflows_options:
     validate: bool(required=False)
     qa_reports: bool(required=False)
+    point_target_analyzer: bool(required=False)
+
+qa_validation_options:
+    metadata_cubes_fail_if_all_nan: bool(required=False)
 
 qa_reports_options:
     backscatter_img:
@@ -197,12 +224,20 @@ qa_reports_options:
         longest_side_max: int(min=1, required=False)
         percentile_for_clipping: list(num(min=0.0, max=100.0), min=2, max=2, required=False)
         gamma: num(min=0.0, required=False)
+        nan_color_in_pdf: str(required=False)
         tile_shape: list(int(min=-1), min=2, max=2, required=False)
     histogram:
         decimation_ratio: list(int(min=1), min=2, max=2, required=False)
         backscatter_histogram_bin_edges_range: list(num(), min=2, max=2, required=False)
+        phase_histogram_y_axis_range: list(any(num(), null()), min=2, max=2, required=False)
         phs_in_radians: bool(required=False)
         tile_shape: list(int(min=-1), min=2, max=2, required=False)
+
+point_target_analyzer_options:
+    nchip: int(min=1, required=False)
+    upsample_factor: int(min=1, required=False)
+    peak_find_domain: enum('time', 'frequency', required=False)
+    num_sidelobes: int(min=2, required=False)
 
 dem_download_options:
     # s3 bucket / curl URL / local file
@@ -265,6 +300,94 @@ geocode_options:
         # Set bottom-right x in same units as output EPSG
         x_abs: num(required=False)
 
+ceos_analysis_ready_data_options:
+
+    # Data access for the source data (URL or DOI)
+    source_data_access: str(required=False)
+
+    # Data access for the output product (URL or DOI)
+    product_data_access: str(required=False)
+
+    # Data access for the static layers product associated with the output product (URL or DOI)
+    static_layers_data_access: str(required=False)
+
+    # Estimated geometric accuracy (bias and standard deviation)
+    # in meters in the X- and Y-directions over the coordinate
+    # system defined by the product's EPSG code
+    estimated_geometric_accuracy_bias_x: num(required=False)
+    estimated_geometric_accuracy_bias_y: num(required=False)
+    estimated_geometric_accuracy_standard_deviation_x: num(required=False)
+    estimated_geometric_accuracy_standard_deviation_y: num(required=False)
+
+# AMPCOR options for data-driven GSLC. Based on InSAR workflow runconfig
+ampcor_options:
+    # Lines per block to process in batch
+    lines_per_block: int(min=1, required=False)
+
+    # Number of columns for chip/template window in reference image
+    window_range: int(min=16, max=512, required=False)
+
+    # Number of lines for chip/template window in reference image
+    window_azimuth: int(min=16, max=512, required=False)
+
+    # Number of columns for search chip/template in secondary image
+    half_search_range: int(min=4, max=128, required=False)
+
+    # Number of lines for search chip/template in secondary image
+    half_search_azimuth: int(min=4, max=128, required=False)
+
+    # Number of columns to skip in reference image for next offset estimate
+    skip_range: int(min=1, required=False)
+
+    # Number of lines to skip in reference image for next offset estimate
+    skip_azimuth: int(min=1, required=False)
+
+    # Margin around image edges to avoid for offset computation
+    margin: int(min=0, required=False)
+
+    # Number of columns of output offset (covariance, snr)
+    offset_width: int(required=False)
+
+    # Number of lines of output offset (covariance, snr)
+    offset_length: int(required=False)
+
+    # Start pixel of the reference image along slant range
+    start_pixel_range: int(min=0, required=False)
+
+    # Start pixel of the reference image along azimuth
+    start_pixel_azimuth: int(min=0, required=False)
+
+    # Domain (frequency or spatial) where to compute cross-correlation
+    cross_correlation_domain: enum('frequency', 'spatial', required=False)
+
+    # Anti-aliasing oversampling factor to apply to reference/secondary SLC
+    # prior to cross-correlation computation
+    slc_oversampling_factor: int(min=2, max=5, required=False)
+
+    # Deramp data prior to FFT: magnitude or complex (linear phase ramp)
+    deramping_method: enum('magnitude', 'complex', required=False)
+
+    # Square zoom window size for cross-correlation statistics (SNR, covariance)
+    correlation_statistics_zoom: int(required=False)
+
+    # Square zoom window size for sub-pixel offset refinement
+    correlation_surface_zoom: int(min=4, required=False)
+
+    # Oversampling factor of the correlation surface for sub-pixel offset refinement
+    correlation_surface_oversampling_factor: int(min=2, max=128, required=False)
+
+    # Correlation surface oversampling algorithm
+    correlation_surface_oversampling_method: enum('sinc', 'fft', required=False)
+
+    # Number of cuda streams
+    cuda_streams: int(required=False)
+
+    # Number of offset estimates to process in batch along slant range
+    windows_batch_range: int(min=1, required=False)
+
+    # Number of offset estimates to process in batch along azimuth
+    windows_batch_azimuth: int(min=1, required=False)
+
 worker_options:
     # To prevent downloading DEM / other data automatically. Default True
     internet_access: bool(required=False)
@@ -284,11 +407,21 @@ output_options:
     compression_enabled: bool(required=False)
 
     # Level of compression applied to GSLC raster (default 4)
-    # 1 - least compression, 9 - best compresssion
+    # 1 - least compression, 9 - best compression
     compression_level: int(min=1, max=9, required=False)
 
     # Chunk size of GSLC raster (default [128, 128])
     chunk_size: list(int(min=4), min=2, max=2, required=False)
 
+    # File space management strategy.
+    fs_strategy: enum("fsm", "page", "aggregate", "none", required=False)
+
+    # File space page size in bytes. Relevant only when `fs_strategy == "page"`
+    fs_page_size: int(min=1, required=False)
+
     # Enable/disable shuffle filtering of GSLC raster (default True)
     shuffle: bool(required=False)
+
+lut_options:
+    # Boolean flag to activate/deactivate model-based solid earth tide corrections
+    solid_earth_tides_enabled: bool(required=False)

@@ -65,6 +65,7 @@ runconfig:
     primary_executable:
       product_type: str()
       product_version: str('^\d+\.\d+\.\d+$', required=False)
+      product_doi: str(required=False)
       composite_release_id: regex(r'\w\d\d\d\d\d', name='CRID')
       processing_type: enum('PR', 'UR') # production, urgent response
       mission_id: enum('NISAR')
@@ -80,8 +81,12 @@ runconfig:
       relative_orbit_number: int(min=1, max=173)
       frame_number: int(min=1, max=176)
       orbit_direction: enum('Descending', 'Ascending')
+      # The polygon for the reference track/frame in a GeoJSON formatted string.
+      # If empty the coverage indicator in the granule_id will be 'X'.
       track_frame_polygon: str(required=False)
-      full_coverage_threshold_percent: num(min=0.0, required=False)
+      # Minimum frame coverage required to be considered "full frame".
+      # (Also only relevant to the granule ID in the output product.)
+      full_coverage_threshold_percent: num(min=0.0, max=100.0, required=False)
     worker:
       # Whether or not to use GPU, optional. Defaults to True if available.
       gpu_enabled: bool(required=False)
@@ -107,10 +112,25 @@ runconfig:
         # NISAR PGE must set to 1520 Hz for RSLC product spec conformance.
         output_prf: num(min=0.0)
 
-        # Interval for azimuth grid alignment in seconds. See docs.
-        # Typically want 1 second and integer PRF (in Hz). Will not
-        # override user-provided start_time.
+        # Interval for azimuth grid alignment in seconds.
+        # The computed start_time (represented as the number of seconds
+        # since midnight) will be rounded to an integer multiple of this
+        # interval.  For the default value of null, the output pulse
+        # interval (1 / output_prf) is used.  When output_prf is an
+        # integer, this guarantees that adjacent scenes can be aligned
+        # in time with integer shifts.
+        # Irrelevant when start_time is not null.
         time_snap_interval: num(required=False)
+
+        # Interval for range grid alignment in meters.
+        # The computed start_range will be rounded to an integer
+        # multiple of this interval.  The default value is equal to
+        # c / 2 / fs_ref which guarantees for NISAR that adjacent
+        # scenes can be aligned in range with integer shifts since the
+        # sample rate for all NISAR modes is an integer multiple of
+        # fs_ref = 6 MHz.
+        # Irrelevant when start_range is not null.
+        range_snap_interval: num(required=False)
 
       # Min amount of padding (in seconds) beyond raw data start and stop times
       # to retain when cropping the orbit and attitude data.
@@ -123,6 +143,10 @@ runconfig:
 
       # Azimuth spectral window, optional.  Defaults to no weighting.
       azimuth_window: include('spectral_window', required=False)
+
+      elevation_antenna_pattern: include('eap_options', required=False)
+
+      noise_equivalent_backscatter: include('nesz_options', required=False)
 
       radio_frequency_interference: include('rfi_options', required=False)
 
@@ -164,6 +188,8 @@ runconfig:
           range: int(min=0, required=False)
           azimuth: int(min=1, required=False)
 
+        notches: list(include('notch'), required=False)
+
       # Settings for azimuth compression algorithm.
       azcomp:
         # Azimuth compression can be tiled arbitrarily, though
@@ -198,6 +224,12 @@ runconfig:
         # nearest, bilinear, bicubic, biquintic, or sinc
         interp_method: enum('nearest', 'bilinear', 'bicubic', 'biquintic', 'sinc', required=False)
 
+        # Whether workflow will terminate if DEM doesn't fully cover radar swath.
+        require_full_coverage: bool(required=False)
+
+      # EPSG code of the projection to use for the metdata cube.
+      metadata_cube_epsg: int(min=1024, max=32767, required=False)
+
       # Nominal antenna dimensions to use for BLU, EAP, etc. when no
       # antenna pattern input file is provided or its contents are
       # unsuitable. Each dimension has units of meters and is assumed
@@ -217,6 +249,9 @@ runconfig:
 
       # Dump height layer to temp file for debug purposes.  Default=False
       debug_dump_height: bool(required=False)
+
+      # If true, fill transmit gaps with zeros to remove loop-back cal pulses.
+      zero_fill_gaps: bool(required=False)
 
       # Processing stage switches, mostly for debug.
       # Any missing stages assumed True
@@ -239,11 +274,21 @@ runconfig:
     # program and which qa option(s) to enable. By default the qa SAS is not run.
     qa: include('qa_options', required=False)
 ---
+notch:
+  frequency: num()
+  bandwidth: num(min=0.0)
+  domain: enum('baseband', 'radio_frequency')
+
 spectral_window:
   kind: enum('Kaiser', 'Cosine', required=False)
   # Shape parameter. For Kaiser, 0 <= shape < Inf.
   # For Cosine, 0 <= shape <= 1
   shape: num(min=0.0, required=False)
+
+eap_options:
+  # Range spacing in meters of resampled antenna pattern grid
+  # Defaults to 5 MHz bandwidth (6 MHz sample rate)
+  spacing: num(required=False)
 
 rdr2geo_options:
   # Allowable height error in m
@@ -263,6 +308,40 @@ geo2rdr_options:
   # null for automatic selection
   time_end: num(required=False)
 
+nesz_options:
+  # supported noise estimator algorithms:
+  # - MEE:  Min Eigenvalue Estimator, Default.
+  # - MVE: Min Variance Estimator
+  algorithm: enum('MEE', 'MVE', required=False)
+  # Number of range blocks. This determines the size
+  # of noise power array as a function of slant range.
+  # If `fill_nan_ends=True`, the size will be `num_range_block+2`.
+  num_range_block: int(min=1, required=False)
+  # Percentage (in [0, 100]) of a range block that can be
+  # corrupted by data gaps before it is considered
+  # invalid and its noise power is set to NaN.
+  threshold_invalid_range_block: num(min=0.0, max=100.0, required=False)
+  # Fill NaN values due to TX gap and add two extra end points
+  # while making sure the product is uniform in slant range.
+  # Set to True for nominal science (recommended) and False
+  # for debugging.
+  fill_nan_ends: bool(required=False)
+  # number of range lines used as coherent processing interval
+  # only in MEE. It is recommended to use a value within [3, 20].
+  cpi: int(min=2, required=False)
+  # Median of  `cpi-1` eigenvalues rather than just min in MEE.
+  # Default is median (recommended).
+  median_ev: bool(required=False)
+  # Difference of noise-only range lines is used in only
+  # MVE (recommended)
+  diff: bool(required=False)
+  # The method in differentiating the noise-only range lines in
+  # only MVE. The supported methods are:
+  # - single: last range line will be subtracted from all.
+  # - mean: averaged over all lines will be subtracted from all.
+  # - diff: consecutive differences will be used in place of all.
+  diff_method: enum('single', 'mean', 'diff', required=False)
+
 rfi_options:
   # Whether to attempt RFI detection and record related metadata.
   # Defaults to True
@@ -270,13 +349,19 @@ rfi_options:
   # Whether to attemt RFI removal. Default to False.
   # Requires that RFI detection is also enabled.
   mitigation_enabled: bool(required=False)
-  # Algorithm selection.  Defaults to 'ST-EVD' for slow-time eigenvalue
-  # decomposition.
-  mitigation_algorithm: enum('ST-EVD', required=False)
-  # Coherent processing interval length (pulses).  Defaults to 32.
-  cpi_length: int(min=2, required=False)
+  # RFI detection algorithm. Supported values include:
+  #   - 'ST-EVD': slow-time eigenvalue decomposition algorithm
+  #   - 'FDNF': frequency domain notch filtering algorithm
+  # Defaults to 'ST-EVD'.
+  mitigation_algorithm: enum('ST-EVD', 'FDNF', required=False)
   # Number of subdivisions in range.  Defaults to 1.
   num_range_blocks: int(min=1, required=False)
+  slow_time_evd: include('slow_time_evd_options', required=False)
+  freq_notch_filter: include('freq_notch_filter_options', required=False)
+
+slow_time_evd_options:
+  # Coherent processing interval length (pulses).  Defaults to 32.
+  cpi_length: int(min=2, required=False)
   # Maximum allowable number of emitters can be detected and suppressed per CPI.
   # ST-EVD would ignore emitters exceeding this limit. This number should be
   # less than cpi_length. Defaults to 16.
@@ -298,6 +383,42 @@ rfi_options:
   # Parameters used to adaptively determine RFI eigenvalue difference thresholds
   threshold_hyperparameters: include('rfi_threshold_options', required=False)
 
+freq_notch_filter_options:
+  # If Frequency Domain Notch Filtering (FDNF) is applied, this parameter
+  # defines the number of azimuth (slow time) pulses of the input data to be
+  # processed at once.
+  num_pulses_az: int(min=1, required=False)
+  # Frequency Domain Notch Filtering (FDNF) slow-time averaging window size
+  # for Time-Stationary Narrowband (TSNB) RFI detection
+  az_winsize: int(min=1, required=False)
+  # Frequency Domain Notch Filtering (FDNF) fast-time averaging window size
+  # for Time-Varying Wideband (TVWB) RFI detection
+  rng_winsize: int(min=1, required=False)
+  # If FDNF is applied, when data mean and standard deviations are computed, 
+  # 'trim_frac/2' proportion of outliers will be removed from both tails of 
+  # the distribution.
+  trim_frac: num(min=0.0, required=False)
+  # If FDNF is applied, a threshold for pvalue needs to be selected. pvalue is a
+  # measure of confidence against a null hypothesis. In FDNF:
+  # Null Hypothesis: NO RFI, Alternative Hypothesis: RFI present
+  # If p-value of the range-frequency power spectra is less than p-value threshold,
+  # alternative hypothesis is accepted. Otherwise, null hypothesis is accepted.
+  pvalue_threshold: num(min=0.0, required=False)
+  # If FDNF is applied, the cumulative probability density function (CDF) 
+  # of the input Time Stationary Narrowband (TSNB) and Time Varying Wideband 
+  # (TVWB) masks will be compared with this threshold. It represents an estimate of 
+  # RFI likelihood in the data. A small cdf_threshold value results in a high 
+  # threshold for RFI detection and vice versa.
+  cdf_threshold: num(min=0.0, required=False)
+  # If FDNF is applied, this parameter controls narrowband RFI detection.
+  # This should be enabled unless for the purpose of debugging.
+  # Defaults to True
+  nb_detect: bool(required=False)
+  # If FDNF is applied, this parameter controls wideband RFI detection.
+  # This should be enabled unless for the purpose of debugging.
+  # Defaults to True
+  wb_detect: bool(required=False)
+
 rfi_threshold_options:
     # The computed sigma ratio of maximum and minimum Eigenvalue
     # first differences. It is a dimensionless figure of merit. Larger value
@@ -313,6 +434,7 @@ rfi_threshold_options:
 qa_options:
   # For descriptions of all QA parameters, see template runconfig (in `defaults` directory)
   workflows: include('workflows_options', required=False)
+  validation: include('qa_validation_options', required=False)
   qa_reports: include('qa_reports_options', required=False)
   absolute_radiometric_calibration: include('absolute_radiometric_calibration_options', required=False)
   point_target_analyzer: include('point_target_analyzer_options', required=False)
@@ -322,9 +444,12 @@ qa_options:
 workflows_options:
   validate: bool(required=False)
   qa_reports: bool(required=False)
-  absolute_radiometric_calibration: bool(required=False)
-  noise_estimation: bool(required=False)
   point_target_analyzer: bool(required=False)
+  absolute_radiometric_calibration: bool(required=False)
+  noise_equivalent_backscatter: bool(required=False)
+
+qa_validation_options:
+  metadata_cubes_fail_if_all_nan: bool(required=False)
 
 qa_reports_options:
   backscatter_img:
@@ -334,16 +459,22 @@ qa_reports_options:
     longest_side_max: int(min=1, required=False)
     percentile_for_clipping: list(num(min=0.0, max=100.0), min=2, max=2, required=False)
     gamma: num(min=0.0, required=False)
+    nan_color_in_pdf: str(required=False)
     tile_shape: list(int(min=-1), min=2, max=2, required=False)
   histogram:
     decimation_ratio: list(int(min=1), min=2, max=2, required=False)
     backscatter_histogram_bin_edges_range: list(num(), min=2, max=2, required=False)
+    phase_histogram_y_axis_range: list(any(num(), null()), min=2, max=2, required=False)
     phs_in_radians: bool(required=False)
     tile_shape: list(int(min=-1), min=2, max=2, required=False)
   range_spectra:
     az_decimation: int(min=1, required=False)
     hz_to_mhz: bool(required=False)
     tile_height: int(min=-1, required=False)
+  azimuth_spectra:
+    num_columns: int(min=-1, required=False)
+    hz_to_mhz: bool(required=False)
+    tile_width: int(min=-1, required=False)
 
 absolute_radiometric_calibration_options:
   nchip: int(min=1, required=False)
@@ -395,3 +526,13 @@ output_options:
     # representation of each component (real/imaginary) of each complex
     # sample.  Only relevant when data_type=complex64_zero_mantissa.
     mantissa_nbits: int(min=1, max=23, required=False)
+
+    # HDF5 file space management strategy.  In our tests, the "page" strategy
+    # works well for accessing files stored on the cloud by reducing the number
+    # of high-latency REST API calls needed to read datasets and their metadata.
+    fs_strategy: enum("fsm", "page", "aggregate", "none", required=False)
+
+    # HDF5 file space page size in bytes.  Only relevant when fs_strategy="page".
+    # Ideally at least large enough to hold `chunk_size` amount of uncompressed
+    # data as well as its metadata.
+    fs_page_size: int(min=512, max=1073741824, required=False)

@@ -1,4 +1,4 @@
-from osgeo import gdal
+from osgeo import gdal, osr, ogr, gdal_array
 import tempfile
 import numpy as np
 import warnings
@@ -6,10 +6,16 @@ import journal
 import os
 
 import isce3
+from isce3.core import crop_external_orbit
 from nisar.products.writers import BaseWriterSingleInput
 from nisar.workflows.h5_prep import set_get_geo_info
 from isce3.core.types import truncate_mantissa
+from isce3.geometry import get_near_and_far_range_incidence_angles
 from nisar.products.readers.orbit import load_orbit_from_xml
+
+
+LEXICOGRAPHIC_BASE_POLS = ['HH', 'HV', 'VH', 'VV']
+COMPACT_POLS = ['RH', 'RV']
 
 
 def _get_attribute_dict(band,
@@ -73,8 +79,7 @@ def _get_attribute_dict(band,
         attr_dict['min_value'] = stats_obj.min
         attr_dict['mean_value'] = stats_obj.mean
         attr_dict['max_value'] = stats_obj.max
-        attr_dict['sample_standard_deviation'] = \
-            stats_obj.sample_stddev
+        attr_dict['sample_stddev'] = stats_obj.sample_stddev
 
     elif stats_real_imag_obj_list is not None:
 
@@ -82,14 +87,12 @@ def _get_attribute_dict(band,
         attr_dict['min_real_value'] = stats_obj.real.min
         attr_dict['mean_real_value'] = stats_obj.real.mean
         attr_dict['max_real_value'] = stats_obj.real.max
-        attr_dict['sample_standard_deviation_real'] = \
-            stats_obj.real.sample_stddev
+        attr_dict['sample_stddev_real'] = stats_obj.real.sample_stddev
 
         attr_dict['min_imag_value'] = stats_obj.imag.min
         attr_dict['mean_imag_value'] = stats_obj.imag.mean
         attr_dict['max_imag_value'] = stats_obj.imag.max
-        attr_dict['sample_standard_deviation_imag'] = \
-            stats_obj.imag.sample_stddev
+        attr_dict['sample_stddev_imag'] = stats_obj.imag.sample_stddev
 
     if valid_min is not None:
         attr_dict['valid_min'] = valid_min
@@ -161,7 +164,8 @@ def save_dataset(ds_filename, h5py_obj, root_path,
                  fill_value=None,
                  valid_min=None,
                  valid_max=None,
-                 compute_stats=True):
+                 compute_stats=True,
+                 hdf5_data_type=None):
     '''
     Write a temporary multi-band raster file as an output HDF5 file
     or a set of single-band files.
@@ -245,7 +249,9 @@ def save_dataset(ds_filename, h5py_obj, root_path,
         Value to populate the HDF5 dataset attribute "valid_max"
     compute_stats: bool, optional
         Flag that indicates if statistics should be compute for the
-        raster layer. Defaults to True.
+        raster layer. Defaults to True
+    hdf5_data_type: Union[h5py.h5t.TypeCompoundID, numpy.dtype], optional
+        Data type of the output H5 datasets
     '''
 
     raster = isce3.io.Raster(ds_filename)
@@ -275,7 +281,8 @@ def save_dataset(ds_filename, h5py_obj, root_path,
                           fill_value=fill_value,
                           valid_min=valid_min,
                           valid_max=valid_max,
-                          compute_stats=compute_stats)
+                          compute_stats=compute_stats,
+                          hdf5_data_type=hdf5_data_type)
 
     else:
         save_raster(ds_filename, output_ds_name,
@@ -308,7 +315,8 @@ def save_hdf5_dataset(ds_filename, h5py_obj, root_path,
                       fill_value=None,
                       valid_min=None,
                       valid_max=None,
-                      compute_stats=True):
+                      compute_stats=True,
+                      hdf5_data_type=None):
     '''
     Write a raster files as a set of HDF5 datasets
 
@@ -369,8 +377,12 @@ def save_hdf5_dataset(ds_filename, h5py_obj, root_path,
         Value to populate the HDF5 dataset attribute "valid_max"
     compute_stats: bool, optional
         Flag that indicates if statistics should be compute for the
-        raster layer. Defaults to True.
+        raster layer. Defaults to True
+    hdf5_data_type: Union[h5py.h5t.TypeCompoundID, numpy.dtype], optional
+        Data type of the output H5 datasets
     '''
+
+    info_channel = journal.info("save_hdf5_dataset")
 
     gdal_ds = gdal.Open(ds_filename, gdal.GA_ReadOnly)
     nbands = gdal_ds.RasterCount
@@ -396,12 +408,14 @@ def save_hdf5_dataset(ds_filename, h5py_obj, root_path,
     stats_obj_list, stats_real_imag_obj_list = \
         _get_stats_obj_list(raster, compute_stats)
 
-    if chunking_enabled and chunk_size is None:
-        chunk_size = [512, 512]
-
     if chunking_enabled:
-        create_dataset_kwargs['chunks'] = \
-            (min(chunk_size[0], length), min(chunk_size[1], width))
+        if chunk_size is None:
+            chunk_size = [512, 512]
+
+        effective_chunk_size = (min(chunk_size[0], length),
+                                min(chunk_size[1], width))
+
+        create_dataset_kwargs['chunks'] = effective_chunk_size
 
     if compression_enabled:
         if compression_type is not None:
@@ -416,10 +430,6 @@ def save_hdf5_dataset(ds_filename, h5py_obj, root_path,
 
     for band in range(nbands):
         gdal_band = gdal_ds.GetRasterBand(band+1)
-        data = gdal_band.ReadAsArray()
-
-        if mantissa_nbits is not None:
-            truncate_mantissa(data, mantissa_nbits)
 
         attr_dict = _get_attribute_dict(
             band,
@@ -440,10 +450,83 @@ def save_hdf5_dataset(ds_filename, h5py_obj, root_path,
 
         h5_ds = f'{root_path}/{output_ds_name_band}'
 
-        dset = h5py_obj.require_dataset(h5_ds, data=data,
-                                        shape=data.shape,
-                                        dtype=data.dtype,
-                                        **create_dataset_kwargs)
+        if hdf5_data_type is not None:
+            band_data_type = hdf5_data_type
+        else:
+            band_data_type = \
+                gdal_array.GDALTypeCodeToNumericTypeCode(gdal_band.DataType)
+
+        width = int(gdal_ds.RasterXSize)
+        length = int(gdal_ds.RasterYSize)
+
+        block_nbands = 1
+        n_threads = 1
+        # Convert type size from bits to bytes (assuming word size is 8 bits)
+        data_type_size = int(gdal.GetDataTypeSize(gdal_band.DataType)) // 8
+        min_block_size = int(isce3.core.default_min_block_size)
+        max_block_size = int(isce3.core.default_max_block_size)
+
+        ret = isce3.core.get_block_processing_parameters(
+            array_length=length,
+            array_width=width,
+            nbands=block_nbands,
+            type_size=data_type_size,
+            min_block_size=min_block_size,
+            max_block_size=max_block_size,
+            snap=effective_chunk_size[0],
+            n_threads=n_threads)
+
+        n_blocks_y = ret['n_blocks_y']
+        n_blocks_x = ret['n_blocks_x']
+        block_length = ret['block_length']
+        block_width = ret['block_width']
+
+        info_channel.log(f'saving dataset: {h5_ds}')
+        info_channel.log(f'    length: {length}')
+        info_channel.log(f'    width: {width}')
+        info_channel.log(f'    block processing (Y-direction): {n_blocks_y}'
+                         f' blocks of {block_length} lines')
+        info_channel.log(f'    block processing (X-direction): {n_blocks_x}'
+                         f' blocks of {block_width} columns')
+        info_channel.log('    h5 dataset chunk length:'
+                         f' {effective_chunk_size[0]}')
+        info_channel.log('    h5 dataset chunk width:'
+                         f' {effective_chunk_size[1]}')
+
+        # create the output H5 dataset
+        dset = h5py_obj.create_dataset(h5_ds,
+                                       shape=(length, width),
+                                       dtype=band_data_type,
+                                       **create_dataset_kwargs)
+
+        for block_y in range(n_blocks_y):
+
+            offset_y = block_y * block_length
+            this_block_length = min(block_length, length - offset_y)
+
+            for block_x in range(n_blocks_x):
+
+                offset_x = block_x * block_width
+                this_block_width = min(block_width, width - offset_x)
+
+                # read data block from raster
+                data_block = gdal_band.ReadAsArray(
+                    xoff=int(offset_x),
+                    yoff=int(offset_y),
+                    win_xsize=int(this_block_width),
+                    win_ysize=int(this_block_length)
+                )
+
+                # truncate array (if applicable)
+                if mantissa_nbits is not None:
+                    truncate_mantissa(data_block, mantissa_nbits)
+
+                # write data block to HDF5 file
+                block_slice = np.index_exp[
+                    offset_y:offset_y + this_block_length,
+                    offset_x:offset_x + this_block_width
+                ]
+                dset.write_direct(data_block, dest_sel=block_slice)
 
         dset.dims[0].attach_scale(yds)
         dset.dims[1].attach_scale(xds)
@@ -460,7 +543,7 @@ def get_file_extension(format):
 
     Parameters
     ----------
-    format: str 
+    format: str
         File format: "GTiff" or "ENVI"
 
     Returns
@@ -636,15 +719,14 @@ class BaseL2WriterSingleInput(BaseWriterSingleInput):
             self.cfg["dynamic_ancillary_file_group"]['orbit_file']
         self.flag_external_orbit_file = self.orbit_file is not None
 
+        orbit_path = f'{self.input_product_path}/metadata/orbit'
+        self.orbit = isce3.core.load_orbit_from_h5_group(
+            self.input_hdf5_obj[orbit_path])
+
         if self.flag_external_orbit_file:
             ref_epoch = self.input_product_obj.getRadarGrid().ref_epoch
-            self.orbit = load_orbit_from_xml(self.orbit_file, ref_epoch)
-        else:
-            orbit_path = (f'{self.root_path}/'
-                          f'{self.input_product_hdf5_group_type}'
-                          '/metadata/orbit')
-            self.orbit = isce3.core.load_orbit_from_h5_group(
-                self.input_hdf5_obj[orbit_path])
+            external_orbit = load_orbit_from_xml(self.orbit_file, ref_epoch)
+            self.orbit = crop_external_orbit(external_orbit, self.orbit)
 
     def populate_identification_l2_specific(self):
         """
@@ -667,13 +749,124 @@ class BaseL2WriterSingleInput(BaseWriterSingleInput):
             'identification/isGeocoded',
             is_geocoded)
 
-        # TODO populate attribute `epsg`
         self.copy_from_input(
             'identification/boundingPolygon')
 
+        list_of_frequencies = list(self.freq_pols_dict.keys())
+
         self.set_value(
             'identification/listOfFrequencies',
-            list(self.freq_pols_dict.keys()))
+            list_of_frequencies)
+
+        self.copy_from_input(
+            'identification/platformName',
+            default='(NOT SPECIFIED)')
+
+    def populate_ceos_analysis_ready_data_parameters_l2_common(self):
+
+        self.copy_from_runconfig(
+            '{PRODUCT}/metadata/ceosAnalysisReadyData/staticLayersDataAccess',
+            'ceos_analysis_ready_data/static_layers_data_access',
+            default='(NOT SPECIFIED)')
+
+        ceos_ard_document_identifier = \
+            ('https://ceos.org/ard/files/PFS/SAR/v1.0/CEOS-ARD_PFS'
+             '_Synthetic_Aperture_Radar_v1.0.pdf')
+        self.set_value(
+            '{PRODUCT}/metadata/ceosAnalysisReadyData/'
+            'ceosAnalysisReadyDataDocumentIdentifier',
+            ceos_ard_document_identifier)
+
+        # Iterate over the geogrids for each frequency and
+        # store the maximum extents. Y extents are reversed
+        # because the step size in the Y direction is negative
+        geogrids = self.cfg['processing']['geocode']['geogrids']
+
+        list_of_frequencies = list(self.freq_pols_dict.keys())
+
+        start_x = +np.inf
+        end_x = -np.inf
+        start_y = -np.inf
+        end_y = +np.inf
+
+        epsg_code = None
+
+        for frequency in list_of_frequencies:
+            geogrid = geogrids[frequency]
+
+            if epsg_code is None:
+                epsg_code = geogrid.epsg
+            elif epsg_code != geogrid.epsg:
+                error_msg = ('EPSG code does not match for frequencies:'
+                             f'{list_of_frequencies}')
+                error_channel = journal.error(
+                    'populate_identification_l2_specific')
+                error_channel.log(error_msg)
+                raise NotImplementedError(error_msg)
+
+            start_x = min(start_x, geogrid.start_x)
+            end_x = max(end_x, geogrid.end_x)
+
+            start_y = max(start_y, geogrid.start_y)
+            end_y = min(end_y, geogrid.end_y)
+
+        # Notes about anti-meridian crossing:
+        #
+        # Estimating minimum and maximum longitudes values
+        # from a grid in geographic coordinates (EPSG 4326)
+        # can be challenging because longitude values can be
+        # "wrapped" around the antimeridian, i.e., +181 becomes
+        # -179. However, since in GeoGridParameters, `end_x`
+        # is obtained as `start_x + width * step_x`,
+        # the longitude coordinates will not be "wrapped" if they
+        # cross the antimeridian. This means that `end_x` will not be
+        # less than `start_x` and the minimum and maximum values
+        # can be correctly estimated
+
+        # Create geogrids' bbox ring
+        geogrids_bbox_ring = ogr.Geometry(ogr.wkbLinearRing)
+        geogrids_bbox_ring.AddPoint(start_x, start_y)
+        geogrids_bbox_ring.AddPoint(start_x, end_y)
+        geogrids_bbox_ring.AddPoint(end_x, end_y)
+        geogrids_bbox_ring.AddPoint(end_x, start_y)
+        geogrids_bbox_ring.AddPoint(start_x, start_y)
+
+        # Assign georeference to the geogrids' bbox ring
+        geogrid_srs = osr.SpatialReference()
+        geogrid_srs.ImportFromEPSG(epsg_code)
+        geogrids_bbox_ring.AssignSpatialReference(geogrid_srs)
+
+        bounding_box_wkt = geogrids_bbox_ring.ExportToWkt()
+
+        self.set_value(
+            '{PRODUCT}/metadata/ceosAnalysisReadyData/boundingBox',
+            bounding_box_wkt)
+
+        bounding_box_path = \
+            (f'{self.output_product_path}/metadata/ceosAnalysisReadyData/'
+             'boundingBox')
+
+        self.output_hdf5_obj[bounding_box_path].attrs['epsg'] = epsg_code
+
+        # TODO: add the EPSG code as an attribute of the following
+        # H5 datasets
+        for xy in ['x', 'y']:
+            h5_grp_path = ('{PRODUCT}/metadata/ceosAnalysisReadyData/'
+                           'geometricAccuracy')
+            runcfg_prefix = ('ceos_analysis_ready_data/'
+                             'estimated_geometric_accuracy')
+
+            self.copy_from_runconfig(
+                f'{h5_grp_path}/bias/{xy}',
+                f'{runcfg_prefix}_bias_{xy}',
+                format_function=np.float32,
+                default=np.nan)
+
+            self.copy_from_runconfig(
+                f'{h5_grp_path}/standardDeviation/{xy}',
+                f'{runcfg_prefix}_standard_deviation_{xy}',
+                format_function=np.float32,
+                default=np.nan)
 
     def populate_calibration_information(self):
 
@@ -682,15 +875,25 @@ class BaseL2WriterSingleInput(BaseWriterSingleInput):
         calibration_freq_parameter_list = ['commonDelay',
                                            'faradayRotation']
 
-        # calibration parameters to be copied from the RSLC
-        # specific to each polarization
-        calibration_freq_pol_parameter_list = \
+        # calibration metadata to be copied from the RSLC which are specific to
+        # each polarization channel, but which only exist for
+        # polarizations with a corresponding imagery layer in the RSLC
+        calibration_existing_pols_parameter_list = \
+            ['rfiLikelihood']
+
+        # calibration metadata to be copied from the RSLC
+        # that are specific to each polarization channel
+        # but exist for to all possible polarizations within a given
+        # polarimetric basis
+        # including polarizations without a corresponding image layer
+        # See: `isce3.python.packages.nisar.products.writers.SLC.set_calibration()`
+        calibration_all_pols_parameter_list = \
             ['differentialDelay',
              'differentialPhase',
              'scaleFactor',
              'scaleFactorSlope']
 
-        for frequency in self.freq_pols_dict.keys():
+        for frequency, pol_list in self.freq_pols_dict.items():
 
             for parameter in calibration_freq_parameter_list:
                 cal_freq_path = (
@@ -700,11 +903,32 @@ class BaseL2WriterSingleInput(BaseWriterSingleInput):
                 self.copy_from_input(f'{cal_freq_path}/{parameter}',
                                      default=np.nan)
 
-            # The following parameters are available for all
-            # quad pols in the lexicographic base
-            # regardless of listOfPolarizations
-            for pol in ['HH', 'HV', 'VH', 'VV']:
-                for parameter in calibration_freq_pol_parameter_list:
+            for pol in pol_list:
+                for parameter in calibration_existing_pols_parameter_list:
+                    self.copy_from_input(
+                        f'{cal_freq_path}/{pol}/{parameter}',
+                        default=np.nan)
+
+            # Copy polarimetric calibration parameters associated with all
+            # polarizations for given basis
+            product_pols = []
+            for pol_list in self.freq_pols_dict.values():
+                product_pols.extend(pol_list)
+
+            if all(pol in LEXICOGRAPHIC_BASE_POLS for pol in product_pols):
+                list_of_all_pols = LEXICOGRAPHIC_BASE_POLS
+            elif all(pol in COMPACT_POLS for pol in product_pols):
+                list_of_all_pols = COMPACT_POLS
+            else:
+                error_channel = journal.error(
+                    'BaseL2WriterSingleInput.populate_calibration_information')
+                error_msg = ('Unsupported polarimetric channels:'
+                             f' {self.freq_pols_dict}')
+                error_channel.log(error_msg)
+                raise KeyError(error_msg)
+
+            for pol in list_of_all_pols:
+                for parameter in calibration_all_pols_parameter_list:
                     self.copy_from_input(f'{cal_freq_path}/{pol}/{parameter}',
                                          default=np.nan)
 
@@ -713,31 +937,55 @@ class BaseL2WriterSingleInput(BaseWriterSingleInput):
                                 'txVerticalCrosspol',
                                 'rxHorizontalCrosspol',
                                 'rxVerticalCrosspol']
-        self.geocode_lut(
-            '{PRODUCT}/metadata/calibrationInformation/crosstalk',
-            frequency=list(self.freq_pols_dict.keys())[0],
-            output_ds_name_list=crosstalk_parameters,
-            skip_if_not_present=True)
+        for crosstalk_parameter in crosstalk_parameters:
+            self.copy_from_input(
+                '{PRODUCT}/metadata/calibrationInformation/crosstalk/'
+                f'{crosstalk_parameter}',
+                skip_if_not_present=True)
 
-        luts_list = ['elevationAntennaPattern', 'nes0']
+        for abstract_lut in ("eap", "noise"):
 
-        for lut in luts_list:
+            if abstract_lut == "eap":
+                old_name = new_name = "elevationAntennaPattern"
+                compute_stats = False
+            elif abstract_lut == "noise":
+                # Noise dataset was renamed in product spec v1.2.0.
+                old_name = "nes0"
+                new_name = "noiseEquivalentBackscatter"
+                compute_stats = True
+            else:
+                assert False, f"unexpected {abstract_lut=}"
 
             # geocode frequency dependent LUTs
             for frequency, pol_list in self.freq_pols_dict.items():
 
                 # The path below is only valid for RSLC products
-                # with product specification version 1.1.0 or above
+                # with product specification version 1.2.0 or above
                 success = self.geocode_lut(
                     '{PRODUCT}/metadata/calibrationInformation/'
-                    f'frequency{frequency}/{lut}',
+                    f'frequency{frequency}/{new_name}',
                     frequency=frequency,
                     output_ds_name_list=pol_list,
-                    skip_if_not_present=True)
+                    skip_if_not_present=True,
+                    compute_stats=compute_stats)
 
+                # Try reading with the old name.
+                if not success and new_name != old_name:
+                    root = ('{PRODUCT}/metadata/calibrationInformation/'
+                        f'frequency{frequency}')
+                    success = self.geocode_lut(
+                        output_h5_group=f"{root}/{new_name}",
+                        input_h5_group=f"{root}/{old_name}",
+                        frequency=frequency,
+                        output_ds_name_list=pol_list,
+                        skip_if_not_present=True,
+                        compute_stats=compute_stats)
+
+                # Failed with these path schema, don't bother with other pols.
                 if not success:
                     break
 
+            # Succeeded with these path schema, don't bother trying the old one.
             if success:
                 continue
 
@@ -746,26 +994,50 @@ class BaseL2WriterSingleInput(BaseWriterSingleInput):
             for frequency, pol_list in self.freq_pols_dict.items():
                 for pol in pol_list:
 
-                    input_ds_name_list = [f'frequency{frequency}/{pol}/{lut}']
+                    zero_doppler_time_path = (
+                        f'{self.input_product_path}/metadata/'
+                        f'calibrationInformation/frequency{frequency}/{pol}/'
+                        'zeroDopplerTime')
+
+                    if zero_doppler_time_path in self.input_hdf5_obj:
+
+                        self.geocode_lut(
+                            output_h5_group=('{PRODUCT}/metadata/'
+                                             'calibrationInformation'
+                                             f'/frequency{frequency}/{new_name}'),
+                            input_h5_group=('{PRODUCT}/metadata/'
+                                            'calibrationInformation'
+                                            f'/frequency{frequency}/{pol}'),
+                            frequency=list(self.freq_pols_dict.keys())[0],
+                            input_ds_name_list=[old_name],
+                            output_ds_name_list=pol,
+                            skip_if_not_present=True,
+                            compute_stats=compute_stats)
+
+                        continue
+
+                    input_ds_name_list = [f'frequency{frequency}/{pol}/{old_name}']
 
                     self.geocode_lut(
                         output_h5_group=('{PRODUCT}/metadata/'
                                          'calibrationInformation'
-                                         f'/frequency{frequency}/{lut}'),
+                                         f'/frequency{frequency}/{new_name}'),
                         input_h5_group=('{PRODUCT}/metadata/'
                                         'calibrationInformation'),
                         frequency=list(self.freq_pols_dict.keys())[0],
                         input_ds_name_list=input_ds_name_list,
                         output_ds_name_list=pol,
-                        skip_if_not_present=True)
+                        skip_if_not_present=True,
+                        compute_stats=compute_stats)
 
     def populate_orbit(self):
 
-        # save the orbit ephemeris
+        # Save the orbit ephemeris
         orbit_hdf5_group = self.output_hdf5_obj[
             f'{self.output_product_path}/metadata'].require_group(
                 "orbit")
 
+        # Save the orbit into the HDF5 file
         self.orbit.save_to_h5(orbit_hdf5_group)
 
     def populate_attitude(self):
@@ -778,9 +1050,300 @@ class BaseL2WriterSingleInput(BaseWriterSingleInput):
         self._copy_group_from_input('{PRODUCT}/metadata/attitude',
                                     excludes=excludes_list)
 
+    def populate_source_data(self):
+        """
+        Populate the `sourceData` group
+        """
+
+        self.copy_from_input(
+            '{PRODUCT}/metadata/sourceData/productDoi',
+            'identification/productDoi',
+            skip_if_not_present=True)
+
+        self.copy_from_input(
+            '{PRODUCT}/metadata/sourceData/productVersion',
+            'identification/productVersion',
+            skip_if_not_present=True)
+
+        self.copy_from_input(
+            '{PRODUCT}/metadata/sourceData/lookDirection',
+            'identification/lookDirection',
+            format_function=str.title)
+
+        self.copy_from_input(
+            '{PRODUCT}/metadata/sourceData/productLevel',
+            'identification/productLevel',
+            default='L1')
+
+        # CEOS ARD convention is 'Slant range' or 'Ground range'.
+        self.set_value(
+            '{PRODUCT}/metadata/sourceData/productGeometry',
+            'Slant range')
+
+        self.copy_from_input(
+            '{PRODUCT}/metadata/sourceData/processingDateTime',
+            'identification/processingDateTime',
+            skip_if_not_present=True)
+
+        # this parameter should be copied from the input RSLC product
+        self.copy_from_input(
+            '{PRODUCT}/metadata/sourceData/processingCenter',
+            'identification/processingCenter',
+            default='(NOT SPECIFIED)')
+
+        self.copy_from_input(
+            '{PRODUCT}/metadata/sourceData/processingInformation/'
+            'parameters/runConfigurationContents',
+            '{PRODUCT}/metadata/processingInformation/parameters/'
+            'runConfigurationContents',
+            skip_if_not_present=True)
+
+        self.copy_from_input(
+            '{PRODUCT}/metadata/sourceData/processingInformation/'
+            'parameters/referenceTerrainHeight',
+            '{PRODUCT}/metadata/processingInformation/parameters/'
+            'referenceTerrainHeight',
+            skip_if_not_present=True)
+
+        self.copy_from_input(
+            '{PRODUCT}/metadata/sourceData/processingInformation/'
+            'parameters/zeroDopplerTime',
+            '{PRODUCT}/metadata/processingInformation/parameters/'
+            'zeroDopplerTime',
+            skip_if_not_present=True)
+
+        self.copy_from_input(
+            '{PRODUCT}/metadata/sourceData/processingInformation/'
+            'parameters/slantRange',
+            '{PRODUCT}/metadata/processingInformation/parameters/'
+            'slantRange',
+            skip_if_not_present=True)
+
+        self.copy_from_input(
+            '{PRODUCT}/metadata/sourceData/processingInformation/'
+            'algorithms/rfiDetection',
+            '{PRODUCT}/metadata/processingInformation/algorithms/'
+            'rfiDetection',
+            skip_if_not_present=True)
+
+        self.copy_from_input(
+            '{PRODUCT}/metadata/sourceData/processingInformation/'
+            'algorithms/rfiMitigation',
+            '{PRODUCT}/metadata/processingInformation/algorithms/'
+            'rfiMitigation',
+            skip_if_not_present=True)
+
+        self.copy_from_input(
+            '{PRODUCT}/metadata/sourceData/processingInformation/'
+            'algorithms/rangeCompression',
+            '{PRODUCT}/metadata/processingInformation/algorithms/'
+            'rangeCompression',
+            skip_if_not_present=True)
+
+        self.copy_from_input(
+            '{PRODUCT}/metadata/sourceData/processingInformation/'
+            'algorithms/elevationAntennaPatternCorrection',
+            '{PRODUCT}/metadata/processingInformation/algorithms/'
+            'elevationAntennaPatternCorrection',
+            skip_if_not_present=True)
+
+        self.copy_from_input(
+            '{PRODUCT}/metadata/sourceData/processingInformation/'
+            'algorithms/rangeSpreadingLossCorrection',
+            '{PRODUCT}/metadata/processingInformation/algorithms/'
+            'rangeSpreadingLossCorrection',
+            skip_if_not_present=True)
+
+        self.copy_from_input(
+            '{PRODUCT}/metadata/sourceData/processingInformation/'
+            'algorithms/dopplerCentroidEstimation',
+            '{PRODUCT}/metadata/processingInformation/algorithms/'
+            'dopplerCentroidEstimation',
+            skip_if_not_present=True)
+
+        self.copy_from_input(
+            '{PRODUCT}/metadata/sourceData/processingInformation/'
+            'algorithms/azimuthPresumming',
+            '{PRODUCT}/metadata/processingInformation/algorithms/'
+            'azimuthPresumming',
+            skip_if_not_present=True)
+
+        self.copy_from_input(
+            '{PRODUCT}/metadata/sourceData/processingInformation/'
+            'algorithms/azimuthCompression',
+            '{PRODUCT}/metadata/processingInformation/algorithms/'
+            'azimuthCompression',
+            skip_if_not_present=True)
+
+        self.copy_from_input(
+            '{PRODUCT}/metadata/sourceData/processingInformation/'
+            'algorithms/softwareVersion',
+            '{PRODUCT}/metadata/processingInformation/algorithms/'
+            'softwareVersion',
+            skip_if_not_present=True)
+
+        self.copy_from_input(
+            '{PRODUCT}/metadata/sourceData/swaths/zeroDopplerStartTime',
+            'identification/zeroDopplerStartTime')
+
+        self.copy_from_input(
+            '{PRODUCT}/metadata/sourceData/swaths/zeroDopplerEndTime',
+            'identification/zeroDopplerEndTime')
+
+        self.copy_from_input(
+            '{PRODUCT}/metadata/sourceData/swaths/zeroDopplerTimeSpacing',
+            '{PRODUCT}/swaths/zeroDopplerTimeSpacing')
+
+        for i, (frequency, _) in enumerate(self.freq_pols_dict.items()):
+            radar_grid_obj = self.input_product_obj.getRadarGrid(frequency)
+
+            output_swaths_freq_path = ('{PRODUCT}/metadata/sourceData/'
+                                       f'swaths/frequency{frequency}')
+            input_swaths_freq_path = ('{PRODUCT}/swaths/'
+                                      f'frequency{frequency}')
+
+            near_range_inc_angle_rad, far_range_inc_angle_rad = \
+                get_near_and_far_range_incidence_angles(radar_grid_obj,
+                                                        self.orbit)
+
+            near_range_inc_angle_deg = np.rad2deg(near_range_inc_angle_rad)
+            far_range_inc_angle_deg = np.rad2deg(far_range_inc_angle_rad)
+
+            self.set_value(
+                f'{output_swaths_freq_path}/nearRangeIncidenceAngle',
+                near_range_inc_angle_deg)
+
+            self.set_value(
+                f'{output_swaths_freq_path}/farRangeIncidenceAngle',
+                far_range_inc_angle_deg)
+
+            self.copy_from_input(
+                f'{output_swaths_freq_path}/listOfPolarizations',
+                f'{input_swaths_freq_path}/listOfPolarizations')
+
+            if i == 0:
+                self.set_value(
+                    '{PRODUCT}/metadata/sourceData/swaths/'
+                    'numberOfAzimuthLines',
+                    radar_grid_obj.length,
+                    format_function=np.uint64)
+
+            # compute azimuth resolution
+            azimuth_bandwidth_path = (
+                f'{self.input_product_path}'
+                f'/swaths/frequency{frequency}/processedAzimuthBandwidth')
+            azimuth_bandwidth = self.input_hdf5_obj[azimuth_bandwidth_path][()]
+
+            along_track_spacing_path = (
+                f'{self.input_product_path}'
+                f'/swaths/frequency{frequency}/sceneCenterAlongTrackSpacing')
+            along_track_spacing = self.input_hdf5_obj[
+                along_track_spacing_path][()]
+
+            zero_doppler_time_spacing_path = (
+                f'{self.input_product_path}'
+                f'/swaths/zeroDopplerTimeSpacing')
+            zero_doppler_time_spacing = self.input_hdf5_obj[
+                zero_doppler_time_spacing_path][()]
+
+            # ground velocity and azimuth resolution computed at the scene center
+            ground_velocity = along_track_spacing / zero_doppler_time_spacing
+            azimuth_resolution = ground_velocity / azimuth_bandwidth
+
+            self.set_value(
+                f'{output_swaths_freq_path}/sceneCenterAlongTrackResolution',
+                azimuth_resolution)
+
+            # compute range resolution
+            range_bandwidth_path = (
+                f'{self.input_product_path}'
+                f'/swaths/frequency{frequency}/processedRangeBandwidth')
+            range_bandwidth = self.input_hdf5_obj[range_bandwidth_path][()]
+            range_resolution = (isce3.core.speed_of_light /
+                                (2 * range_bandwidth))
+            self.set_value(
+                f'{output_swaths_freq_path}/rangeResolution',
+                range_resolution)
+
+            self.copy_from_input(
+                f'{output_swaths_freq_path}/sceneCenterAlongTrackSpacing',
+                f'{input_swaths_freq_path}/sceneCenterAlongTrackSpacing')
+
+            self.copy_from_input(
+                f'{output_swaths_freq_path}/sceneCenterGroundRangeSpacing',
+                f'{input_swaths_freq_path}/sceneCenterGroundRangeSpacing')
+
+            self.copy_from_input(
+                f'{output_swaths_freq_path}/acquiredRangeBandwidth',
+                f'{input_swaths_freq_path}/acquiredRangeBandwidth')
+
+            self.copy_from_input(
+                f'{output_swaths_freq_path}/processedRangeBandwidth',
+                f'{input_swaths_freq_path}/processedRangeBandwidth')
+
+            self.copy_from_input(
+                f'{output_swaths_freq_path}/processedAzimuthBandwidth',
+                f'{input_swaths_freq_path}/processedAzimuthBandwidth')
+
+            self.copy_from_input(
+                f'{output_swaths_freq_path}/centerFrequency',
+                f'{input_swaths_freq_path}/processedCenterFrequency')
+
+            self.set_value(
+                f'{output_swaths_freq_path}/slantRangeStart',
+                radar_grid_obj.starting_range)
+
+            self.copy_from_input(
+                f'{output_swaths_freq_path}/slantRangeSpacing',
+                f'{input_swaths_freq_path}/slantRangeSpacing')
+
+            self.set_value(
+                f'{output_swaths_freq_path}/numberOfRangeSamples',
+                radar_grid_obj.width,
+                format_function=np.uint64)
+
+            self.copy_from_input(
+                '{PRODUCT}/metadata/sourceData/processingInformation/'
+                f'parameters/frequency{frequency}/dopplerCentroid',
+                '{PRODUCT}/metadata/processingInformation/parameters/'
+                f'frequency{frequency}/dopplerCentroid',
+                skip_if_not_present=True)
+
+            # Copy range-Doppler Doppler Centroid LUT into the sourceData
+            # group.
+            # First, we look for the coordinate vectors `zeroDopplerTime`
+            # and `slantRange` in the same level of the `dopplerCentroid` LUT.
+            # If these vectors are not found, a `KeyError` exception will be
+            # raised. We catch that exception, and look for the coordinate
+            # vectors two levels below, following old RSLC specs.
+            try:
+                self.copy_from_input(
+                    '{PRODUCT}/metadata/sourceData/processingInformation/'
+                    f'parameters/frequency{frequency}/zeroDopplerTime',
+                    '{PRODUCT}/metadata/processingInformation/parameters/'
+                    f'frequency{frequency}/zeroDopplerTime')
+            except KeyError:
+                self.copy_from_input(
+                    '{PRODUCT}/metadata/sourceData/processingInformation/'
+                    f'parameters/frequency{frequency}/zeroDopplerTime',
+                    '{PRODUCT}/metadata/processingInformation/parameters/'
+                    'zeroDopplerTime')
+            try:
+                self.copy_from_input(
+                    '{PRODUCT}/metadata/sourceData/processingInformation/'
+                    f'parameters/frequency{frequency}/slantRange',
+                    '{PRODUCT}/metadata/processingInformation/parameters/'
+                    f'frequency{frequency}/slantRange')
+            except KeyError:
+                self.copy_from_input(
+                    '{PRODUCT}/metadata/sourceData/processingInformation/'
+                    f'parameters/frequency{frequency}/slantRange',
+                    '{PRODUCT}/metadata/processingInformation/parameters/'
+                    'slantRange')
+
     def populate_processing_information_l2_common(self):
 
-        # Since the flag "rfiCorrectionApplied" is not present in the RSLC
+        # Since the flag "rfiMitigationApplied" is not present in the RSLC
         # metadata, we populate it by reading the name of the
         # RFI mitigation algorithm from the RSLC metadata. The flag
         # is only True if the name of the algorithm is present in the metadata,
@@ -794,9 +1357,18 @@ class BaseL2WriterSingleInput(BaseWriterSingleInput):
             rfi_mitigation_path != '' and
             'disabled' not in rfi_mitigation_path.lower())
 
+        # populate processing information parameters
+        for xy in ['x', 'y']:
+            parameters_group = \
+                '{PRODUCT}/metadata/processingInformation/parameters'
+            self.copy_from_runconfig(
+                f'{parameters_group}/geocoding/snapToGrid{xy.upper()}',
+                f'processing/geocode/{xy}_snap',
+                default=np.nan,
+                format_function=np.float64)
+
         self.set_value(
-            '{PRODUCT}/metadata/processingInformation/parameters/'
-            'rfiCorrectionApplied',
+            f'{parameters_group}/rfiMitigationApplied',
             flag_rfi_mitigation_applied)
 
         self.set_value(
@@ -812,13 +1384,15 @@ class BaseL2WriterSingleInput(BaseWriterSingleInput):
             f'{inputs_group}/l1SlcGranules',
             [self.input_file])
 
-        orbit_file = self.cfg[
-            'dynamic_ancillary_file_group']['orbit_file']
-        if orbit_file is None:
-            orbit_file = '(NOT SPECIFIED)'
-        self.set_value(
-            f'{inputs_group}/orbitFiles',
-            [orbit_file])
+        # populate input orbit and TEC files
+        for ancillary_type in ['orbit', 'tec']:
+            ancillary_file = self.cfg[
+                'dynamic_ancillary_file_group'][f'{ancillary_type}_file']
+            if ancillary_file is None:
+                ancillary_file = '(NOT SPECIFIED)'
+            self.set_value(
+                f'{inputs_group}/{ancillary_type}Files',
+                [ancillary_file])
 
         # `run_config_path` can be either a file name or a string
         # representing the contents of the runconfig file (identified
@@ -847,7 +1421,8 @@ class BaseL2WriterSingleInput(BaseWriterSingleInput):
     def geocode_lut(self, output_h5_group, input_h5_group=None,
                     frequency='A', output_ds_name_list=None,
                     input_ds_name_list=None,
-                    skip_if_not_present=False):
+                    skip_if_not_present=False,
+                    compute_stats=False):
         """
         Geocode a look-up table (LUT) from the input product in
         radar coordinates to the output product in map coordinates
@@ -870,6 +1445,9 @@ class BaseL2WriterSingleInput(BaseWriterSingleInput):
         skip_if_not_present: bool, optional
             Flag to prevent the execution to stop if the dataset
             is not present from input
+        compute_stats: bool, optional
+            Flag that indicates if statistics should be computed for the
+            output raster layer. Defaults to False.
 
         Returns
         -------
@@ -938,7 +1516,8 @@ class BaseL2WriterSingleInput(BaseWriterSingleInput):
             metadata_group,
             input_h5_group_path,
             output_h5_group_path,
-            skip_if_not_present)
+            skip_if_not_present,
+            compute_stats)
 
     def geocode_metadata_group(self,
                                frequency,
@@ -947,7 +1526,8 @@ class BaseL2WriterSingleInput(BaseWriterSingleInput):
                                metadata_group,
                                input_h5_group_path,
                                output_h5_group_path,
-                               skip_if_not_present):
+                               skip_if_not_present,
+                               compute_stats):
 
         error_channel = journal.error('geocode_metadata_group')
 
@@ -1015,19 +1595,24 @@ class BaseL2WriterSingleInput(BaseWriterSingleInput):
         lines = zero_doppler_h5_dataset.size
         samples = slant_range_h5_dataset.size
 
-        time_spacing = np.average(
-            zero_doppler_h5_dataset[1:-1] - zero_doppler_h5_dataset[0:-2])
-        range_spacing = np.average(
-            slant_range_h5_dataset[1:-1] - slant_range_h5_dataset[0:-2])
+        if len(zero_doppler_h5_dataset) >= 2:
+            time_spacing = np.average(np.diff(zero_doppler_h5_dataset))
+        else:
+            time_spacing = None
 
-        if time_spacing <= 0:
+        if time_spacing is None or time_spacing <= 0:
             error_msg = ('Invalid zero-Doppler time array under'
                          f' {zero_doppler_path}:'
                          f' {zero_doppler_h5_dataset[()]}')
             error_channel.log(error_msg)
             raise RuntimeError(error_msg)
 
-        if range_spacing <= 0:
+        if len(slant_range_h5_dataset) >= 2:
+            range_spacing = np.average(np.diff(slant_range_h5_dataset))
+        else:
+            range_spacing = None
+
+        if range_spacing is None or range_spacing <= 0:
             error_msg = ('Invalid range spacing array under'
                          f' {slant_range_path}: {slant_range_h5_dataset[()]}')
             error_channel.log(error_msg)
@@ -1092,6 +1677,10 @@ class BaseL2WriterSingleInput(BaseWriterSingleInput):
         geo.threshold_geo2rdr = threshold
         geo.numiter_geo2rdr = maxiter
 
+        if (len(zero_doppler_h5_dataset) < 5 or 
+                len(slant_range_h5_dataset) < 5):
+            geo.data_interpolator = 'nearest'
+
         geo.geogrid(metadata_geogrid.start_x,
                     metadata_geogrid.start_y,
                     metadata_geogrid.spacing_x,
@@ -1135,6 +1724,7 @@ class BaseL2WriterSingleInput(BaseWriterSingleInput):
 
         save_dataset(temp_output.name, self.output_hdf5_obj,
                      output_h5_group_path,
-                     yds, xds, output_ds_name_list)
+                     yds, xds, output_ds_name_list,
+                     compute_stats=compute_stats)
 
         return True

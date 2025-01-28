@@ -92,14 +92,19 @@ def _io_valid(geo_io_checks, rdr_io_checks):
         raise ValueError(err_str)
 
 
-def _phase_array_valid(phase_array, geo_array, which_phase):
+def _output_array_valid(output_array, geo_array, which_output):
     '''
-    Compare geo output array shape and phase array shpae to see if they match
+    Compare geo output array shape and output array shape to see if they match
     '''
-    # default phase_array has size=0
-    if phase_array.size:
-        if phase_array.shape != geo_array.shape:
-            err_str = f'{which_phase} phase array shape does not match geocoded array shape'
+
+    # Skip the size check when the output array is not provided
+    if output_array is None:
+        return
+
+    # default output_array has size==0
+    if output_array.size:
+        if output_array.shape != geo_array.shape:
+            err_str = f'{which_output} output array shape does not match geocoded array shape'
             error_channel.log(err_str)
             raise ValueError(err_str)
 
@@ -109,6 +114,7 @@ def geocode_slc(geo_data_blocks: Union[np.ndarray, list[np.ndarray]],
                 dem_raster, radargrid,
                 geogrid, orbit, native_doppler, image_grid_doppler,
                 ellipsoid, threshold_geo2rdr, num_iter_geo2rdr,
+                mask_block=None,
                 sliced_radargrid=None, subswaths=None,
                 first_azimuth_line=0,  first_range_sample=0, flatten=True,
                 reramp=True,
@@ -121,7 +127,7 @@ def geocode_slc(geo_data_blocks: Union[np.ndarray, list[np.ndarray]],
                 carrier_phase_block: Optional[np.ndarray] = np.array([],
                                                                      dtype=np.float64),
                 flatten_phase_block: Optional[np.ndarray] = np.array([],
-                                                                    dtype=np.float64)):
+                                                                     dtype=np.float64)):
     '''
     Geocode a subset of pixels for multiple radar SLC arrays to a given geogrid.
     All radar SLC arrays share a common radar grid. All output geocoded arrays
@@ -152,6 +158,8 @@ def geocode_slc(geo_data_blocks: Union[np.ndarray, list[np.ndarray]],
         Threshold for geo2rdr computations
     num_iter_geo2rdr: int
         Maximum number of iterations for geo2rdr convergence
+    mask_block: numpy.ndarray or None
+        Optional output array containing masking values of geocoded SLC
     sliced_radargrid: RadarGridParameters
         Radar grid representing subset of radargrid
     subswaths: SubSwaths or None, default=None
@@ -191,29 +199,42 @@ def geocode_slc(geo_data_blocks: Union[np.ndarray, list[np.ndarray]],
     if sliced_radargrid is None:
         sliced_radargrid = radargrid
 
-    # if subswaths not passed in, pass in emtpy kwarg.
-    # else pass in subswaths in kwarg
-    kwargs = {}
-    if subswaths is not None:
-        kwargs['subswaths'] = subswaths
-
     # if both geo and radar blocks are np.ndarray, put them into a list
-    # to match expected input type of list[np.ndaarray]
+    # to match expected input type of list[np.ndarray]
     if geo_io_checks.is_array and rdr_io_checks.is_array:
         geo_data_blocks = [geo_data_blocks]
         rdr_data_blocks = [rdr_data_blocks]
 
-    # if not default carrier/flattening phase array, check if shape matches
-    # geoocoded array shape
-    for phase_arr, which_phase in zip([carrier_phase_block, flatten_phase_block],
-                                      ['carrier', 'flattening']):
-        _phase_array_valid(phase_arr, geo_data_blocks[0], which_phase)
+    # check if non-geocoded output array shapes matches geocoded array shape.
+    for output_arr, which_output in zip([carrier_phase_block,
+                                         flatten_phase_block,
+                                         mask_block],
+                                        ['carrier', 'flattening', 'mask']):
+        _output_array_valid(output_arr, geo_data_blocks[0], which_output)
 
-    _geocode_slc(geo_data_blocks, carrier_phase_block, flatten_phase_block,
-                 rdr_data_blocks, dem_raster, radargrid,
-                 sliced_radargrid, geogrid, orbit, native_doppler,
-                 image_grid_doppler, ellipsoid, threshold_geo2rdr,
-                 num_iter_geo2rdr, first_azimuth_line, first_range_sample,
-                 flatten, reramp, az_carrier, rg_carrier, az_time_correction,
-                 srange_correction, flatten_with_corrected_srange,
-                 invalid_value, **kwargs)
+    _geocode_slc(geo_data_blocks=geo_data_blocks,
+                 carrier_phase_block=carrier_phase_block,
+                 flatten_phase_block=flatten_phase_block,
+                 rdr_data_blocks=rdr_data_blocks,
+                 dem_raster=dem_raster,
+                 radargrid=radargrid,
+                 sliced_radar_grid=sliced_radargrid,
+                 geogrid=geogrid,
+                 orbit=orbit,
+                 native_doppler=native_doppler,
+                 image_grid_doppler=image_grid_doppler,
+                 ellipsoid=ellipsoid,
+                 threshold_geo2rdr=threshold_geo2rdr,
+                 numiter_geo2rdr=num_iter_geo2rdr,
+                 mask_block=mask_block,
+                 azimuth_first_line=first_azimuth_line,
+                 range_first_pixel=first_range_sample,
+                 flatten=flatten,
+                 reramp=reramp,
+                 az_carrier=az_carrier,
+                 rg_carrier=rg_carrier,
+                 az_time_correction=az_time_correction,
+                 srange_correction=srange_correction,
+                 flatten_with_corrected_srange=flatten_with_corrected_srange,
+                 invalid_value=invalid_value,
+                 subswaths=subswaths)

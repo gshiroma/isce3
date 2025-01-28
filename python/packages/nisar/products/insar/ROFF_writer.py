@@ -1,9 +1,12 @@
 import numpy as np
 from nisar.workflows.h5_prep import get_off_params
-from nisar.workflows.helpers import get_cfg_freq_pols
+from nisar.workflows.helpers import (get_cfg_freq_pols,
+                                     get_pixel_offsets_dataset_shape,
+                                     get_pixel_offsets_params)
 
 from .dataset_params import DatasetParams, add_dataset_and_attrs
 from .InSAR_base_writer import InSARBaseWriter
+from .InSAR_HDF5_optimizer_config import get_InSAR_output_options
 from .InSAR_L1_writer import L1InSARWriter
 from .InSAR_products_info import InSARProductsInfo
 from .product_paths import ROFFGroupsPaths
@@ -18,7 +21,12 @@ class ROFFWriter(L1InSARWriter):
         """
         Constructor for ROFF class
         """
+        hdf5_opt_config, kwds = get_InSAR_output_options(kwds, 'ROFF')
+
         super().__init__(**kwds)
+
+        # HDF5 IO optimizer configuration
+        self.hdf5_optimizer_config = hdf5_opt_config
 
         # group paths are ROFF group paths
         self.group_paths = ROFFGroupsPaths()
@@ -33,9 +41,10 @@ class ROFFWriter(L1InSARWriter):
         """
         super().add_root_attrs()
 
-        self.attrs["title"] = np.string_("NISAR L1 ROFF Product")
+        # Add additional attributes
+        self.attrs["title"] = np.bytes_("NISAR L1 ROFF Product")
         self.attrs["reference_document"] = \
-            np.string_("D-105009 NISAR NASA SDS"
+            np.bytes_("D-105009 NISAR NASA SDS"
                        " Product Specification L1 Range Doppler Pixel Offsets")
 
     def add_coregistration_to_algo_group(self):
@@ -55,26 +64,17 @@ class ROFFWriter(L1InSARWriter):
                 "coregistrationMethod",
                 coreg_method,
                 "RSLC coregistration method",
-                {
-                    "algorithm_type": "RSLC coregistration",
-                },
             ),
             DatasetParams(
                 "geometryCoregistration",
                 "Range doppler to geogrid then geogrid to range doppler"
                 ,
                 "Geometry coregistration algorithm",
-                {
-                    "algorithm_type": "RSLC coregistration",
-                },
             ),
             DatasetParams(
                 "resampling",
                 "sinc",
                 "Secondary RSLC resampling algorithm",
-                {
-                    "algorithm_type": "RSLC coregistration",
-                },
             ),
         ]
 
@@ -97,11 +97,7 @@ class ROFFWriter(L1InSARWriter):
                 cross_corr = DatasetParams(
                     "crossCorrelationAlgorithm",
                     cross_correlation_domain,
-                    f"Cross-correlation algorithm for layer {layer[-1]}"
-                    ,
-                    {
-                        "algorithm_type": "RSLC coregistration",
-                    },
+                    f"Cross-correlation algorithm for layer {layer[-1]}",
                 )
                 cross_corr_group = \
                     self.require_group(f"{self.group_paths.AlgorithmsPath}/crossCorrelation/{layer}")
@@ -132,7 +128,7 @@ class ROFFWriter(L1InSARWriter):
         # pull the offset parameters
         is_roff,  margin, rg_start, az_start,\
         rg_skip, az_skip, rg_search, az_search,\
-        rg_chip, az_chip, ovs_factor = self._pull_pixel_offsets_params()
+        rg_chip, az_chip, ovs_factor = get_pixel_offsets_params(self.cfg)
 
         for freq, *_ in get_cfg_freq_pols(self.cfg):
             swath_frequency_path = \
@@ -213,11 +209,15 @@ class ROFFWriter(L1InSARWriter):
                 pixeloffsets_group,
                 "rangeBandwidth",
             )
+            pixeloffsets_group['rangeBandwidth'].attrs['description'] = \
+                np.bytes_(f'Processed slant range bandwidth for frequency {freq} pixel offsets layers')
             swath_frequency_group.copy(
                 "processedAzimuthBandwidth",
                 pixeloffsets_group,
                 "azimuthBandwidth",
             )
+            pixeloffsets_group['azimuthBandwidth'].attrs['description'] = \
+                np.bytes_(f'Processed azimuth bandwidth for frequency {freq} pixel offsets layers')
 
             for layer in proc_cfg["offsets_product"]:
                 if layer.startswith("layer"):
@@ -289,7 +289,7 @@ class ROFFWriter(L1InSARWriter):
             swaths_freq_group = self.require_group(swaths_freq_group_name)
 
             # shape of offset product
-            off_shape = self._get_pixeloffsets_dataset_shape(freq, pol_list[0])
+            off_shape = get_pixel_offsets_dataset_shape(self.cfg, freq)
 
             # pixel offsets dataset parameters including:
             # dataset name, description, and unit
@@ -302,12 +302,12 @@ class ROFFWriter(L1InSARWriter):
                 (
                     "alongTrackOffsetVariance",
                     "Along-track pixel offsets variance",
-                    Units.unitless,
+                    Units.meter2,
                 ),
                 (
                     "slantRangeOffsetVariance",
                     "Slant range pixel offsets variance",
-                    Units.unitless,
+                    Units.meter2,
                 ),
                 (
                     "correlationSurfacePeak",
@@ -317,7 +317,7 @@ class ROFFWriter(L1InSARWriter):
                 (
                     "crossOffsetVariance",
                     "Off-diagonal term of the pixel offsets covariance matrix",
-                    Units.unitless,
+                    Units.meter2,
                 ),
                 (
                     "slantRangeOffset",
@@ -355,10 +355,6 @@ class ROFFWriter(L1InSARWriter):
                                 np.float32,
                                 ds_description,
                                 units=ds_unit,
-                                compression_enabled=self.cfg['output']['compression_enabled'],
-                                compression_level=self.cfg['output']['compression_level'],
-                                chunk_size=self.cfg['output']['chunk_size'],
-                                shuffle_filter=self.cfg['output']['shuffle']
                             )
 
 
@@ -383,60 +379,11 @@ class ROFFWriter(L1InSARWriter):
             for layer in proc_cfg["offsets_product"]
             if layer.startswith("layer")]
 
-        list_of_layers = np.string_(layers)
+        list_of_layers = np.bytes_(layers)
         freq_group.require_dataset('listOfLayers',
                                     shape=list_of_layers.shape,
                                     dtype=list_of_layers.dtype,
                                     data=list_of_layers)
 
-        freq_group['listOfLayers'].attrs['units'] = Units.unitless
         freq_group['listOfLayers'].attrs['description'] =\
-            np.string_('List of pixel offsets layers')
-
-    def add_swaths_to_hdf5(self):
-        """
-        Add swaths to the HDF5
-        """
-        super().add_swaths_to_hdf5()
-
-        # pull the offset parameters
-        is_roff,  margin, rg_start, az_start,\
-        rg_skip, az_skip, rg_search, az_search,\
-        rg_chip, az_chip, ovs_factor = self._pull_pixel_offsets_params()
-
-        for freq, pol_list, _ in get_cfg_freq_pols(self.cfg):
-            # Create the swath group
-            swaths_freq_group_name = (
-                f"{self.group_paths.SwathsPath}/frequency{freq}"
-            )
-            swaths_freq_group = self.require_group(swaths_freq_group_name)
-
-            rslc_freq_group = self.ref_h5py_file_obj[
-                f"{self.ref_rslc.SwathPath}/frequency{freq}"
-            ]
-
-            # add scene center parameters
-            scene_center_params = [
-                DatasetParams(
-                    "sceneCenterAlongTrackSpacing",
-                    rslc_freq_group["sceneCenterAlongTrackSpacing"][()]
-                    * az_skip,
-                    (
-                        "Nominal along-track spacing in meters between"
-                        " consecutive lines near mid-swath of the product images"
-                    ),
-                    {"units": Units.meter},
-                ),
-                DatasetParams(
-                    "sceneCenterGroundRangeSpacing",
-                    rslc_freq_group["sceneCenterGroundRangeSpacing"][()]
-                    * rg_skip,
-                    (
-                        "Nominal ground range spacing in meters between"
-                        " consecutive pixels near mid-swath of the product images"
-                    ),
-                    {"units": Units.meter},
-                ),
-            ]
-            for ds_param in scene_center_params:
-                add_dataset_and_attrs(swaths_freq_group, ds_param)
+            np.bytes_('List of pixel offsets layers')

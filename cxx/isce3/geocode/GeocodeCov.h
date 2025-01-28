@@ -1,6 +1,7 @@
 #pragma once
 
 #include <functional>
+#include <optional>
 
 // pyre
 #include <pyre/journal.h>
@@ -30,6 +31,7 @@ enum geocodeOutputMode {
     INTERP = 0,
     AREA_PROJECTION = 1,
 };
+
 
 template<class T>
 class Geocode {
@@ -93,6 +95,10 @@ public:
      * (in radar geometry). Samples identified as SHADOW or LAYOVER_AND_SHADOW are
      * considered invalid.
      * @param[in]  sub_swaths          Sub-swaths metadata
+     * @param[in]  apply_valid_samples_sub_swath_masking Flag indicating whether the
+     * valid-samples sub-swath masking should be applied during geocoding.
+     * If not given, then sub-swath masking will be applied if the sub_swaths
+     * parameter is provided.
      * @param[out] out_mask            Output valid-pixels
      * sub-swath mask raster
      * @param[in]  geocode_memory_mode Select memory mode
@@ -139,6 +145,7 @@ public:
             isce3::io::Raster* output_rtc = nullptr,
             isce3::io::Raster* input_layover_shadow_mask_raster = nullptr,
             isce3::product::SubSwaths* sub_swaths = nullptr,
+            std::optional<bool> apply_valid_samples_sub_swath_masking = std::nullopt,
             isce3::io::Raster* out_mask = nullptr,
             isce3::core::GeocodeMemoryMode geocode_memory_mode =
                     isce3::core::GeocodeMemoryMode::Auto,
@@ -191,6 +198,8 @@ public:
      * (in radar geometry). Samples identified as SHADOW or LAYOVER_AND_SHADOW are
      * considered invalid.
      * @param[in]  sub_swaths          Sub-swaths metadata
+     * @param[in]  apply_valid_samples_sub_swath_masking Flag indicating whether the
+     * valid-samples sub-swath masking should be applied during geocoding
      * @param[out] out_mask            Output valid-pixels
      * sub-swath mask raster
      * @param[in]  geocode_memory_mode Select memory mode
@@ -230,6 +239,7 @@ public:
             isce3::io::Raster* output_rtc = nullptr,
             isce3::io::Raster* input_layover_shadow_mask_raster = nullptr,
             isce3::product::SubSwaths* sub_swaths = nullptr,
+            std::optional<bool> apply_valid_samples_sub_swath_masking = {},
             isce3::io::Raster* out_mask = nullptr,
             isce3::core::GeocodeMemoryMode geocode_memory_mode =
                 isce3::core::GeocodeMemoryMode::Auto,
@@ -289,6 +299,10 @@ public:
      * (in radar geometry). Samples identified as SHADOW or LAYOVER_AND_SHADOW are
      * considered invalid.
      * @param[in]  sub_swaths          Sub-swaths metadata
+     * @param[in]  apply_valid_samples_sub_swath_masking Flag indicating whether the
+     * valid-samples sub-swath masking should be applied during geocoding.
+     * If not given, then sub-swath masking will be applied if the sub_swaths
+     * parameter is provided.
      * @param[out] out_mask            Output valid-pixels
      * sub-swath mask raster
      * @param[in]  geocode_memory_mode Select memory mode
@@ -333,6 +347,7 @@ public:
             isce3::io::Raster* output_rtc = nullptr,
             isce3::io::Raster* input_layover_shadow_mask_raster = nullptr,
             isce3::product::SubSwaths* sub_swaths = nullptr,
+            std::optional<bool> apply_valid_samples_sub_swath_masking = std::nullopt,
             isce3::io::Raster* out_mask = nullptr,
             isce3::core::GeocodeMemoryMode geocode_memory_mode =
                     isce3::core::GeocodeMemoryMode::Auto,
@@ -513,6 +528,7 @@ private:
             isce3::io::Raster* input_layover_shadow_mask_raster,
             isce3::core::Matrix<uint8_t>& input_layover_shadow_mask,
             isce3::product::SubSwaths * sub_swaths,
+            bool apply_valid_samples_sub_swath_masking,
             isce3::io::Raster* out_mask,
             isce3::core::GeocodeMemoryMode geocode_memory_mode,
             const long long min_block_size, const long long max_block_size,
@@ -562,10 +578,15 @@ private:
      * array (in radar geometry). Samples identified as SHADOW or LAYOVER_AND_SHADOW are
      * considered invalid.
      * @param[in]  sub_swaths         Sub-swaths metadata
+     * @param[in]  apply_valid_samples_sub_swath_masking Flag indicating whether the
+     * valid-samples sub-swath masking should be applied during geocoding
+     * @param[out] out_mask Output valid-pixels
+     * sub-swath mask raster
      * @param[out] out_mask           Output valid-pixels
      * sub-swath mask raster
      * @param[out] out_mask_array     Output valid-pixels
      * sub-swath mask array
+     * @param[in] interp_margin       Interpolation margin
      */
     template<class T_out>
     inline void _interpolate(const isce3::core::Matrix<T_out>& rdrDataBlock,
@@ -589,8 +610,10 @@ private:
             isce3::io::Raster* input_layover_shadow_mask_raster,
             isce3::core::Matrix<uint8_t>& input_layover_shadow_mask,
             isce3::product::SubSwaths * sub_swaths,
+            bool apply_valid_samples_sub_swath_masking,
             isce3::io::Raster* out_mask,
-            isce3::core::Matrix<short>& out_mask_array);
+            isce3::core::Matrix<uint8_t>& out_mask_array,
+            const int interp_margin);
 
     /**
      * param[in,out] data a matrix of data that needs to be base-banded in

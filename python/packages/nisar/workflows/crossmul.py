@@ -6,18 +6,18 @@ wrapper for crossmul
 import pathlib
 import time
 
-import h5py
 import isce3
 import journal
 from osgeo import gdal
 
 gdal.UseExceptions()
 
+from isce3.io import HDF5OptimizedReader
 from nisar.products.readers import SLC
 from nisar.workflows import prepare_insar_hdf5
 from nisar.workflows.compute_stats import compute_stats_real_data
 from nisar.workflows.crossmul_runconfig import CrossmulRunConfig
-from nisar.workflows.helpers import (complex_raster_path_from_h5,
+from nisar.workflows.helpers import (copy_raster,
                                      get_cfg_freq_pols)
 from nisar.products.insar.product_paths import RIFGGroupsPaths
 from nisar.workflows.yaml_argparse import YamlArgparse
@@ -81,7 +81,7 @@ def run(cfg: dict, output_hdf5: str = None, resample_type='coarse',
         raise ValueError(err_str)
 
     t_all = time.time()
-    with h5py.File(output_hdf5, 'a', libver='latest') as dst_h5:
+    with HDF5OptimizedReader(name=output_hdf5, mode='a', libver='latest') as dst_h5:
         for freq, pol_list, offset_pol_list in get_cfg_freq_pols(cfg):
             # create output product
             crossmul_dir = scratch_path / f'crossmul/freq{freq}'
@@ -149,20 +149,15 @@ def run(cfg: dict, output_hdf5: str = None, resample_type='coarse',
                         update=True)
 
                 # prepare reference input raster
-                c32_output_path = str(output_dir / 'reference.slc')
-                raster_path, _ = complex_raster_path_from_h5(ref_slc, freq,
-                                                             pol, ref_hdf5,
-                                                             lines_per_block,
-                                                             c32_output_path)
-                ref_slc_raster = isce3.io.Raster(raster_path)
+                copy_raster(ref_hdf5, freq, pol,
+                            lines_per_block, str(output_dir / 'reference.slc'), file_type='ENVI')
+                ref_slc_raster = isce3.io.Raster(str(output_dir / 'reference.slc'))
 
                 # prepare secondary input raster
                 if coregistered_is_file:
-                    c32_output_path = str(output_dir / 'secondary.slc')
-                    raster_path, _ = complex_raster_path_from_h5(sec_slc, freq,
-                                                                 pol, sec_hdf5,
-                                                                 lines_per_block,
-                                                                 c32_output_path)
+                    copy_raster(sec_hdf5, freq, pol,
+                                lines_per_block, str(output_dir / 'secondary.slc'), file_type='ENVI')
+                    raster_path = str(output_dir / 'secondary.slc')
                 else:
                     raster_path = str(coregistered_slc_path / f'{resample_type}_resample_slc/'
                                        f'freq{freq}/{pol}/coregistered_secondary.slc')

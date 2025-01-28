@@ -1,4 +1,5 @@
 <?xml version="1.0"?>
+<!-- product specification version is 1.2.1 -->
 <algorithm name="L2_GeocodedCovariance"
            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
     <product template="L2_GCOV_template">
@@ -6,10 +7,10 @@
     <science uid="sci_1">
       <!-- Global attributes for the product -->
       <annotation app="conformance" Conventions="CF-1.7"
-                                    title="NISAR L2_GCOV Product"
+                                    title="NISAR L2 GCOV Product"
                                     institution="NASA JPL"
                                     mission_name="NISAR"
-                                    reference_document="D-102274 NISAR NASA SDS Product Specification Level-2 Geocoded Polarimetric Covariance L2_GCOV"
+                                    reference_document="D-102274 NISAR NASA SDS Product Specification Level-2 Geocoded Polarimetric Covariance L2 GCOV"
                                     contact="nisar-sds-ops@jpl.nasa.gov"/>
       <!-- End of global attributes for the product -->
 
@@ -20,24 +21,21 @@
                  signed="false"
                  width="32">
           <annotation app="conformance"
-                      lang="en"
-                      units="1">Absolute orbit number</annotation>
+                      lang="en">Absolute orbit number</annotation>
         </integer>
         <integer name="/science/LSAR/identification/trackNumber"
                  shape="scalar"
                  signed="false"
-                 width="8">
+                 width="32">
           <annotation app="conformance"
-                      lang="en"
-                      units="1">Track number</annotation>
+                      lang="en">Track number</annotation>
         </integer>
         <integer name="/science/LSAR/identification/frameNumber"
                  shape="scalar"
                  signed="false"
                  width="16">
           <annotation app="conformance"
-                      lang="en"
-                      units="1">Frame number</annotation>
+                      lang="en">Frame number</annotation>
         </integer>
         <string length="0"
                 name="/science/LSAR/identification/missionId"
@@ -64,6 +62,12 @@
                       lang="en">Unique granule identification name</annotation>
         </string>
         <string length="0"
+                 name="/science/LSAR/identification/productDoi"
+                 shape="scalar">
+          <annotation app="conformance"
+                      lang="en">Digital Object Identifier (DOI) for the product</annotation>
+        </string>
+        <string length="0"
                 name="/science/LSAR/identification/productVersion"
                 shape="scalar">
           <annotation app="conformance"
@@ -87,17 +91,17 @@
           <annotation app="conformance"
                       lang="en">Orbit direction, either "Ascending" or "Descending"</annotation>
         </string>
-        <string length="27"
+        <string length="29"
                 name="/science/LSAR/identification/zeroDopplerStartTime"
                 shape="scalar">
           <annotation app="conformance"
-                      lang="en">Azimuth start time of the product</annotation>
+                      lang="en">Azimuth start time (in UTC) of the product in the format YYYY-mm-ddTHH:MM:SS.sssssssss</annotation>
         </string>
-        <string length="27"
+        <string length="29"
                 name="/science/LSAR/identification/zeroDopplerEndTime"
                 shape="scalar">
           <annotation app="conformance"
-                      lang="en">Azimuth stop time of the product</annotation>
+                      lang="en">Azimuth stop time (in UTC) of the product in the format YYYY-mm-ddTHH:MM:SS.sssssssss</annotation>
         </string>
         <string length="0"
                 name="/science/LSAR/identification/plannedDatatakeId"
@@ -148,19 +152,25 @@
                 <annotation app="conformance"
                             ogr_geometry="polygon"
                             epsg="4326"
-                            lang="en">OGR compatible WKT representation of bounding polygon of the image</annotation>
+                            lang="en">OGR compatible WKT representing the bounding polygon of the image. Horizontal coordinates are WGS84 longitude followed by latitude (both in degrees), and the vertical coordinate is the height above the WGS84 ellipsoid in meters. The first point corresponds to the start-time, near-range radar coordinate, and the perimeter is traversed in counterclockwise order on the map. This means the traversal order in radar coordinates differs for left-looking and right-looking sensors. The polygon includes the four corners of the radar grid, with equal numbers of points distributed evenly in radar coordinates along each edge</annotation>
         </string>
-        <string length="27"
+        <string length="19"
               name="/science/LSAR/identification/processingDateTime"
               shape="scalar">
               <annotation app="conformance"
-                          lang="en">Processing UTC date and time in the format YYYY-mm-ddTHH:MM:SS</annotation>
+                          lang="en">Processing date and time (in UTC) in the format YYYY-mm-ddTHH:MM:SS</annotation>
         </string>
         <string length="0"
               name="/science/LSAR/identification/radarBand"
               shape="scalar">
               <annotation app="conformance"
                           lang="en">Acquired frequency band, either "L" or "S"</annotation>
+        </string>
+        <string length="0"
+                name="/science/LSAR/identification/platformName"
+                shape="scalar">
+                <annotation app="conformance"
+                            lang="en">Name of the platform used to collect the remote sensing data provided in this product</annotation>
         </string>
         <string length="0"
               name="/science/LSAR/identification/instrumentName"
@@ -186,6 +196,26 @@
                 <annotation app="conformance"
                             lang="en">"True" if this product is a composite of data collected in multiple radar modes, "False" otherwise.</annotation>
         </string>
+        <string length="0"
+                name="/science/LSAR/identification/isFullFrame"
+                shape="scalar">
+                <annotation app="conformance"
+                            lang="en"
+                            frameCoveragePercentage="Percentage of NISAR frame containing processed data"
+                            thresholdPercentage="Threshold percentage used to determine if the product is full frame or partial frame">"True" if the product fully covers a NISAR frame, "False" if partial coverage</annotation>
+        </string>
+        <string length="6"
+                name="/science/LSAR/identification/compositeReleaseId"
+                shape="scalar">
+                <annotation app="conformance"
+                            lang="en">Unique version identifier of the science data production system</annotation>
+        </string>
+        <string length="0"
+                name="/science/LSAR/identification/isJointObservation"
+                shape="scalar">
+                <annotation app="conformance"
+                            lang="en">"True" if any portion of this product was acquired in a joint observation mode (e.g., L-band and S-band simultaneously), "False" otherwise</annotation>
+        </string>
         <!-- End of product identification -->
 
         <!-- Main layers for frequencyA -->
@@ -207,6 +237,7 @@
               width="64">
           <annotation app="conformance"
                       lang="en"
+                      long_name="Y coordinates spacing"
                       units="meters">Nominal spacing in meters between consecutive lines</annotation>
         </real>
         <real name="/science/LSAR/GCOV/grids/frequencyA/xCoordinateSpacing"
@@ -214,14 +245,20 @@
               width="64">
           <annotation app="conformance"
                       lang="en"
+                      long_name="X coordinates spacing"
                       units="meters">Nominal spacing in meters between consecutive pixels</annotation>
         </real>
-
         <real name="/science/LSAR/GCOV/grids/frequencyA/numberOfLooks"
-              shape="complexDataFrequencyAShape"
+              shape="realDataFrequencyAShape"
               width="32">
           <annotation app="conformance"
                       lang="en"
+                      long_name="Number of radar looks"
+                      DIMENSION_LIST="HDF5 internal attribute"
+                      mean_value="Arithmetic average of the numeric data points"
+                      min_value="Minimum value of the numeric data points"
+                      max_value="Maximum value of the numeric data points"
+                      sample_stddev="Standard deviation of the numeric data points"
                       valid_min="0"
                       _FillValue="nan"
                       grid_mapping="projection"
@@ -242,6 +279,8 @@
                         inverse_flattening="Inverse flattening of the ellipsoidal figure"
                         latitude_of_projection_origin="The latitude chosen as the origin of rectangular coordinates for a map projection."
                         longitude_of_projection_origin="The longitude, with respect to Greenwich, of the prime meridian associated with the geodetic datum."
+                        longitude_of_central_meridian="The line of longitude at the center of a map projection generally used as the basis for constructing the projection."
+                        scale_factor_at_central_meridian="A multiplier for reducing a distance obtained from a map by computation or scaling to the actual distance along the central meridian."
                         semi_major_axis="Semi-major axis"
                         spatial_ref="Spatial reference"
                         utm_zone_number="UTM zone number"
@@ -254,6 +293,11 @@
               width="64">
               <annotation app="conformance"
                           lang="en"
+                          REFERENCE_LIST="HDF5 internal attribute"
+                          CLASS="HDF5 internal attribute"
+                          NAME="HDF5 internal attribute"
+                          long_name="X coordinates of projection"
+                          standard_name="projection_x_coordinate"
                           units="meters">X coordinates in specified projection</annotation>
         </real>
         <real name="/science/LSAR/GCOV/grids/frequencyA/yCoordinates"
@@ -261,38 +305,56 @@
               width="64">
               <annotation app="conformance"
                           lang="en"
+                          REFERENCE_LIST="HDF5 internal attribute"
+                          CLASS="HDF5 internal attribute"
+                          NAME="HDF5 internal attribute"
+                          long_name="Y coordinates of projection"
+                          standard_name="projection_y_coordinate"
                           units="meters">Y coordinates in specified projection</annotation>
         </real>
 
         <!-- 2D CF compliant rasters -->
         <!-- Number of layers in actual product will depend on list of available polarizations above -->
         <real name="/science/LSAR/GCOV/grids/frequencyA/rtcGammaToSigmaFactor"
-              shape="complexDataFrequencyAShape"
+              shape="realDataFrequencyAShape"
               width="32">
           <annotation app="conformance"
                       lang="en"
+                      DIMENSION_LIST="HDF5 internal attribute"
+                      long_name="Radiometric terrain correction area normalization factor gamma0 to sigma0"
+                      mean_value="Arithmetic average of the numeric data points"
+                      min_value="Minimum value of the numeric data points"
+                      max_value="Maximum value of the numeric data points"
+                      sample_stddev="Standard deviation of the numeric data points"
                       valid_min="0"
                       _FillValue="nan"
                       grid_mapping="projection"
                       units="1">Radiometric terrain correction factor to normalize GCOV terms from gamma0 to sigma0</annotation>
         </real>
         <integer name="/science/LSAR/GCOV/grids/frequencyA/mask"
-              shape="complexDataFrequencyAShape"
+              shape="realDataFrequencyAShape"
               signed="false"
               width="8">
           <annotation app="conformance"
                       lang="en"
+                      DIMENSION_LIST="HDF5 internal attribute"
+                      long_name="Valid samples subswath mask"
                       valid_min="0"
                       _FillValue="255"
-                      grid_mapping="projection"
-                      units="1">GCOV terms mask</annotation>
+                      grid_mapping="projection">Mask indicating the subswath number associated with valid GCOV samples. A GCOV sample is only considered valid if it is generated from fully-focused radar samples. If at least one radar sample in the averaging set is partially focused or invalid, the corresponding mask pixel will contain the value `0`. GCOV pixels outside of the radar acquisition extent are filled with the value `255`</annotation>
         </integer>
         <real name="/science/LSAR/GCOV/grids/frequencyA/HHHH"
-              shape="complexDataFrequencyAShape"
+              shape="realDataFrequencyAShape"
               width="32">
           <annotation app="conformance"
                       lang="en"
+                      long_name="Geocoded polarimetric covariance term HHHH"
+                      mean_value="Arithmetic average of the numeric data points"
+                      min_value="Minimum value of the numeric data points"
+                      max_value="Maximum value of the numeric data points"
+                      sample_stddev="Standard deviation of the numeric data points"
                       valid_min="0"
+                      DIMENSION_LIST="HDF5 internal attribute"
                       _FillValue="nan"
                       grid_mapping="projection"
                       units="1">Covariance between HH and HH</annotation>
@@ -303,6 +365,16 @@
               width="32">
           <annotation app="conformance"
                       lang="en"
+                      DIMENSION_LIST="HDF5 internal attribute"
+                      long_name="Geocoded polarimetric covariance term HHHV"
+                      mean_real_value="Arithmetic average of the real part of the numeric data points"
+                      min_real_value="Minimum value of the real part of the numeric data points"
+                      max_real_value="Maximum value of the real part of the numeric data points"
+                      sample_stddev_real="Standard deviation of the real part of the numeric data points"
+                      mean_imag_value="Arithmetic average of the imaginary part of the numeric data points"
+                      min_imag_value="Minimum value of the imaginary part of the numeric data points"
+                      max_imag_value="Maximum value of the imaginary part of the numeric data points"
+                      sample_stddev_imag="Standard deviation of the imaginary part of the numeric data points"
                       _FillValue="(nan+nan*j)"
                       grid_mapping="projection"
                       units="1">Covariance between HH and HV</annotation>
@@ -313,6 +385,16 @@
               width="32">
           <annotation app="conformance"
                       lang="en"
+                      DIMENSION_LIST="HDF5 internal attribute"
+                      long_name="Geocoded polarimetric covariance term HHVH"
+                      mean_real_value="Arithmetic average of the real part of the numeric data points"
+                      min_real_value="Minimum value of the real part of the numeric data points"
+                      max_real_value="Maximum value of the real part of the numeric data points"
+                      sample_stddev_real="Standard deviation of the real part of the numeric data points"
+                      mean_imag_value="Arithmetic average of the imaginary part of the numeric data points"
+                      min_imag_value="Minimum value of the imaginary part of the numeric data points"
+                      max_imag_value="Maximum value of the imaginary part of the numeric data points"
+                      sample_stddev_imag="Standard deviation of the imaginary part of the numeric data points"
                       _FillValue="(nan+nan*j)"
                       grid_mapping="projection"
                       units="1">Covariance betweeen HH and VH</annotation>
@@ -323,16 +405,32 @@
               width="32">
           <annotation app="conformance"
                       lang="en"
+                      DIMENSION_LIST="HDF5 internal attribute"
+                      long_name="Geocoded polarimetric covariance term HHVV"
+                      mean_real_value="Arithmetic average of the real part of the numeric data points"
+                      min_real_value="Minimum value of the real part of the numeric data points"
+                      max_real_value="Maximum value of the real part of the numeric data points"
+                      sample_stddev_real="Standard deviation of the real part of the numeric data points"
+                      mean_imag_value="Arithmetic average of the imaginary part of the numeric data points"
+                      min_imag_value="Minimum value of the imaginary part of the numeric data points"
+                      max_imag_value="Maximum value of the imaginary part of the numeric data points"
+                      sample_stddev_imag="Standard deviation of the imaginary part of the numeric data points"
                       _FillValue="(nan+nan*j)"
                       grid_mapping="projection"
                       units="1">Covariance between HH and VV</annotation>
           <annotation app="io" kwd="complex" />
         </real>
         <real name="/science/LSAR/GCOV/grids/frequencyA/HVHV"
-              shape="complexDataFrequencyAShape"
+              shape="realDataFrequencyAShape"
               width="32">
           <annotation app="conformance"
                       lang="en"
+                      DIMENSION_LIST="HDF5 internal attribute"
+                      long_name="Geocoded polarimetric covariance term HVHV"
+                      mean_value="Arithmetic average of the numeric data points"
+                      min_value="Minimum value of the numeric data points"
+                      max_value="Maximum value of the numeric data points"
+                      sample_stddev="Standard deviation of the numeric data points"
                       valid_min="0"
                       _FillValue="nan"
                       grid_mapping="projection"
@@ -344,6 +442,16 @@
               width="32">
           <annotation app="conformance"
                       lang="en"
+                      DIMENSION_LIST="HDF5 internal attribute"
+                      long_name="Geocoded polarimetric covariance term HVVH"
+                      mean_real_value="Arithmetic average of the real part of the numeric data points"
+                      min_real_value="Minimum value of the real part of the numeric data points"
+                      max_real_value="Maximum value of the real part of the numeric data points"
+                      sample_stddev_real="Standard deviation of the real part of the numeric data points"
+                      mean_imag_value="Arithmetic average of the imaginary part of the numeric data points"
+                      min_imag_value="Minimum value of the imaginary part of the numeric data points"
+                      max_imag_value="Maximum value of the imaginary part of the numeric data points"
+                      sample_stddev_imag="Standard deviation of the imaginary part of the numeric data points"
                       _FillValue="(nan+nan*j)"
                       grid_mapping="projection"
                       units="1">Covariance between HV and VH</annotation>
@@ -354,16 +462,32 @@
               width="32">
           <annotation app="conformance"
                       lang="en"
+                      DIMENSION_LIST="HDF5 internal attribute"
+                      long_name="Geocoded polarimetric covariance term HVVV"
+                      mean_real_value="Arithmetic average of the real part of the numeric data points"
+                      min_real_value="Minimum value of the real part of the numeric data points"
+                      max_real_value="Maximum value of the real part of the numeric data points"
+                      sample_stddev_real="Standard deviation of the real part of the numeric data points"
+                      mean_imag_value="Arithmetic average of the imaginary part of the numeric data points"
+                      min_imag_value="Minimum value of the imaginary part of the numeric data points"
+                      max_imag_value="Maximum value of the imaginary part of the numeric data points"
+                      sample_stddev_imag="Standard deviation of the imaginary part of the numeric data points"
                       _FillValue="(nan+nan*j)"
                       grid_mapping="projection"
                       units="1">Covariance betweeen HH and VV</annotation>
           <annotation app="io" kwd="complex" />
         </real>
         <real name="/science/LSAR/GCOV/grids/frequencyA/VHVH"
-              shape="complexDataFrequencyAShape"
+              shape="realDataFrequencyAShape"
               width="32">
           <annotation app="conformance"
                       lang="en"
+                      DIMENSION_LIST="HDF5 internal attribute"
+                      long_name="Geocoded polarimetric covariance term VHVH"
+                      mean_value="Arithmetic average of the numeric data points"
+                      min_value="Minimum value of the numeric data points"
+                      max_value="Maximum value of the numeric data points"
+                      sample_stddev="Standard deviation of the numeric data points"
                       valid_min="0"
                       _FillValue="nan"
                       grid_mapping="projection"
@@ -375,16 +499,32 @@
               width="32">
           <annotation app="conformance"
                       lang="en"
+                      DIMENSION_LIST="HDF5 internal attribute"
+                      long_name="Geocoded polarimetric covariance term VHVV"
+                      mean_real_value="Arithmetic average of the real part of the numeric data points"
+                      min_real_value="Minimum value of the real part of the numeric data points"
+                      max_real_value="Maximum value of the real part of the numeric data points"
+                      sample_stddev_real="Standard deviation of the real part of the numeric data points"
+                      mean_imag_value="Arithmetic average of the imaginary part of the numeric data points"
+                      min_imag_value="Minimum value of the imaginary part of the numeric data points"
+                      max_imag_value="Maximum value of the imaginary part of the numeric data points"
+                      sample_stddev_imag="Standard deviation of the imaginary part of the numeric data points"
                       _FillValue="(nan+nan*j)"
                       grid_mapping="projection"
                       units="1">Covariance betweeen VH and VV</annotation>
           <annotation app="io" kwd="complex" />
         </real>
         <real name="/science/LSAR/GCOV/grids/frequencyA/VVVV"
-              shape="complexDataFrequencyAShape"
+              shape="realDataFrequencyAShape"
               width="32">
           <annotation app="conformance"
                       lang="en"
+                      DIMENSION_LIST="HDF5 internal attribute"
+                      long_name="Geocoded polarimetric covariance term VVVV"
+                      mean_value="Arithmetic average of the numeric data points"
+                      min_value="Minimum value of the numeric data points"
+                      max_value="Maximum value of the numeric data points"
+                      sample_stddev="Standard deviation of the numeric data points"
                       valid_min="0"
                       _FillValue="nan"
                       grid_mapping="projection"
@@ -392,10 +532,16 @@
           <annotation app="io" />
         </real>
         <real name="/science/LSAR/GCOV/grids/frequencyA/RHRH"
-              shape="complexDataFrequencyAShape"
+              shape="realDataFrequencyAShape"
               width="32">
           <annotation app="conformance"
                       lang="en"
+                      DIMENSION_LIST="HDF5 internal attribute"
+                      long_name="Geocoded polarimetric covariance term RHRH"
+                      mean_value="Arithmetic average of the numeric data points"
+                      min_value="Minimum value of the numeric data points"
+                      max_value="Maximum value of the numeric data points"
+                      sample_stddev="Standard deviation of the numeric data points"
                       valid_min="0"
                       _FillValue="nan"
                       grid_mapping="projection"
@@ -407,26 +553,32 @@
               width="32">
           <annotation app="conformance"
                       lang="en"
+                      DIMENSION_LIST="HDF5 internal attribute"
+                      long_name="Geocoded polarimetric covariance term RHRV"
+                      mean_real_value="Arithmetic average of the real part of the numeric data points"
+                      min_real_value="Minimum value of the real part of the numeric data points"
+                      max_real_value="Maximum value of the real part of the numeric data points"
+                      sample_stddev_real="Standard deviation of the real part of the numeric data points"
+                      mean_imag_value="Arithmetic average of the imaginary part of the numeric data points"
+                      min_imag_value="Minimum value of the imaginary part of the numeric data points"
+                      max_imag_value="Maximum value of the imaginary part of the numeric data points"
+                      sample_stddev_imag="Standard deviation of the imaginary part of the numeric data points"
                       _FillValue="(nan+nan*j)"
                       grid_mapping="projection"
                       units="1">Covariance between RH and RV</annotation>
           <annotation app="io" kwd="complex" />
         </real>
-        <real name="/science/LSAR/GCOV/grids/frequencyA/RVRH"
-              shape="complexDataFrequencyAShape"
-              width="32">
-          <annotation app="conformance"
-                      lang="en"
-                      _FillValue="(nan+nan*j)"
-                      grid_mapping="projection"
-                      units="1">Covariance between RV and RH</annotation>
-          <annotation app="io" kwd="complex" />
-        </real>
         <real name="/science/LSAR/GCOV/grids/frequencyA/RVRV"
-              shape="complexDataFrequencyAShape"
+              shape="realDataFrequencyAShape"
               width="32">
           <annotation app="conformance"
                       lang="en"
+                      DIMENSION_LIST="HDF5 internal attribute"
+                      long_name="Geocoded polarimetric covariance term RVRV"
+                      mean_value="Arithmetic average of the numeric data points"
+                      min_value="Minimum value of the numeric data points"
+                      max_value="Maximum value of the numeric data points"
+                      sample_stddev="Standard deviation of the numeric data points"
                       valid_min="0"
                       _FillValue="nan"
                       grid_mapping="projection"
@@ -446,7 +598,7 @@
 
         <!-- Main layers for frequencyB -->
         <!-- Scalars -->
-        <string length="4"
+        <string length="2"
               name="/science/LSAR/GCOV/grids/frequencyB/listOfPolarizations"
               shape="numberOfFrequencyBPolarizations">
           <annotation app="conformance"
@@ -463,6 +615,7 @@
               width="64">
           <annotation app="conformance"
                       lang="en"
+                      long_name="Y coordinates spacing"
                       units="meters">Nominal spacing in meters between consecutive lines</annotation>
         </real>
         <real name="/science/LSAR/GCOV/grids/frequencyB/xCoordinateSpacing"
@@ -470,9 +623,9 @@
               width="64">
           <annotation app="conformance"
                       lang="en"
+                      long_name="X coordinates spacing"
                       units="meters">Nominal spacing in meters between consecutive pixels</annotation>
         </real>
-
         <integer name="/science/LSAR/GCOV/grids/frequencyB/projection"
                  shape="scalar"
                  signed="false"
@@ -486,6 +639,8 @@
                         inverse_flattening="Inverse flattening of the ellipsoidal figure"
                         latitude_of_projection_origin="The latitude chosen as the origin of rectangular coordinates for a map projection."
                         longitude_of_projection_origin="The longitude, with respect to Greenwich, of the prime meridian associated with the geodetic datum."
+                        longitude_of_central_meridian="The line of longitude at the center of a map projection generally used as the basis for constructing the projection."
+                        scale_factor_at_central_meridian="A multiplier for reducing a distance obtained from a map by computation or scaling to the actual distance along the central meridian."
                         semi_major_axis="Semi-major axis"
                         spatial_ref="Spatial reference"
                         utm_zone_number="UTM zone number"
@@ -498,6 +653,11 @@
               width="64">
               <annotation app="conformance"
                           lang="en"
+                          REFERENCE_LIST="HDF5 internal attribute"
+                          CLASS="HDF5 internal attribute"
+                          NAME="HDF5 internal attribute"
+                          long_name="X coordinates of projection"
+                          standard_name="projection_x_coordinate"
                           units="meters">X coordinates in specified projection</annotation>
         </real>
         <real name="/science/LSAR/GCOV/grids/frequencyB/yCoordinates"
@@ -505,16 +665,27 @@
               width="64">
               <annotation app="conformance"
                           lang="en"
+                          REFERENCE_LIST="HDF5 internal attribute"
+                          CLASS="HDF5 internal attribute"
+                          NAME="HDF5 internal attribute"
+                          long_name="Y coordinates of projection"
+                          standard_name="projection_y_coordinate"
                           units="meters">Y coordinates in specified projection</annotation>
         </real>
 
         <!-- 2D CF compliant rasters -->
         <!-- Number of layers in actual product will depend on list of available polarizations above -->
         <real name="/science/LSAR/GCOV/grids/frequencyB/numberOfLooks"
-              shape="complexDataFrequencyBShape"
+              shape="realDataFrequencyBShape"
               width="32">
           <annotation app="conformance"
                       lang="en"
+                      DIMENSION_LIST="HDF5 internal attribute"
+                      long_name="Number of radar looks"
+                      mean_value="Arithmetic average of the numeric data points"
+                      min_value="Minimum value of the numeric data points"
+                      max_value="Maximum value of the numeric data points"
+                      sample_stddev="Standard deviation of the numeric data points"
                       valid_min="0"
                       _FillValue="nan"
                       grid_mapping="projection"
@@ -522,31 +693,44 @@
           <annotation app="io" />
         </real>
         <real name="/science/LSAR/GCOV/grids/frequencyB/rtcGammaToSigmaFactor"
-              shape="complexDataFrequencyBShape"
+              shape="realDataFrequencyBShape"
               width="32">
           <annotation app="conformance"
                       lang="en"
+                      DIMENSION_LIST="HDF5 internal attribute"
+                      long_name="Radiometric terrain correction area normalization factor gamma0 to sigma0"
+                      mean_value="Arithmetic average of the numeric data points"
+                      min_value="Minimum value of the numeric data points"
+                      max_value="Maximum value of the numeric data points"
+                      sample_stddev="Standard deviation of the numeric data points"
                       valid_min="0"
                       _FillValue="nan"
                       grid_mapping="projection"
                       units="1">Radiometric terrain correction factor to normalize GCOV terms from gamma0 to sigma0</annotation>
         </real>
         <integer name="/science/LSAR/GCOV/grids/frequencyB/mask"
-              shape="complexDataFrequencyBShape"
+              shape="realDataFrequencyBShape"
               signed="false"
               width="8">
           <annotation app="conformance"
                       lang="en"
+                      DIMENSION_LIST="HDF5 internal attribute"
+                      long_name="Valid samples subswath mask"
                       valid_min="0"
                       _FillValue="255"
-                      grid_mapping="projection"
-                      units="1">GCOV terms mask</annotation>
+                      grid_mapping="projection">Mask indicating the subswath number associated with valid GCOV samples. A GCOV sample is only considered valid if it is generated from fully-focused radar samples. If at least one radar sample in the averaging set is partially focused or invalid, the corresponding mask pixel will contain the value `0`. GCOV pixels outside of the radar acquisition extent are filled with the value `255`</annotation>
         </integer>
         <real name="/science/LSAR/GCOV/grids/frequencyB/HHHH"
-              shape="complexDataFrequencyBShape"
+              shape="realDataFrequencyBShape"
               width="32">
           <annotation app="conformance"
                       lang="en"
+                      DIMENSION_LIST="HDF5 internal attribute"
+                      long_name="Geocoded polarimetric covariance term HHHH"
+                      mean_value="Arithmetic average of the numeric data points"
+                      min_value="Minimum value of the numeric data points"
+                      max_value="Maximum value of the numeric data points"
+                      sample_stddev="Standard deviation of the numeric data points"
                       valid_min="0"
                       _FillValue="nan"
                       grid_mapping="projection"
@@ -558,6 +742,16 @@
               width="32">
           <annotation app="conformance"
                       lang="en"
+                      DIMENSION_LIST="HDF5 internal attribute"
+                      long_name="Geocoded polarimetric covariance term HHHV"
+                      mean_real_value="Arithmetic average of the real part of the numeric data points"
+                      min_real_value="Minimum value of the real part of the numeric data points"
+                      max_real_value="Maximum value of the real part of the numeric data points"
+                      sample_stddev_real="Standard deviation of the real part of the numeric data points"
+                      mean_imag_value="Arithmetic average of the imaginary part of the numeric data points"
+                      min_imag_value="Minimum value of the imaginary part of the numeric data points"
+                      max_imag_value="Maximum value of the imaginary part of the numeric data points"
+                      sample_stddev_imag="Standard deviation of the imaginary part of the numeric data points"
                       _FillValue="(nan+nan*j)"
                       grid_mapping="projection"
                       units="1">Covariance between HH and HV</annotation>
@@ -568,6 +762,16 @@
               width="32">
           <annotation app="conformance"
                       lang="en"
+                      DIMENSION_LIST="HDF5 internal attribute"
+                      long_name="Geocoded polarimetric covariance term HHVH"
+                      mean_real_value="Arithmetic average of the real part of the numeric data points"
+                      min_real_value="Minimum value of the real part of the numeric data points"
+                      max_real_value="Maximum value of the real part of the numeric data points"
+                      sample_stddev_real="Standard deviation of the real part of the numeric data points"
+                      mean_imag_value="Arithmetic average of the imaginary part of the numeric data points"
+                      min_imag_value="Minimum value of the imaginary part of the numeric data points"
+                      max_imag_value="Maximum value of the imaginary part of the numeric data points"
+                      sample_stddev_imag="Standard deviation of the imaginary part of the numeric data points"
                       _FillValue="(nan+nan*j)"
                       grid_mapping="projection"
                       units="1">Covariance betweeen HH and VH</annotation>
@@ -578,16 +782,32 @@
               width="32">
           <annotation app="conformance"
                       lang="en"
+                      DIMENSION_LIST="HDF5 internal attribute"
+                      long_name="Geocoded polarimetric covariance term HHVV"
+                      mean_real_value="Arithmetic average of the real part of the numeric data points"
+                      min_real_value="Minimum value of the real part of the numeric data points"
+                      max_real_value="Maximum value of the real part of the numeric data points"
+                      sample_stddev_real="Standard deviation of the real part of the numeric data points"
+                      mean_imag_value="Arithmetic average of the imaginary part of the numeric data points"
+                      min_imag_value="Minimum value of the imaginary part of the numeric data points"
+                      max_imag_value="Maximum value of the imaginary part of the numeric data points"
+                      sample_stddev_imag="Standard deviation of the imaginary part of the numeric data points"
                       _FillValue="(nan+nan*j)"
                       grid_mapping="projection"
                       units="1">Covariance between HH and VV</annotation>
           <annotation app="io" kwd="complex" />
         </real>
         <real name="/science/LSAR/GCOV/grids/frequencyB/HVHV"
-              shape="complexDataFrequencyBShape"
+              shape="realDataFrequencyBShape"
               width="32">
           <annotation app="conformance"
                       lang="en"
+                      DIMENSION_LIST="HDF5 internal attribute"
+                      long_name="Geocoded polarimetric covariance term HVHV"
+                      mean_value="Arithmetic average of the numeric data points"
+                      min_value="Minimum value of the numeric data points"
+                      max_value="Maximum value of the numeric data points"
+                      sample_stddev="Standard deviation of the numeric data points"
                       valid_min="0"
                       _FillValue="nan"
                       grid_mapping="projection"
@@ -599,6 +819,16 @@
               width="32">
           <annotation app="conformance"
                       lang="en"
+                      DIMENSION_LIST="HDF5 internal attribute"
+                      long_name="Geocoded polarimetric covariance term HVVH"
+                      mean_real_value="Arithmetic average of the real part of the numeric data points"
+                      min_real_value="Minimum value of the real part of the numeric data points"
+                      max_real_value="Maximum value of the real part of the numeric data points"
+                      sample_stddev_real="Standard deviation of the real part of the numeric data points"
+                      mean_imag_value="Arithmetic average of the imaginary part of the numeric data points"
+                      min_imag_value="Minimum value of the imaginary part of the numeric data points"
+                      max_imag_value="Maximum value of the imaginary part of the numeric data points"
+                      sample_stddev_imag="Standard deviation of the imaginary part of the numeric data points"
                       _FillValue="(nan+nan*j)"
                       grid_mapping="projection"
                       units="1">Covariance between HV and VH</annotation>
@@ -609,16 +839,32 @@
               width="32">
           <annotation app="conformance"
                       lang="en"
+                      DIMENSION_LIST="HDF5 internal attribute"
+                      long_name="Geocoded polarimetric covariance term HVVV"
+                      mean_real_value="Arithmetic average of the real part of the numeric data points"
+                      min_real_value="Minimum value of the real part of the numeric data points"
+                      max_real_value="Maximum value of the real part of the numeric data points"
+                      sample_stddev_real="Standard deviation of the real part of the numeric data points"
+                      mean_imag_value="Arithmetic average of the imaginary part of the numeric data points"
+                      min_imag_value="Minimum value of the imaginary part of the numeric data points"
+                      max_imag_value="Maximum value of the imaginary part of the numeric data points"
+                      sample_stddev_imag="Standard deviation of the imaginary part of the numeric data points"
                       _FillValue="(nan+nan*j)"
                       grid_mapping="projection"
                       units="1">Covariance betweeen HH and VV</annotation>
           <annotation app="io" kwd="complex" />
         </real>
         <real name="/science/LSAR/GCOV/grids/frequencyB/VHVH"
-              shape="complexDataFrequencyBShape"
+              shape="realDataFrequencyBShape"
               width="32">
           <annotation app="conformance"
                       lang="en"
+                      DIMENSION_LIST="HDF5 internal attribute"
+                      long_name="Geocoded polarimetric covariance term VHVH"
+                      mean_value="Arithmetic average of the numeric data points"
+                      min_value="Minimum value of the numeric data points"
+                      max_value="Maximum value of the numeric data points"
+                      sample_stddev="Standard deviation of the numeric data points"
                       valid_min="0"
                       _FillValue="nan"
                       grid_mapping="projection"
@@ -630,16 +876,32 @@
               width="32">
           <annotation app="conformance"
                       lang="en"
+                      DIMENSION_LIST="HDF5 internal attribute"
+                      long_name="Geocoded polarimetric covariance term VHVV"
+                      mean_real_value="Arithmetic average of the real part of the numeric data points"
+                      min_real_value="Minimum value of the real part of the numeric data points"
+                      max_real_value="Maximum value of the real part of the numeric data points"
+                      sample_stddev_real="Standard deviation of the real part of the numeric data points"
+                      mean_imag_value="Arithmetic average of the imaginary part of the numeric data points"
+                      min_imag_value="Minimum value of the imaginary part of the numeric data points"
+                      max_imag_value="Maximum value of the imaginary part of the numeric data points"
+                      sample_stddev_imag="Standard deviation of the imaginary part of the numeric data points"
                       _FillValue="(nan+nan*j)"
                       grid_mapping="projection"
                       units="1">Covariance betweeen VH and VV</annotation>
           <annotation app="io" kwd="complex" />
         </real>
         <real name="/science/LSAR/GCOV/grids/frequencyB/VVVV"
-              shape="complexDataFrequencyBShape"
+              shape="realDataFrequencyBShape"
               width="32">
           <annotation app="conformance"
                       lang="en"
+                      DIMENSION_LIST="HDF5 internal attribute"
+                      long_name="Geocoded polarimetric covariance term VVVV"
+                      mean_value="Arithmetic average of the numeric data points"
+                      min_value="Minimum value of the numeric data points"
+                      max_value="Maximum value of the numeric data points"
+                      sample_stddev="Standard deviation of the numeric data points"
                       valid_min="0"
                       _FillValue="nan"
                       grid_mapping="projection"
@@ -647,10 +909,16 @@
           <annotation app="io" />
         </real>
         <real name="/science/LSAR/GCOV/grids/frequencyB/RHRH"
-              shape="complexDataFrequencyBShape"
+              shape="realDataFrequencyBShape"
               width="32">
           <annotation app="conformance"
                       lang="en"
+                      DIMENSION_LIST="HDF5 internal attribute"
+                      long_name="Geocoded polarimetric covariance term RHRH"
+                      mean_value="Arithmetic average of the numeric data points"
+                      min_value="Minimum value of the numeric data points"
+                      max_value="Maximum value of the numeric data points"
+                      sample_stddev="Standard deviation of the numeric data points"
                       valid_min="0"
                       _FillValue="nan"
                       grid_mapping="projection"
@@ -662,26 +930,32 @@
               width="32">
           <annotation app="conformance"
                       lang="en"
+                      DIMENSION_LIST="HDF5 internal attribute"
+                      long_name="Geocoded polarimetric covariance term RHRV"
+                      mean_real_value="Arithmetic average of the real part of the numeric data points"
+                      min_real_value="Minimum value of the real part of the numeric data points"
+                      max_real_value="Maximum value of the real part of the numeric data points"
+                      sample_stddev_real="Standard deviation of the real part of the numeric data points"
+                      mean_imag_value="Arithmetic average of the imaginary part of the numeric data points"
+                      min_imag_value="Minimum value of the imaginary part of the numeric data points"
+                      max_imag_value="Maximum value of the imaginary part of the numeric data points"
+                      sample_stddev_imag="Standard deviation of the imaginary part of the numeric data points"
                       _FillValue="(nan+nan*j)"
                       grid_mapping="projection"
                       units="1">Covariance between RH and RV</annotation>
           <annotation app="io" kwd="complex" />
         </real>
-        <real name="/science/LSAR/GCOV/grids/frequencyB/RVRH"
-              shape="complexDataFrequencyBShape"
-              width="32">
-          <annotation app="conformance"
-                      lang="en"
-                      _FillValue="(nan+nan*j)"
-                      grid_mapping="projection"
-                      units="1">Covariance between RV and RH</annotation>
-          <annotation app="io" kwd="complex" />
-        </real>
         <real name="/science/LSAR/GCOV/grids/frequencyB/RVRV"
-              shape="complexDataFrequencyBShape"
+              shape="realDataFrequencyBShape"
               width="32">
           <annotation app="conformance"
                       lang="en"
+                      DIMENSION_LIST="HDF5 internal attribute"
+                      long_name="Geocoded polarimetric covariance term RVRV"
+                      mean_value="Arithmetic average of the numeric data points"
+                      min_value="Minimum value of the numeric data points"
+                      max_value="Maximum value of the numeric data points"
+                      sample_stddev="Standard deviation of the numeric data points"
                       valid_min="0"
                       _FillValue="nan"
                       grid_mapping="projection"
@@ -699,12 +973,83 @@
                       units="1">Number of swaths of continuous imagery, due to transmit gaps</annotation>
         </integer>
 
+        <!-- Start of CEOS ARD metadata -->
+        <string length="0"
+                name="/science/LSAR/GCOV/metadata/ceosAnalysisReadyData/boundingBox"
+                shape="scalar">
+                <annotation app="conformance"
+                            epsg="EPSG code"
+                            lang="en">OGR compatible WKT representing the bounding box of the product (the union of the geocoded grid for available frequency A and frequency B image datasets). Horizontal coordinates are X and Y directions of the geocoded grid coordinate system, and the vertical coordinate is the height above the WGS84 ellipsoid in meters. The first point corresponds to the top left edge of the bounding box. The remaining points are traversed in counterclockwise order on the map. The fifth point closes the bounding box by repeating the first point</annotation>
+        </string>
+        <string length="0"
+                name="/science/LSAR/GCOV/metadata/ceosAnalysisReadyData/staticLayersDataAccess"
+                shape="scalar">
+          <annotation app="conformance"
+                      lang="en">Location of the static layers product associated with this product (URL or DOI)</annotation>
+        </string>
+        <string length="0"
+                name="/science/LSAR/GCOV/metadata/ceosAnalysisReadyData/outputBackscatterDecibelConversionFormula"
+                shape="scalar">
+                <annotation app="conformance"
+                            lang="en">Formula to convert provided backscatter to decibel (dB)</annotation>
+        </string>
+        <string length="0"
+                name="/science/LSAR/GCOV/metadata/ceosAnalysisReadyData/ceosAnalysisReadyDataProductType"
+                shape="scalar">
+          <annotation app="conformance"
+                      lang="en">CEOS Analysis Ready Data (CARD) product type</annotation>
+        </string>
+        <string length="0"
+                name="/science/LSAR/GCOV/metadata/ceosAnalysisReadyData/ceosAnalysisReadyDataDocumentIdentifier"
+                shape="scalar">
+          <annotation app="conformance"
+                      lang="en">CEOS Analysis Ready Data (CARD) document identifier</annotation>
+        </string>
+
+       <!-- Geometric accuracy -->
+       <real name="/science/LSAR/GCOV/metadata/ceosAnalysisReadyData/geometricAccuracy/bias/y"
+             shape="scalar"
+             width="32">
+             <annotation app="conformance"
+                         lang="en"
+                         epsg="EPSG code"
+                         units="meters">An estimate of the localization error bias in the Y/northing direction</annotation>
+       </real>
+       <real name="/science/LSAR/GCOV/metadata/ceosAnalysisReadyData/geometricAccuracy/bias/x"
+             shape="scalar"
+             width="32">
+             <annotation app="conformance"
+                         lang="en"
+                         epsg="EPSG code"
+                         units="meters">An estimate of the localization error bias in the X/easting direction</annotation>
+       </real>
+       <real name="/science/LSAR/GCOV/metadata/ceosAnalysisReadyData/geometricAccuracy/standardDeviation/y"
+             shape="scalar"
+             width="32">
+             <annotation app="conformance"
+                         lang="en"
+                         epsg="EPSG code"
+                         units="meters">An estimate of the localization error standard deviation in the Y/northing direction</annotation>
+       </real>
+       <real name="/science/LSAR/GCOV/metadata/ceosAnalysisReadyData/geometricAccuracy/standardDeviation/x"
+             shape="scalar"
+             width="32">
+             <annotation app="conformance"
+                         lang="en"
+                         epsg="EPSG code"
+                         units="meters">An estimate of the localization error standard deviation in the X/easting direction</annotation>
+       </real>
+
         <!-- Start of Metadata cube -->
         <real name="/science/LSAR/GCOV/metadata/radarGrid/slantRange"
               shape="radarCubeShape"
               width="64">
           <annotation app="conformance"
                       lang="en"
+                      DIMENSION_LIST="HDF5 internal attribute"
+                      _FillValue="nan"
+                      long_name="Slant range"
+                      grid_mapping="projection"
                       units="meters">Slant range in meters</annotation>
         </real>
         <real name="/science/LSAR/GCOV/metadata/radarGrid/zeroDopplerAzimuthTime"
@@ -712,13 +1057,18 @@
               width="64">
           <annotation app="conformance"
                       lang="en"
-                      units="seconds since YYYY-mm-ddTHH:MM:SS">Zero Doppler azimuth time in seconds</annotation>
+                      DIMENSION_LIST="HDF5 internal attribute"
+                      long_name="Zero Doppler azimuth time"
+                      grid_mapping="projection"
+                      _FillValue="nan"
+                      units="seconds since YYYY-mm-ddTHH:MM:SS">Zero Doppler azimuth time in seconds since UTC epoch</annotation>
         </real>
         <real name="/science/LSAR/GCOV/metadata/radarGrid/incidenceAngle"
               shape="radarCubeShape"
               width="32">
           <annotation app="conformance"
                       lang="en"
+                      DIMENSION_LIST="HDF5 internal attribute"
                       valid_max="90.0"
                       valid_min="0.0"
                       _FillValue="nan"
@@ -731,6 +1081,7 @@
               width="32">
           <annotation app="conformance"
                       lang="en"
+                      DIMENSION_LIST="HDF5 internal attribute"
                       valid_max="1.0"
                       valid_min="-1.0"
                       _FillValue="nan"
@@ -743,6 +1094,7 @@
               width="32">
           <annotation app="conformance"
                       lang="en"
+                      DIMENSION_LIST="HDF5 internal attribute"
                       valid_max="1.0"
                       valid_min="-1.0"
                       _FillValue="nan"
@@ -755,6 +1107,7 @@
               width="32">
           <annotation app="conformance"
                       lang="en"
+                      DIMENSION_LIST="HDF5 internal attribute"
                       valid_max="1.0"
                       valid_min="-1.0"
                       _FillValue="nan"
@@ -767,6 +1120,7 @@
               width="32">
           <annotation app="conformance"
                       lang="en"
+                      DIMENSION_LIST="HDF5 internal attribute"
                       valid_max="1.0"
                       valid_min="-1.0"
                       _FillValue="nan"
@@ -779,6 +1133,7 @@
               width="32">
           <annotation app="conformance"
                       lang="en"
+                      DIMENSION_LIST="HDF5 internal attribute"
                       valid_max="90.0"
                       valid_min="0.0"
                       _FillValue="nan"
@@ -791,9 +1146,10 @@
               width="64">
           <annotation app="conformance"
                       lang="en"
+                      DIMENSION_LIST="HDF5 internal attribute"
                       _FillValue="nan"
                       grid_mapping="projection"
-                      long_name="Ground-track velocity"
+                      long_name="Ground track velocity"
                       units="meters / second">Absolute value of the platform velocity scaled at the target height</annotation>
         </real>
 
@@ -810,6 +1166,8 @@
                         inverse_flattening="Inverse flattening of the ellipsoidal figure"
                         latitude_of_projection_origin="The latitude chosen as the origin of rectangular coordinates for a map projection."
                         longitude_of_projection_origin="The longitude, with respect to Greenwich, of the prime meridian associated with the geodetic datum."
+                        longitude_of_central_meridian="The line of longitude at the center of a map projection generally used as the basis for constructing the projection."
+                        scale_factor_at_central_meridian="A multiplier for reducing a distance obtained from a map by computation or scaling to the actual distance along the central meridian."
                         semi_major_axis="Semi-major axis"
                         spatial_ref="Spatial reference"
                         utm_zone_number="UTM zone number"
@@ -822,6 +1180,11 @@
               width="64">
               <annotation app="conformance"
                           lang="en"
+                          REFERENCE_LIST="HDF5 internal attribute"
+                          CLASS="HDF5 internal attribute"
+                          NAME="HDF5 internal attribute"
+                          long_name="X coordinates of projection"
+                          standard_name="projection_x_coordinate"
                           units="meters">X coordinates in specified projection</annotation>
         </real>
         <real name="/science/LSAR/GCOV/metadata/radarGrid/yCoordinates"
@@ -829,6 +1192,11 @@
               width="64">
               <annotation app="conformance"
                           lang="en"
+                          REFERENCE_LIST="HDF5 internal attribute"
+                          CLASS="HDF5 internal attribute"
+                          NAME="HDF5 internal attribute"
+                          long_name="Y coordinates of projection"
+                          standard_name="projection_y_coordinate"
                           units="meters">Y coordinates in specified projection</annotation>
         </real>
         <real name="/science/LSAR/GCOV/metadata/radarGrid/heightAboveEllipsoid"
@@ -836,6 +1204,10 @@
               width="64">
               <annotation app="conformance"
                           lang="en"
+                          REFERENCE_LIST="HDF5 internal attribute"
+                          CLASS="HDF5 internal attribute"
+                          NAME="HDF5 internal attribute"
+                          standard_name = "height_above_reference_ellipsoid"
                           units="meters">Height values above WGS84 Ellipsoid corresponding to the radar grid</annotation>
         </real>
         <!-- End of Metadata cube -->
@@ -854,30 +1226,43 @@
                         inverse_flattening="Inverse flattening of the ellipsoidal figure"
                         latitude_of_projection_origin="The latitude chosen as the origin of rectangular coordinates for a map projection."
                         longitude_of_projection_origin="The longitude, with respect to Greenwich, of the prime meridian associated with the geodetic datum."
+                        longitude_of_central_meridian="The line of longitude at the center of a map projection generally used as the basis for constructing the projection."
+                        scale_factor_at_central_meridian="A multiplier for reducing a distance obtained from a map by computation or scaling to the actual distance along the central meridian."
                         semi_major_axis="Semi-major axis"
                         spatial_ref="Spatial reference"
                         utm_zone_number="UTM zone number"
                         lang="en">Product map grid projection: EPSG code, with additional projection information as HDF5 Attributes</annotation>
         </integer>
-        <real name="/science/LSAR/GCOV/metadata/calibrationInformation/frequencyA/elevationAntennaPattern/yCoordinates"	
-              shape="calibrationLength"	
-              width="64">	
-              <annotation app="conformance"	
-                          lang="en"	
-                          units="meters">Y coordinates in specified projection</annotation>	
-        </real>	
-        <real name="/science/LSAR/GCOV/metadata/calibrationInformation/frequencyA/elevationAntennaPattern/xCoordinates"	
-              shape="calibrationWidth"	
-              width="64">	
-              <annotation app="conformance"	
-                          lang="en"	
-                          units="meters">X coordinates in specified projection</annotation>	
+        <real name="/science/LSAR/GCOV/metadata/calibrationInformation/frequencyA/elevationAntennaPattern/yCoordinates"
+              shape="calibrationLength"
+              width="64">
+              <annotation app="conformance"
+                          lang="en"
+                          REFERENCE_LIST="HDF5 internal attribute"
+                          CLASS="HDF5 internal attribute"
+                          NAME="HDF5 internal attribute"
+                          long_name="Y coordinates of projection"
+                          standard_name="projection_y_coordinate"
+                          units="meters">Y coordinates in specified projection</annotation>
+        </real>
+        <real name="/science/LSAR/GCOV/metadata/calibrationInformation/frequencyA/elevationAntennaPattern/xCoordinates"
+              shape="calibrationWidth"
+              width="64">
+              <annotation app="conformance"
+                          lang="en"
+                          REFERENCE_LIST="HDF5 internal attribute"
+                          CLASS="HDF5 internal attribute"
+                          NAME="HDF5 internal attribute"
+                          long_name="X coordinates of projection"
+                          standard_name="projection_x_coordinate"
+                          units="meters">X coordinates in specified projection</annotation>
         </real>
         <real name="/science/LSAR/GCOV/metadata/calibrationInformation/frequencyA/elevationAntennaPattern/HH"
               shape="antennaPatternComplexShape"
               width="32">
           <annotation app="conformance"
                       lang="en"
+                      DIMENSION_LIST="HDF5 internal attribute"
                       _FillValue="(nan+nan*j)"
                       grid_mapping="projection"
                       units="1">Complex two-way elevation antenna pattern</annotation>
@@ -888,6 +1273,7 @@
               width="32">
           <annotation app="conformance"
                       lang="en"
+                      DIMENSION_LIST="HDF5 internal attribute"
                       _FillValue="(nan+nan*j)"
                       grid_mapping="projection"
                       units="1">Complex two-way elevation antenna pattern</annotation>
@@ -898,6 +1284,7 @@
               width="32">
           <annotation app="conformance"
                       lang="en"
+                      DIMENSION_LIST="HDF5 internal attribute"
                       _FillValue="(nan+nan*j)"
                       grid_mapping="projection"
                       units="1">Complex two-way elevation antenna pattern</annotation>
@@ -908,6 +1295,7 @@
               width="32">
           <annotation app="conformance"
                       lang="en"
+                      DIMENSION_LIST="HDF5 internal attribute"
                       _FillValue="(nan+nan*j)"
                       grid_mapping="projection"
                       units="1">Complex two-way elevation antenna pattern</annotation>
@@ -918,6 +1306,7 @@
               width="32">
           <annotation app="conformance"
                       lang="en"
+                      DIMENSION_LIST="HDF5 internal attribute"
                       _FillValue="(nan+nan*j)"
                       grid_mapping="projection"
                       units="1">Complex two-way elevation antenna pattern</annotation>
@@ -928,6 +1317,7 @@
               width="32">
           <annotation app="conformance"
                       lang="en"
+                      DIMENSION_LIST="HDF5 internal attribute"
                       _FillValue="(nan+nan*j)"
                       grid_mapping="projection"
                       units="1">Complex two-way elevation antenna pattern</annotation>
@@ -946,30 +1336,43 @@
                         inverse_flattening="Inverse flattening of the ellipsoidal figure"
                         latitude_of_projection_origin="The latitude chosen as the origin of rectangular coordinates for a map projection."
                         longitude_of_projection_origin="The longitude, with respect to Greenwich, of the prime meridian associated with the geodetic datum."
+                        longitude_of_central_meridian="The line of longitude at the center of a map projection generally used as the basis for constructing the projection."
+                        scale_factor_at_central_meridian="A multiplier for reducing a distance obtained from a map by computation or scaling to the actual distance along the central meridian."
                         semi_major_axis="Semi-major axis"
                         spatial_ref="Spatial reference"
                         utm_zone_number="UTM zone number"
                         lang="en">Product map grid projection: EPSG code, with additional projection information as HDF5 Attributes</annotation>
         </integer>
-        <real name="/science/LSAR/GCOV/metadata/calibrationInformation/frequencyB/elevationAntennaPattern/yCoordinates"	
-              shape="calibrationLength"	
-              width="64">	
-              <annotation app="conformance"	
-                          lang="en"	
-                          units="meters">Y coordinates in specified projection</annotation>	
-        </real>	
-        <real name="/science/LSAR/GCOV/metadata/calibrationInformation/frequencyB/elevationAntennaPattern/xCoordinates"	
-              shape="calibrationWidth"	
-              width="64">	
-              <annotation app="conformance"	
-                          lang="en"	
-                          units="meters">X coordinates in specified projection</annotation>	
+        <real name="/science/LSAR/GCOV/metadata/calibrationInformation/frequencyB/elevationAntennaPattern/yCoordinates"
+              shape="calibrationLength"
+              width="64">
+              <annotation app="conformance"
+                          lang="en"
+                          REFERENCE_LIST="HDF5 internal attribute"
+                          CLASS="HDF5 internal attribute"
+                          NAME="HDF5 internal attribute"
+                          long_name="Y coordinates of projection"
+                          standard_name="projection_y_coordinate"
+                          units="meters">Y coordinates in specified projection</annotation>
+        </real>
+        <real name="/science/LSAR/GCOV/metadata/calibrationInformation/frequencyB/elevationAntennaPattern/xCoordinates"
+              shape="calibrationWidth"
+              width="64">
+              <annotation app="conformance"
+                          lang="en"
+                          REFERENCE_LIST="HDF5 internal attribute"
+                          CLASS="HDF5 internal attribute"
+                          NAME="HDF5 internal attribute"
+                          long_name="X coordinates of projection"
+                          standard_name="projection_x_coordinate"
+                          units="meters">X coordinates in specified projection</annotation>
         </real>
         <real name="/science/LSAR/GCOV/metadata/calibrationInformation/frequencyB/elevationAntennaPattern/HH"
               shape="antennaPatternComplexShape"
               width="32">
           <annotation app="conformance"
                       lang="en"
+                      DIMENSION_LIST="HDF5 internal attribute"
                       _FillValue="(nan+nan*j)"
                       grid_mapping="projection"
                       units="1">Complex two-way elevation antenna pattern</annotation>
@@ -980,6 +1383,7 @@
               width="32">
           <annotation app="conformance"
                       lang="en"
+                      DIMENSION_LIST="HDF5 internal attribute"
                       _FillValue="(nan+nan*j)"
                       grid_mapping="projection"
                       units="1">Complex two-way elevation antenna pattern</annotation>
@@ -990,6 +1394,7 @@
               width="32">
           <annotation app="conformance"
                       lang="en"
+                      DIMENSION_LIST="HDF5 internal attribute"
                       _FillValue="(nan+nan*j)"
                       grid_mapping="projection"
                       units="1">Complex two-way elevation antenna pattern</annotation>
@@ -1000,6 +1405,7 @@
               width="32">
           <annotation app="conformance"
                       lang="en"
+                      DIMENSION_LIST="HDF5 internal attribute"
                       _FillValue="(nan+nan*j)"
                       grid_mapping="projection"
                       units="1">Complex two-way elevation antenna pattern</annotation>
@@ -1010,6 +1416,7 @@
               width="32">
           <annotation app="conformance"
                       lang="en"
+                      DIMENSION_LIST="HDF5 internal attribute"
                       _FillValue="(nan+nan*j)"
                       grid_mapping="projection"
                       units="1">Complex two-way elevation antenna pattern</annotation>
@@ -1020,6 +1427,7 @@
               width="32">
           <annotation app="conformance"
                       lang="en"
+                      DIMENSION_LIST="HDF5 internal attribute"
                       _FillValue="(nan+nan*j)"
                       grid_mapping="projection"
                       units="1">Complex two-way elevation antenna pattern</annotation>
@@ -1028,7 +1436,7 @@
         <!-- End of antenna pattern -->
 
         <!-- Start of noise pattern -->
-        <integer name="/science/LSAR/GCOV/metadata/calibrationInformation/frequencyA/nes0/projection"
+        <integer name="/science/LSAR/GCOV/metadata/calibrationInformation/frequencyA/noiseEquivalentBackscatter/projection"
                  shape="scalar"
                  signed="false"
                  width="32">
@@ -1041,89 +1449,136 @@
                         inverse_flattening="Inverse flattening of the ellipsoidal figure"
                         latitude_of_projection_origin="The latitude chosen as the origin of rectangular coordinates for a map projection."
                         longitude_of_projection_origin="The longitude, with respect to Greenwich, of the prime meridian associated with the geodetic datum."
+                        longitude_of_central_meridian="The line of longitude at the center of a map projection generally used as the basis for constructing the projection."
+                        scale_factor_at_central_meridian="A multiplier for reducing a distance obtained from a map by computation or scaling to the actual distance along the central meridian."
                         semi_major_axis="Semi-major axis"
                         spatial_ref="Spatial reference"
                         utm_zone_number="UTM zone number"
                         lang="en">Product map grid projection: EPSG code, with additional projection information as HDF5 Attributes</annotation>
         </integer>
-        <real name="/science/LSAR/GCOV/metadata/calibrationInformation/frequencyA/nes0/yCoordinates"	
-              shape="calibrationLength"	
-              width="64">	
-              <annotation app="conformance"	
-                          lang="en"	
-                          units="meters">Y coordinates in specified projection</annotation>	
-        </real>	
-        <real name="/science/LSAR/GCOV/metadata/calibrationInformation/frequencyA/nes0/xCoordinates"	
-              shape="calibrationWidth"	
-              width="64">	
-              <annotation app="conformance"	
-                          lang="en"	
-                          units="meters">X coordinates in specified projection</annotation>	
+        <real name="/science/LSAR/GCOV/metadata/calibrationInformation/frequencyA/noiseEquivalentBackscatter/yCoordinates"
+              shape="calibrationLength"
+              width="64">
+              <annotation app="conformance"
+                          lang="en"
+                          REFERENCE_LIST="HDF5 internal attribute"
+                          CLASS="HDF5 internal attribute"
+                          NAME="HDF5 internal attribute"
+                          long_name="Y coordinates of projection"
+                          standard_name="projection_y_coordinate"
+                          units="meters">Y coordinates in specified projection</annotation>
         </real>
-        <real name="/science/LSAR/GCOV/metadata/calibrationInformation/frequencyA/nes0/HH"
+        <real name="/science/LSAR/GCOV/metadata/calibrationInformation/frequencyA/noiseEquivalentBackscatter/xCoordinates"
+              shape="calibrationWidth"
+              width="64">
+              <annotation app="conformance"
+                          lang="en"
+                          REFERENCE_LIST="HDF5 internal attribute"
+                          CLASS="HDF5 internal attribute"
+                          NAME="HDF5 internal attribute"
+                          long_name="X coordinates of projection"
+                          standard_name="projection_x_coordinate"
+                          units="meters">X coordinates in specified projection</annotation>
+        </real>
+        <real name="/science/LSAR/GCOV/metadata/calibrationInformation/frequencyA/noiseEquivalentBackscatter/HH"
               shape="calibrationScaleShape"
               width="32">
           <annotation app="conformance"
                       lang="en"
+                      DIMENSION_LIST="HDF5 internal attribute"
+                      mean_value="Arithmetic average of the numeric data points"
+                      min_value="Minimum value of the numeric data points"
+                      max_value="Maximum value of the numeric data points"
+                      sample_stddev="Standard deviation of the numeric data points"
                       _FillValue="nan"
                       grid_mapping="projection"
-                      units="1">Noise equivalent sigma zero</annotation>
+                      units="1">Noise equivalent backscatter in linear scale (units of DN^2)</annotation>
         </real>
-        <real name="/science/LSAR/GCOV/metadata/calibrationInformation/frequencyA/nes0/HV"
+        <real name="/science/LSAR/GCOV/metadata/calibrationInformation/frequencyA/noiseEquivalentBackscatter/HV"
               shape="calibrationScaleShape"
               width="32">
           <annotation app="conformance"
                       lang="en"
+                      DIMENSION_LIST="HDF5 internal attribute"
+                      mean_value="Arithmetic average of the numeric data points"
+                      min_value="Minimum value of the numeric data points"
+                      max_value="Maximum value of the numeric data points"
+                      sample_stddev="Standard deviation of the numeric data points"
                       _FillValue="nan"
                       grid_mapping="projection"
-                      units="1">Noise equivalent sigma zero</annotation>
+                      units="1">Noise equivalent backscatter in linear scale (units of DN^2)</annotation>
         </real>
-        <real name="/science/LSAR/GCOV/metadata/calibrationInformation/frequencyA/nes0/VH"
+        <real name="/science/LSAR/GCOV/metadata/calibrationInformation/frequencyA/noiseEquivalentBackscatter/VH"
               shape="calibrationScaleShape"
               width="32">
           <annotation app="conformance"
                       lang="en"
+                      DIMENSION_LIST="HDF5 internal attribute"
+                      mean_value="Arithmetic average of the numeric data points"
+                      min_value="Minimum value of the numeric data points"
+                      max_value="Maximum value of the numeric data points"
+                      sample_stddev="Standard deviation of the numeric data points"
                       _FillValue="nan"
                       grid_mapping="projection"
-                      units="1">Noise equivalent sigma zero</annotation>
+                      units="1">Noise equivalent backscatter in linear scale (units of DN^2)</annotation>
         </real>
-        <real name="/science/LSAR/GCOV/metadata/calibrationInformation/frequencyA/nes0/VV"
+        <real name="/science/LSAR/GCOV/metadata/calibrationInformation/frequencyA/noiseEquivalentBackscatter/VV"
               shape="calibrationScaleShape"
               width="32">
           <annotation app="conformance"
                       lang="en"
+                      DIMENSION_LIST="HDF5 internal attribute"
+                      mean_value="Arithmetic average of the numeric data points"
+                      min_value="Minimum value of the numeric data points"
+                      max_value="Maximum value of the numeric data points"
+                      sample_stddev="Standard deviation of the numeric data points"
                       _FillValue="nan"
                       grid_mapping="projection"
-                      units="1">Noise equivalent sigma zero</annotation>
+                      units="1">Noise equivalent backscatter in linear scale (units of DN^2)</annotation>
         </real>
-        <real name="/science/LSAR/GCOV/metadata/calibrationInformation/frequencyA/nes0/RH"
+        <real name="/science/LSAR/GCOV/metadata/calibrationInformation/frequencyA/noiseEquivalentBackscatter/RH"
               shape="calibrationScaleShape"
               width="32">
           <annotation app="conformance"
                       lang="en"
+                      DIMENSION_LIST="HDF5 internal attribute"
+                      mean_value="Arithmetic average of the numeric data points"
+                      min_value="Minimum value of the numeric data points"
+                      max_value="Maximum value of the numeric data points"
+                      sample_stddev="Standard deviation of the numeric data points"
                       _FillValue="nan"
                       grid_mapping="projection"
-                      units="1">Noise equivalent sigma zero</annotation>
+                      units="1">Noise equivalent backscatter in linear scale (units of DN^2)</annotation>
         </real>
-        <real name="/science/LSAR/GCOV/metadata/calibrationInformation/frequencyA/nes0/RV"
+        <real name="/science/LSAR/GCOV/metadata/calibrationInformation/frequencyA/noiseEquivalentBackscatter/RV"
               shape="calibrationScaleShape"
               width="32">
           <annotation app="conformance"
                       lang="en"
+                      DIMENSION_LIST="HDF5 internal attribute"
+                      mean_value="Arithmetic average of the numeric data points"
+                      min_value="Minimum value of the numeric data points"
+                      max_value="Maximum value of the numeric data points"
+                      sample_stddev="Standard deviation of the numeric data points"
                       _FillValue="nan"
                       grid_mapping="projection"
-                      units="1">Noise equivalent sigma zero</annotation>
+                      units="1">Noise equivalent backscatter in linear scale (units of DN^2)</annotation>
         </real>
-        <real name="/science/LSAR/GCOV/metadata/calibrationInformation/frequencyB/nes0/HH"
+        <real name="/science/LSAR/GCOV/metadata/calibrationInformation/frequencyB/noiseEquivalentBackscatter/HH"
               shape="calibrationScaleShape"
               width="32">
           <annotation app="conformance"
                       lang="en"
+                      DIMENSION_LIST="HDF5 internal attribute"
+                      mean_value="Arithmetic average of the numeric data points"
+                      min_value="Minimum value of the numeric data points"
+                      max_value="Maximum value of the numeric data points"
+                      sample_stddev="Standard deviation of the numeric data points"
                       _FillValue="nan"
                       grid_mapping="projection"
-                      units="1">Noise equivalent sigma zero</annotation>
+                      units="1">Noise equivalent backscatter in linear scale (units of DN^2)</annotation>
         </real>
-        <integer name="/science/LSAR/GCOV/metadata/calibrationInformation/frequencyB/nes0/projection"
+        <integer name="/science/LSAR/GCOV/metadata/calibrationInformation/frequencyB/noiseEquivalentBackscatter/projection"
                  shape="scalar"
                  signed="false"
                  width="32">
@@ -1136,114 +1591,117 @@
                         inverse_flattening="Inverse flattening of the ellipsoidal figure"
                         latitude_of_projection_origin="The latitude chosen as the origin of rectangular coordinates for a map projection."
                         longitude_of_projection_origin="The longitude, with respect to Greenwich, of the prime meridian associated with the geodetic datum."
+                        longitude_of_central_meridian="The line of longitude at the center of a map projection generally used as the basis for constructing the projection."
+                        scale_factor_at_central_meridian="A multiplier for reducing a distance obtained from a map by computation or scaling to the actual distance along the central meridian."
                         semi_major_axis="Semi-major axis"
                         spatial_ref="Spatial reference"
                         utm_zone_number="UTM zone number"
                         lang="en">Product map grid projection: EPSG code, with additional projection information as HDF5 Attributes</annotation>
         </integer>
-        <real name="/science/LSAR/GCOV/metadata/calibrationInformation/frequencyB/nes0/yCoordinates"	
-              shape="calibrationLength"	
-              width="64">	
-              <annotation app="conformance"	
-                          lang="en"	
-                          units="meters">Y coordinates in specified projection</annotation>	
-        </real>	
-        <real name="/science/LSAR/GCOV/metadata/calibrationInformation/frequencyB/nes0/xCoordinates"	
-              shape="calibrationWidth"	
-              width="64">	
-              <annotation app="conformance"	
-                          lang="en"	
-                          units="meters">X coordinates in specified projection</annotation>	
+        <real name="/science/LSAR/GCOV/metadata/calibrationInformation/frequencyB/noiseEquivalentBackscatter/yCoordinates"
+              shape="calibrationLength"
+              width="64">
+              <annotation app="conformance"
+                          lang="en"
+                          REFERENCE_LIST="HDF5 internal attribute"
+                          CLASS="HDF5 internal attribute"
+                          NAME="HDF5 internal attribute"
+                          long_name="Y coordinates of projection"
+                          standard_name="projection_y_coordinate"
+                          units="meters">Y coordinates in specified projection</annotation>
         </real>
-        <real name="/science/LSAR/GCOV/metadata/calibrationInformation/frequencyB/nes0/HV"
+        <real name="/science/LSAR/GCOV/metadata/calibrationInformation/frequencyB/noiseEquivalentBackscatter/xCoordinates"
+              shape="calibrationWidth"
+              width="64">
+              <annotation app="conformance"
+                          lang="en"
+                          REFERENCE_LIST="HDF5 internal attribute"
+                          CLASS="HDF5 internal attribute"
+                          NAME="HDF5 internal attribute"
+                          long_name="X coordinates of projection"
+                          standard_name="projection_x_coordinate"
+                          units="meters">X coordinates in specified projection</annotation>
+        </real>
+        <real name="/science/LSAR/GCOV/metadata/calibrationInformation/frequencyB/noiseEquivalentBackscatter/HV"
               shape="calibrationScaleShape"
               width="32">
           <annotation app="conformance"
                       lang="en"
+                      DIMENSION_LIST="HDF5 internal attribute"
+                      mean_value="Arithmetic average of the numeric data points"
+                      min_value="Minimum value of the numeric data points"
+                      max_value="Maximum value of the numeric data points"
+                      sample_stddev="Standard deviation of the numeric data points"
                       _FillValue="nan"
                       grid_mapping="projection"
-                      units="1">Noise equivalent sigma zero</annotation>
+                      units="1">Noise equivalent backscatter in linear scale (units of DN^2)</annotation>
         </real>
-        <real name="/science/LSAR/GCOV/metadata/calibrationInformation/frequencyB/nes0/VH"
+        <real name="/science/LSAR/GCOV/metadata/calibrationInformation/frequencyB/noiseEquivalentBackscatter/VH"
               shape="calibrationScaleShape"
               width="32">
           <annotation app="conformance"
                       lang="en"
+                      DIMENSION_LIST="HDF5 internal attribute"
+                      mean_value="Arithmetic average of the numeric data points"
+                      min_value="Minimum value of the numeric data points"
+                      max_value="Maximum value of the numeric data points"
+                      sample_stddev="Standard deviation of the numeric data points"
                       _FillValue="nan"
                       grid_mapping="projection"
-                      units="1">Noise equivalent sigma zero</annotation>
+                      units="1">Noise equivalent backscatter in linear scale (units of DN^2)</annotation>
         </real>
-        <real name="/science/LSAR/GCOV/metadata/calibrationInformation/frequencyB/nes0/VV"
+        <real name="/science/LSAR/GCOV/metadata/calibrationInformation/frequencyB/noiseEquivalentBackscatter/VV"
               shape="calibrationScaleShape"
               width="32">
           <annotation app="conformance"
                       lang="en"
+                      DIMENSION_LIST="HDF5 internal attribute"
+                      mean_value="Arithmetic average of the numeric data points"
+                      min_value="Minimum value of the numeric data points"
+                      max_value="Maximum value of the numeric data points"
+                      sample_stddev="Standard deviation of the numeric data points"
                       _FillValue="nan"
                       grid_mapping="projection"
-                      units="1">Noise equivalent sigma zero</annotation>
+                      units="1">Noise equivalent backscatter in linear scale (units of DN^2)</annotation>
         </real>
-        <real name="/science/LSAR/GCOV/metadata/calibrationInformation/frequencyB/nes0/RH"
+        <real name="/science/LSAR/GCOV/metadata/calibrationInformation/frequencyB/noiseEquivalentBackscatter/RH"
               shape="calibrationScaleShape"
               width="32">
           <annotation app="conformance"
                       lang="en"
+                      DIMENSION_LIST="HDF5 internal attribute"
+                      mean_value="Arithmetic average of the numeric data points"
+                      min_value="Minimum value of the numeric data points"
+                      max_value="Maximum value of the numeric data points"
+                      sample_stddev="Standard deviation of the numeric data points"
                       _FillValue="nan"
                       grid_mapping="projection"
-                      units="1">Noise equivalent sigma zero</annotation>
+                      units="1">Noise equivalent backscatter in linear scale (units of DN^2)</annotation>
         </real>
-        <real name="/science/LSAR/GCOV/metadata/calibrationInformation/frequencyB/nes0/RV"
+        <real name="/science/LSAR/GCOV/metadata/calibrationInformation/frequencyB/noiseEquivalentBackscatter/RV"
               shape="calibrationScaleShape"
               width="32">
           <annotation app="conformance"
                       lang="en"
+                      DIMENSION_LIST="HDF5 internal attribute"
+                      mean_value="Arithmetic average of the numeric data points"
+                      min_value="Minimum value of the numeric data points"
+                      max_value="Maximum value of the numeric data points"
+                      sample_stddev="Standard deviation of the numeric data points"
                       _FillValue="nan"
                       grid_mapping="projection"
-                      units="1">Noise equivalent sigma zero</annotation>
+                      units="1">Noise equivalent backscatter in linear scale (units of DN^2)</annotation>
         </real>
         <!-- End of noise patterns -->
 
         <!-- Start of calibration parameters -->
 
-        <!-- Crosstalk 2D LUTs -->
-        <integer name="/science/LSAR/GCOV/metadata/calibrationInformation/crosstalk/projection"
-                 shape="scalar"
-                 signed="false"
-                 width="32">
-            <annotation app="conformance"
-                        ellipsoid="Projection ellipsoid"
-                        epsg_code="Projection EPSG code"
-                        false_easting="The value added to all abscissa values in the rectangular coordinates for a map projection."
-                        false_northing="The value added to all ordinate values in the rectangular coordinates for a map projection."
-                        grid_mapping_name="Grid mapping variable name"
-                        inverse_flattening="Inverse flattening of the ellipsoidal figure"
-                        latitude_of_projection_origin="The latitude chosen as the origin of rectangular coordinates for a map projection."
-                        longitude_of_projection_origin="The longitude, with respect to Greenwich, of the prime meridian associated with the geodetic datum."
-                        semi_major_axis="Semi-major axis"
-                        spatial_ref="Spatial reference"
-                        utm_zone_number="UTM zone number"
-                        lang="en">Product map grid projection: EPSG code, with additional projection information as HDF5 Attributes</annotation>
-        </integer>
-        <real name="/science/LSAR/GCOV/metadata/calibrationInformation/crosstalk/yCoordinates"	
-              shape="calibrationLength"	
-              width="64">	
-              <annotation app="conformance"	
-                          lang="en"	
-                          units="meters">Y coordinates corresponding to crosstalk records</annotation>	
-        </real>	
-        <real name="/science/LSAR/GCOV/metadata/calibrationInformation/crosstalk/xCoordinates"	
-              shape="calibrationWidth"	
-              width="64">	
-              <annotation app="conformance"	
-                          lang="en"	
-                          units="meters">X coordinates corresponding to crosstalk records</annotation>	
-        </real>
+        <!-- Crosstalk parameters -->
         <real name="/science/LSAR/GCOV/metadata/calibrationInformation/crosstalk/txHorizontalCrosspol"
               shape="crosstalkComplexShape"
               width="32">
               <annotation app="conformance"
                           lang="en"
-                          _FillValue="(nan+nan*j)"
-                          grid_mapping="projection"
                           units="1">Crosstalk in H-transmit channel expressed as ratio txV / txH</annotation>
               <annotation app="io" kwd="complex" />
         </real>
@@ -1252,8 +1710,6 @@
               width="32">
               <annotation app="conformance"
                           lang="en"
-                          _FillValue="(nan+nan*j)"
-                          grid_mapping="projection"
                           units="1">Crosstalk in V-transmit channel expressed as ratio txH / txV</annotation>
               <annotation app="io" kwd="complex" />
         </real>
@@ -1262,8 +1718,6 @@
               width="32">
               <annotation app="conformance"
                           lang="en"
-                          _FillValue="(nan+nan*j)"
-                          grid_mapping="projection"
                           units="1">Crosstalk in H-receive channel expressed as ratio rxV / rxH</annotation>
               <annotation app="io" kwd="complex" />
         </real>
@@ -1272,9 +1726,7 @@
               width="32">
               <annotation app="conformance"
                           lang="en"
-                          _FillValue="(nan+nan*j)"
-                          grid_mapping="projection"
-                          units="1">Crosstalk in V-recieve channel expressed as ratio rxH / rxV</annotation>
+                          units="1">Crosstalk in V-receive channel expressed as ratio rxH / rxV</annotation>
               <annotation app="io" kwd="complex" />
         </real>
 
@@ -1292,6 +1744,92 @@
                           lang="en"
                           units="radians">Faraday rotation correction applied in processing</annotation>
         </real>
+
+      <!-- RFI results -->
+      <real name="/science/LSAR/GCOV/metadata/calibrationInformation/frequencyA/HH/rfiLikelihood"
+            shape="scalar"
+            width="64">
+            <annotation app="conformance"
+                        lang="en"
+                        units="1">Severity of radio frequency interference (RFI) contamination in the data. Value is in the interval [0,1], where 0: lowest severity, and 1: highest severity (or NaN if RFI detection was skipped)</annotation>
+      </real>
+      <real name="/science/LSAR/GCOV/metadata/calibrationInformation/frequencyA/HV/rfiLikelihood"
+            shape="scalar"
+            width="64">
+            <annotation app="conformance"
+                        lang="en"
+                        units="1">Severity of radio frequency interference (RFI) contamination in the data. Value is in the interval [0,1], where 0: lowest severity, and 1: highest severity (or NaN if RFI detection was skipped)</annotation>
+      </real>
+      <real name="/science/LSAR/GCOV/metadata/calibrationInformation/frequencyA/VH/rfiLikelihood"
+            shape="scalar"
+            width="64">
+            <annotation app="conformance"
+                        lang="en"
+                        units="1">Severity of radio frequency interference (RFI) contamination in the data. Value is in the interval [0,1], where 0: lowest severity, and 1: highest severity (or NaN if RFI detection was skipped)</annotation>
+      </real>
+      <real name="/science/LSAR/GCOV/metadata/calibrationInformation/frequencyA/VV/rfiLikelihood"
+            shape="scalar"
+            width="64">
+            <annotation app="conformance"
+                        lang="en"
+                        units="1">Severity of radio frequency interference (RFI) contamination in the data. Value is in the interval [0,1], where 0: lowest severity, and 1: highest severity (or NaN if RFI detection was skipped)</annotation>
+      </real>
+      <real name="/science/LSAR/GCOV/metadata/calibrationInformation/frequencyA/RH/rfiLikelihood"
+            shape="scalar"
+            width="64">
+            <annotation app="conformance"
+                        lang="en"
+                        units="1">Severity of radio frequency interference (RFI) contamination in the data. Value is in the interval [0,1], where 0: lowest severity, and 1: highest severity (or NaN if RFI detection was skipped)</annotation>
+      </real>
+      <real name="/science/LSAR/GCOV/metadata/calibrationInformation/frequencyA/RV/rfiLikelihood"
+            shape="scalar"
+            width="64">
+            <annotation app="conformance"
+                        lang="en"
+                        units="1">Severity of radio frequency interference (RFI) contamination in the data. Value is in the interval [0,1], where 0: lowest severity, and 1: highest severity (or NaN if RFI detection was skipped)</annotation>
+      </real>
+      <real name="/science/LSAR/GCOV/metadata/calibrationInformation/frequencyB/HH/rfiLikelihood"
+            shape="scalar"
+            width="64">
+            <annotation app="conformance"
+                        lang="en"
+                        units="1">Severity of radio frequency interference (RFI) contamination in the data. Value is in the interval [0,1], where 0: lowest severity, and 1: highest severity (or NaN if RFI detection was skipped)</annotation>
+      </real>
+      <real name="/science/LSAR/GCOV/metadata/calibrationInformation/frequencyB/HV/rfiLikelihood"
+            shape="scalar"
+            width="64">
+            <annotation app="conformance"
+                        lang="en"
+                        units="1">Severity of radio frequency interference (RFI) contamination in the data. Value is in the interval [0,1], where 0: lowest severity, and 1: highest severity (or NaN if RFI detection was skipped)</annotation>
+      </real>
+      <real name="/science/LSAR/GCOV/metadata/calibrationInformation/frequencyB/VH/rfiLikelihood"
+            shape="scalar"
+            width="64">
+            <annotation app="conformance"
+                        lang="en"
+                        units="1">Severity of radio frequency interference (RFI) contamination in the data. Value is in the interval [0,1], where 0: lowest severity, and 1: highest severity (or NaN if RFI detection was skipped)</annotation>
+      </real>
+      <real name="/science/LSAR/GCOV/metadata/calibrationInformation/frequencyB/VV/rfiLikelihood"
+            shape="scalar"
+            width="64">
+            <annotation app="conformance"
+                        lang="en"
+                        units="1">Severity of radio frequency interference (RFI) contamination in the data. Value is in the interval [0,1], where 0: lowest severity, and 1: highest severity (or NaN if RFI detection was skipped)</annotation>
+      </real>
+      <real name="/science/LSAR/GCOV/metadata/calibrationInformation/frequencyB/RH/rfiLikelihood"
+            shape="scalar"
+            width="64">
+            <annotation app="conformance"
+                        lang="en"
+                        units="1">Severity of radio frequency interference (RFI) contamination in the data. Value is in the interval [0,1], where 0: lowest severity, and 1: highest severity (or NaN if RFI detection was skipped)</annotation>
+      </real>
+      <real name="/science/LSAR/GCOV/metadata/calibrationInformation/frequencyB/RV/rfiLikelihood"
+            shape="scalar"
+            width="64">
+            <annotation app="conformance"
+                        lang="en"
+                        units="1">Severity of radio frequency interference (RFI) contamination in the data. Value is in the interval [0,1], where 0: lowest severity, and 1: highest severity (or NaN if RFI detection was skipped)</annotation>
+      </real>
 
         <!-- channel-specific corrections -->
         <!-- HH -->
@@ -1664,6 +2202,7 @@
         </real>
 
         <!-- Start of processing information -->
+        <!-- Processing information flags parameters -->
         <string length="0"
                 name="/science/LSAR/GCOV/metadata/processingInformation/parameters/noiseCorrectionApplied"
                 shape="scalar">
@@ -1719,10 +2258,10 @@
                             lang="en">Flag to indicate if the azimuth ionospheric correction has been applied</annotation>
         </string>
         <string length="0"
-                name="/science/LSAR/GCOV/metadata/processingInformation/parameters/rfiCorrectionApplied"
+                name="/science/LSAR/GCOV/metadata/processingInformation/parameters/rfiMitigationApplied"
                 shape="scalar">
                 <annotation app="conformance"
-                            lang="en">Flag to indicate if an RFI correction has been applied</annotation>
+                            lang="en">Flag to indicate if an RFI mitigation has been applied</annotation>
         </string>
         <string length="0"
                 name="/science/LSAR/GCOV/metadata/processingInformation/parameters/postProcessingFilteringApplied"
@@ -1865,6 +2404,20 @@
                 <annotation app="conformance"
                             lang="en">Flag to indicate if the source data is upsampled for geocoding</annotation>
         </string>
+        <real name="/science/LSAR/GCOV/metadata/processingInformation/parameters/geocoding/snapToGridX"
+              shape="scalar"
+              width="64">
+              <annotation app="conformance"
+                          lang="en"
+                          units="meters">Snap to the grid along the X direction with the origin set at 0. The X-coordinate of the scene's upper-left corner is a multiple of this value</annotation>
+        </real>
+        <real name="/science/LSAR/GCOV/metadata/processingInformation/parameters/geocoding/snapToGridY"
+              shape="scalar"
+              width="64">
+              <annotation app="conformance"
+                          lang="en"
+                          units="meters">Snap to the grid along the Y direction with the origin set at 0. The Y-coordinate of the scene's upper-left corner is a multiple of this value</annotation>
+        </real>
 
         <!-- geo2rdr parameters -->
         <real name="/science/LSAR/GCOV/metadata/processingInformation/parameters/geo2rdr/convergenceThreshold"
@@ -1904,6 +2457,8 @@
                         inverse_flattening="Inverse flattening of the ellipsoidal figure"
                         latitude_of_projection_origin="The latitude chosen as the origin of rectangular coordinates for a map projection."
                         longitude_of_projection_origin="The longitude, with respect to Greenwich, of the prime meridian associated with the geodetic datum."
+                        longitude_of_central_meridian="The line of longitude at the center of a map projection generally used as the basis for constructing the projection."
+                        scale_factor_at_central_meridian="A multiplier for reducing a distance obtained from a map by computation or scaling to the actual distance along the central meridian."
                         semi_major_axis="Semi-major axis"
                         spatial_ref="Spatial reference"
                         utm_zone_number="UTM zone number"
@@ -1914,6 +2469,8 @@
               width="64">
               <annotation app="conformance"
                           lang="en"
+                          long_name="Y coordinates of projection"
+                          standard_name="projection_y_coordinate"
                           units="meters">Y coordinates in specified projection</annotation>
         </real>
         <real name="/science/LSAR/GCOV/metadata/processingInformation/parameters/xCoordinates"
@@ -1921,6 +2478,8 @@
               width="64">
               <annotation app="conformance"
                           lang="en"
+                          long_name="X coordinates of projection"
+                          standard_name="projection_x_coordinate"
                           units="meters">X coordinates in specified projection</annotation>
         </real>
         <real name="/science/LSAR/GCOV/metadata/processingInformation/parameters/referenceTerrainHeight"
@@ -1945,6 +2504,8 @@
                         inverse_flattening="Inverse flattening of the ellipsoidal figure"
                         latitude_of_projection_origin="The latitude chosen as the origin of rectangular coordinates for a map projection."
                         longitude_of_projection_origin="The longitude, with respect to Greenwich, of the prime meridian associated with the geodetic datum."
+                        longitude_of_central_meridian="The line of longitude at the center of a map projection generally used as the basis for constructing the projection."
+                        scale_factor_at_central_meridian="A multiplier for reducing a distance obtained from a map by computation or scaling to the actual distance along the central meridian."
                         semi_major_axis="Semi-major axis"
                         spatial_ref="Spatial reference"
                         utm_zone_number="UTM zone number"
@@ -1955,6 +2516,11 @@
               width="64">
               <annotation app="conformance"
                           lang="en"
+                          REFERENCE_LIST="HDF5 internal attribute"
+                          CLASS="HDF5 internal attribute"
+                          NAME="HDF5 internal attribute"
+                          long_name="Y coordinates of projection"
+                          standard_name="projection_y_coordinate"
                           units="meters">Y coordinates in specified projection</annotation>
         </real>
         <real name="/science/LSAR/GCOV/metadata/processingInformation/parameters/frequencyA/xCoordinates"
@@ -1962,6 +2528,11 @@
               width="64">
               <annotation app="conformance"
                           lang="en"
+                          REFERENCE_LIST="HDF5 internal attribute"
+                          CLASS="HDF5 internal attribute"
+                          NAME="HDF5 internal attribute"
+                          long_name="X coordinates of projection"
+                          standard_name="projection_x_coordinate"
                           units="meters">X coordinates in specified projection</annotation>
         </real>
         <real name="/science/LSAR/GCOV/metadata/processingInformation/parameters/frequencyA/dopplerCentroid"
@@ -1969,6 +2540,7 @@
               width="64">
           <annotation app="conformance"
                       lang="en"
+                      DIMENSION_LIST="HDF5 internal attribute"
                       _FillValue="nan"
                       grid_mapping="projection"
                       units="hertz">2D LUT of Doppler centroid for frequency A</annotation>
@@ -1987,6 +2559,8 @@
                         inverse_flattening="Inverse flattening of the ellipsoidal figure"
                         latitude_of_projection_origin="The latitude chosen as the origin of rectangular coordinates for a map projection."
                         longitude_of_projection_origin="The longitude, with respect to Greenwich, of the prime meridian associated with the geodetic datum."
+                        longitude_of_central_meridian="The line of longitude at the center of a map projection generally used as the basis for constructing the projection."
+                        scale_factor_at_central_meridian="A multiplier for reducing a distance obtained from a map by computation or scaling to the actual distance along the central meridian."
                         semi_major_axis="Semi-major axis"
                         spatial_ref="Spatial reference"
                         utm_zone_number="UTM zone number"
@@ -1997,6 +2571,11 @@
               width="64">
               <annotation app="conformance"
                           lang="en"
+                          REFERENCE_LIST="HDF5 internal attribute"
+                          CLASS="HDF5 internal attribute"
+                          NAME="HDF5 internal attribute"
+                          long_name="Y coordinates of projection"
+                          standard_name="projection_y_coordinate"
                           units="meters">Y coordinates in specified projection</annotation>
         </real>
         <real name="/science/LSAR/GCOV/metadata/processingInformation/parameters/frequencyB/xCoordinates"
@@ -2004,6 +2583,11 @@
               width="64">
               <annotation app="conformance"
                           lang="en"
+                          REFERENCE_LIST="HDF5 internal attribute"
+                          CLASS="HDF5 internal attribute"
+                          NAME="HDF5 internal attribute"
+                          long_name="X coordinates of projection"
+                          standard_name="projection_x_coordinate"
                           units="meters">X coordinates in specified projection</annotation>
         </real>
         <real name="/science/LSAR/GCOV/metadata/processingInformation/parameters/frequencyB/dopplerCentroid"
@@ -2011,6 +2595,7 @@
               width="64">
           <annotation app="conformance"
                       lang="en"
+                      DIMENSION_LIST="HDF5 internal attribute"
                       _FillValue="nan"
                       grid_mapping="projection"
                       units="hertz">2D LUT of Doppler centroid for frequency B</annotation>
@@ -2044,12 +2629,6 @@
                       lang="en">Radiometric terrain correction (RTC) algorithm</annotation>
         </string>
         <string length="0"
-              name="/science/LSAR/GCOV/metadata/processingInformation/algorithms/rfiCorrection"
-              shape="scalar">
-          <annotation app="conformance"
-                      lang="en">RFI correction algorithm</annotation>
-        </string>
-        <string length="0"
               name="/science/LSAR/GCOV/metadata/processingInformation/algorithms/polarimetricSymmetrization"
               shape="scalar">
           <annotation app="conformance"
@@ -2070,23 +2649,17 @@
 
         <!-- Orbit ephemeris -->
         <string length="0"
-                name="/science/LSAR/GCOV/metadata/orbit/referenceEpoch"
-                shape="scalar">
-                <annotation app="conformance"
-                            lang="en">Reference epoch in the format YYYY-mm-ddTHH:MM:SS.SSS</annotation>
-        </string>
-        <string length="0"
                 name="/science/LSAR/GCOV/metadata/orbit/interpMethod"
                 shape="scalar">
                 <annotation app="conformance"
-                            lang="en">Orbit interpolation method</annotation>
+                            lang="en">Orbit interpolation method, either "Hermite" or "Legendre"</annotation>
        </string>
         <real name="/science/LSAR/GCOV/metadata/orbit/time"
               shape="orbitListLength"
               width="64">
               <annotation app="conformance"
                           lang="en"
-                          units="seconds since YYYY-mm-ddTHH:MM:SS">Time vector record. This record contains the time corresponding to position and velocity records</annotation>
+                          units="seconds since YYYY-mm-ddTHH:MM:SS">Time vector record. This record contains the time since UTC epoch corresponding to position and velocity records</annotation>
         </real>
         <real name="/science/LSAR/GCOV/metadata/orbit/position"
               shape="orbitShape"
@@ -2106,16 +2679,16 @@
                 name="/science/LSAR/GCOV/metadata/orbit/orbitType"
                 shape="scalar">
                 <annotation app="conformance"
-                            lang="en">PrOE (or) NOE (or) MOE (or) POE (or) Custom</annotation>
+                            lang="en">Orbit product type, either "FOE", "NOE", "MOE", "POE", or "Custom", where "FOE" stands for Forecast Orbit Ephemeris, "NOE" is Near real-time Orbit Ephemeris, "MOE" is Medium precision Orbit Ephemeris, and "POE" is Precise Orbit Ephemeris</annotation>
         </string>
 
         <!-- Attitude records -->
         <real name="/science/LSAR/GCOV/metadata/attitude/time"
-              shape="orbitListLength"
+              shape="attitudeListLength"
               width="64">
               <annotation app="conformance"
                           lang="en"
-                          units="seconds since YYYY-mm-ddTHH:MM:SS">Time vector record. This record contains the time corresponding to attitude and quaternion records</annotation>
+                          units="seconds since YYYY-mm-ddTHH:MM:SS">Time vector record. This record contains the time since UTC epoch corresponding to attitude and quaternion records</annotation>
         </real>
         <real name="/science/LSAR/GCOV/metadata/attitude/quaternions"
               shape="attitudeQuaternionShape"
@@ -2135,7 +2708,7 @@
                 name="/science/LSAR/GCOV/metadata/attitude/attitudeType"
                 shape="scalar">
                 <annotation app="conformance"
-                            lang="en">PrOE (or) NOE (or) MOE (or) POE (or) Custom</annotation>
+                            lang="en">Attitude type, either "FRP", "NRP", "PRP, or "Custom", where "FRP" stands for Forecast Radar Pointing, "NRP" is Near Real-time Pointing, and "PRP" is Precise Radar Pointing</annotation>
         </string>
 
         <!-- Versions of various algorithm modules used -->
@@ -2160,6 +2733,12 @@
                       lang="en">List of input orbit files used</annotation>
         </string>
         <string length="0"
+                name="/science/LSAR/GCOV/metadata/processingInformation/inputs/tecFiles"
+                shape="numberOfInputTecFiles">
+          <annotation app="conformance"
+                      lang="en">List of input total electron content (TEC) files used</annotation>
+        </string>
+        <string length="0"
                 name="/science/LSAR/GCOV/metadata/processingInformation/inputs/configFiles"
                 shape="numberOfInputConfigFiles">
           <annotation app="conformance"
@@ -2171,8 +2750,13 @@
           <annotation app="conformance"
                       lang="en">Description of the input digital elevation model (DEM)</annotation>
         </string>
-
         <!-- Source data (RSLC) information -->
+        <string length="0"
+                 name="/science/LSAR/GCOV/metadata/sourceData/productDoi"
+                 shape="scalar">
+          <annotation app="conformance"
+                      lang="en">Digital Object Identifier (DOI) of the source product</annotation>
+        </string>
         <string length="0"
                 name="/science/LSAR/GCOV/metadata/sourceData/productVersion"
                 shape="scalar">
@@ -2191,71 +2775,141 @@
           <annotation app="conformance"
                       lang="en">Source data product level. Product level. L0A: Unprocessed instrument data; L0B: Reformatted, unprocessed instrument data; L1: Processed instrument data in radar coordinates system; and L2: Processed instrument data in geocoded coordinates system</annotation>
         </string>
-        <string  length="27"
+        <string length="0"
+                name="/science/LSAR/GCOV/metadata/sourceData/productGeometry"
+                shape="scalar">
+          <annotation app="conformance"
+                      lang="en">Source data product geometry, either "Slant range" or "Ground range"</annotation>
+        </string>
+        <string length="19"
               name="/science/LSAR/GCOV/metadata/sourceData/processingDateTime"
               shape="scalar">
               <annotation app="conformance"
-                          lang="en">Source data Processing UTC date and time in the format YYYY-mm-ddTHH:MM:SS</annotation>
+                          lang="en">Source data processing date and time (in UTC) in the format YYYY-mm-ddTHH:MM:SS</annotation>
+        </string>
+        <string  length="0"
+              name="/science/LSAR/GCOV/metadata/sourceData/processingCenter"
+              shape="scalar">
+              <annotation app="conformance"
+                          lang="en">Source data processing center</annotation>
         </string>
         <string name="/science/LSAR/GCOV/metadata/sourceData/processingInformation/parameters/runConfigurationContents"
               length="0"
               shape="scalar">
               <annotation app="conformance"
-                          lang="en">Contents of the run configuration file with parameters used for processing of the source data product</annotation>
+                          lang="en">Contents of the run configuration file associated with the processing of the source data</annotation>
         </string>
+
+        <real name="/science/LSAR/GCOV/metadata/sourceData/processingInformation/parameters/referenceTerrainHeight"
+              shape="sourceDataDopplerCentroidTimeLength"
+              width="32">
+              <annotation app="conformance"
+                          lang="en"
+                          units="meters">Reference terrain height corresponding to the source data processing information records</annotation>
+        </real>
+        <real name="/science/LSAR/GCOV/metadata/sourceData/processingInformation/parameters/zeroDopplerTime"
+              shape="sourceDataDopplerCentroidTimeLength"
+              width="64">
+              <annotation app="conformance"
+                          lang="en"
+                          units="seconds since YYYY-mm-ddTHH:MM:SS">Zero Doppler time since UTC epoch dimension corresponding to source data processing information records</annotation>
+        </real>
+        <real name="/science/LSAR/GCOV/metadata/sourceData/processingInformation/parameters/slantRange"
+              shape="sourceDataDopplerCentroidSlantRangeWidth"
+              width="64">
+              <annotation app="conformance"
+                          lang="en"
+                          units="meters">Slant range dimension corresponding to source data processing information records</annotation>
+        </real>
+        <real name="/science/LSAR/GCOV/metadata/sourceData/processingInformation/parameters/frequencyA/zeroDopplerTime"
+              shape="sourceDataDopplerCentroidTimeLength"
+              width="64">
+              <annotation app="conformance"
+                          lang="en"
+                          units="seconds since YYYY-mm-ddTHH:MM:SS">Zero Doppler time since UTC epoch dimension corresponding to source data processing information records</annotation>
+        </real>
+        <real name="/science/LSAR/GCOV/metadata/sourceData/processingInformation/parameters/frequencyA/slantRange"
+              shape="sourceDataDopplerCentroidSlantRangeWidth"
+              width="64">
+              <annotation app="conformance"
+                          lang="en"
+                          units="meters">Slant range dimension corresponding to the source data processing information records</annotation>
+        </real>
+        <real name="/science/LSAR/GCOV/metadata/sourceData/processingInformation/parameters/frequencyA/dopplerCentroid"
+              shape="sourceDataDopplerCentroidShape"
+              width="64">
+          <annotation app="conformance"
+                      lang="en"
+                      units="hertz">2D LUT of Doppler centroid for frequency A corresponding to the source data processing information records</annotation>
+        </real>
+        <real name="/science/LSAR/GCOV/metadata/sourceData/processingInformation/parameters/frequencyB/zeroDopplerTime"
+              shape="sourceDataDopplerCentroidTimeLength"
+              width="64">
+              <annotation app="conformance"
+                          lang="en"
+                          units="seconds since YYYY-mm-ddTHH:MM:SS">Zero Doppler time since UTC epoch dimension corresponding to source data processing information records</annotation>
+        </real>
+        <real name="/science/LSAR/GCOV/metadata/sourceData/processingInformation/parameters/frequencyB/slantRange"
+              shape="sourceDataDopplerCentroidSlantRangeWidth"
+              width="64">
+              <annotation app="conformance"
+                          lang="en"
+                          units="meters">Slant range dimension corresponding to source data processing information records</annotation>
+        </real>
+        <real name="/science/LSAR/GCOV/metadata/sourceData/processingInformation/parameters/frequencyB/dopplerCentroid"
+              shape="sourceDataDopplerCentroidShape"
+              width="64">
+          <annotation app="conformance"
+                      lang="en"
+                      units="hertz">2D LUT of Doppler centroid for frequency B corresponding to the source data processing information records</annotation>
+        </real>
         <string length="0"
               name="/science/LSAR/GCOV/metadata/sourceData/processingInformation/algorithms/rfiDetection"
               shape="scalar">
           <annotation app="conformance"
-                      lang="en">Algorithm used for radio frequency interference (RFI) detection</annotation>
+                      lang="en">Algorithm used for radio frequency interference (RFI) detection corresponding to the source data processing information records</annotation>
         </string>
         <string length="0"
               name="/science/LSAR/GCOV/metadata/sourceData/processingInformation/algorithms/rfiMitigation"
               shape="scalar">
           <annotation app="conformance"
-                      lang="en">Algorithm used for radio frequency interference (RFI) mitigation</annotation>
+                      lang="en">Algorithm used for radio frequency interference (RFI) mitigation corresponding to the source data processing information records, either "ST-EVD" or "FDNF" (or "disabled" if no RFI mitigation was applied)</annotation>
         </string>
         <string length="0"
                 name="/science/LSAR/GCOV/metadata/sourceData/processingInformation/algorithms/rangeCompression"
                 shape="scalar">
-          <annotation algorithm_type="range processing"
-                      app="conformance"
-                      lang="en">Algorithm for focusing the data in the range direction</annotation>
+          <annotation app="conformance"
+                      lang="en">Algorithm for focusing the data in the range direction corresponding to the source data processing information records</annotation>
         </string>
         <string length="0"
                 name="/science/LSAR/GCOV/metadata/sourceData/processingInformation/algorithms/elevationAntennaPatternCorrection"
                 shape="scalar">
-          <annotation algorithm_type="range processing"
-                      app="conformance"
-                      lang="en">Algorithm for calibrating the antenna pattern</annotation>
+          <annotation app="conformance"
+                      lang="en">Algorithm for calibrating the antenna pattern corresponding to the source data processing information records</annotation>
         </string>
         <string length="0"
                 name="/science/LSAR/GCOV/metadata/sourceData/processingInformation/algorithms/rangeSpreadingLossCorrection"
                 shape="scalar">
-          <annotation algorithm_type="range processing"
-                      app="conformance"
-                      lang="en">Algorithm for calibrating range fading</annotation>
+          <annotation app="conformance"
+                      lang="en">Algorithm for calibrating range fading corresponding to the source data processing information records</annotation>
         </string>
         <string length="0"
                 name="/science/LSAR/GCOV/metadata/sourceData/processingInformation/algorithms/dopplerCentroidEstimation"
                 shape="scalar">
-          <annotation algorithm_type="doppler centroid estimation"
-                      app="conformance"
-                      lang="en">Algorithm for calculating Doppler centroid</annotation>
+          <annotation app="conformance"
+                      lang="en">Algorithm for calculating Doppler centroid corresponding to the source data processing information records</annotation>
         </string>
         <string length="0"
                 name="/science/LSAR/GCOV/metadata/sourceData/processingInformation/algorithms/azimuthPresumming"
                 shape="scalar">
-          <annotation algorithm_type="azimuth regridding"
-                      app="conformance"
-                      lang="en">Algorithm for regridding and filling gaps in the raw data in azimuth</annotation>
+          <annotation app="conformance"
+                      lang="en">Algorithm for regridding and filling gaps in the raw data in azimuth corresponding to the source data processing information records</annotation>
         </string>
         <string length="0"
                 name="/science/LSAR/GCOV/metadata/sourceData/processingInformation/algorithms/azimuthCompression"
                 shape="scalar">
-          <annotation algorithm_type="azimuth regridding"
-                      app="conformance"
-                      lang="en">Algorithm for focusing the data in the azimuth direction</annotation>
+          <annotation app="conformance"
+                      lang="en">Algorithm for focusing the data in the azimuth direction corresponding to the source data processing information records</annotation>
         </string>
         <string length="0"
                 name="/science/LSAR/GCOV/metadata/sourceData/processingInformation/algorithms/softwareVersion"
@@ -2263,12 +2917,17 @@
                 <annotation app="conformance"
                             lang="en">Software version used for processing the source data</annotation>
         </string>
-        <string length="27"
+        <string length="29"
                 name="/science/LSAR/GCOV/metadata/sourceData/swaths/zeroDopplerStartTime"
                 shape="scalar">
               <annotation app="conformance"
-                          lang="en"
-                          units="seconds">Azimuth start time of the source data product</annotation>
+                          lang="en">Azimuth start time (in UTC) of the source data product in the format YYYY-mm-ddTHH:MM:SS.sssssssss</annotation>
+       </string>
+       <string length="29"
+               name="/science/LSAR/GCOV/metadata/sourceData/swaths/zeroDopplerEndTime"
+               shape="scalar">
+            <annotation app="conformance"
+                        lang="en">Azimuth stop time (in UTC) of the source data product in the format YYYY-mm-ddTHH:MM:SS.sssssssss</annotation>
        </string>
         <real name="/science/LSAR/GCOV/metadata/sourceData/swaths/zeroDopplerTimeSpacing"
               shape="scalar"
@@ -2285,14 +2944,55 @@
                           lang="en"
                           units="seconds">Number of azimuth lines within the source data product</annotation>
         </integer>
-        <real name="/science/LSAR/GCOV/metadata/sourceData/swaths/frequencyA/rangeBandwidth"
+        <string length="2"
+              name="/science/LSAR/GCOV/metadata/sourceData/swaths/frequencyA/listOfPolarizations"
+              shape="numberOfSourceDataFrequencyAPolarizations">
+          <annotation app="conformance"
+                      lang="en">List of polarization layers with frequency A within the source data product</annotation>
+        </string>
+        <real name="/science/LSAR/GCOV/metadata/sourceData/swaths/frequencyA/sceneCenterAlongTrackResolution"
+              shape="scalar"
+              width="64">
+          <annotation app="conformance"
+                      lang="en"
+                      units="meters">Nominal along-track resolution in meters of the source data at scene center</annotation>
+        </real>
+        <real name="/science/LSAR/GCOV/metadata/sourceData/swaths/frequencyA/rangeResolution"
+              shape="scalar"
+              width="64">
+          <annotation app="conformance"
+                      lang="en"
+                      units="meters">Nominal range resolution in meters of the source data</annotation>
+        </real>
+        <real name="/science/LSAR/GCOV/metadata/sourceData/swaths/frequencyA/sceneCenterAlongTrackSpacing"
+              shape="scalar"
+              width="64">
+          <annotation app="conformance"
+                      lang="en"
+                      units="meters">Nominal along-track spacing in meters between consecutive lines near mid swath of the source data</annotation>
+        </real>
+        <real name="/science/LSAR/GCOV/metadata/sourceData/swaths/frequencyA/sceneCenterGroundRangeSpacing"
+              shape="scalar"
+              width="64">
+          <annotation app="conformance"
+                      lang="en"
+                      units="meters">Nominal ground range spacing in meters between consecutive pixels near mid swath of the source data</annotation>
+        </real>
+        <real name="/science/LSAR/GCOV/metadata/sourceData/swaths/frequencyA/acquiredRangeBandwidth"
+              shape="scalar"
+              width="64">
+          <annotation app="conformance"
+                      lang="en"
+                      units="hertz">Source data acquisition range bandwidth in hertz. In case of mode combination, this corresponds to mode with largest bandwidth</annotation>
+        </real>
+        <real name="/science/LSAR/GCOV/metadata/sourceData/swaths/frequencyA/processedRangeBandwidth"
               shape="scalar"
               width="64">
           <annotation app="conformance"
                       lang="en"
                       units="hertz">Source data processed range bandwidth in hertz</annotation>
         </real>
-        <real name="/science/LSAR/GCOV/metadata/sourceData/swaths/frequencyA/azimuthBandwidth"
+        <real name="/science/LSAR/GCOV/metadata/sourceData/swaths/frequencyA/processedAzimuthBandwidth"
               shape="scalar"
               width="64">
           <annotation app="conformance"
@@ -2328,14 +3028,69 @@
                           lang="en"
                           units="1">Number of slant range samples for each azimuth line within the source data</annotation>
         </integer>
-        <real name="/science/LSAR/GCOV/metadata/sourceData/swaths/frequencyB/rangeBandwidth"
+        <real name="/science/LSAR/GCOV/metadata/sourceData/swaths/frequencyA/nearRangeIncidenceAngle"
+              shape="scalar"
+              width="64">
+          <annotation app="conformance"
+                      lang="en"
+                      units="degrees">Near-range incidence angle in degrees at the central azimuth line. The incidence angle is defined as the angle between the LOS vector and the normal to the ellipsoid at the target height</annotation>
+        </real>
+        <real name="/science/LSAR/GCOV/metadata/sourceData/swaths/frequencyA/farRangeIncidenceAngle"
+              shape="scalar"
+              width="64">
+          <annotation app="conformance"
+                      lang="en"
+                      units="degrees">Far-range incidence angle in degrees at the central azimuth line. The incidence angle is defined as the angle between the LOS vector and the normal to the ellipsoid at the target height</annotation>
+        </real>
+        <string length="2"
+              name="/science/LSAR/GCOV/metadata/sourceData/swaths/frequencyB/listOfPolarizations"
+              shape="numberOfSourceDataFrequencyBPolarizations">
+          <annotation app="conformance"
+                      lang="en">List of polarization layers with frequency B within the source data product</annotation>
+        </string>
+        <real name="/science/LSAR/GCOV/metadata/sourceData/swaths/frequencyB/sceneCenterAlongTrackResolution"
+              shape="scalar"
+              width="64">
+          <annotation app="conformance"
+                      lang="en"
+                      units="meters">Nominal along-track resolution in meters of the source data at scene center</annotation>
+        </real>
+        <real name="/science/LSAR/GCOV/metadata/sourceData/swaths/frequencyB/rangeResolution"
+              shape="scalar"
+              width="64">
+          <annotation app="conformance"
+                      lang="en"
+                      units="meters">Nominal range resolution in meters of the source data</annotation>
+        </real>
+        <real name="/science/LSAR/GCOV/metadata/sourceData/swaths/frequencyB/sceneCenterAlongTrackSpacing"
+              shape="scalar"
+              width="64">
+          <annotation app="conformance"
+                      lang="en"
+                      units="meters">Nominal along-track spacing in meters between consecutive lines near mid swath of the source data</annotation>
+        </real>
+        <real name="/science/LSAR/GCOV/metadata/sourceData/swaths/frequencyB/sceneCenterGroundRangeSpacing"
+              shape="scalar"
+              width="64">
+          <annotation app="conformance"
+                      lang="en"
+                      units="meters">Nominal ground range spacing in meters between consecutive pixels near mid swath of the source data</annotation>
+        </real>
+        <real name="/science/LSAR/GCOV/metadata/sourceData/swaths/frequencyB/acquiredRangeBandwidth"
+              shape="scalar"
+              width="64">
+          <annotation app="conformance"
+                      lang="en"
+                      units="hertz">Source data acquisition range bandwidth in hertz. In case of mode combination, this corresponds to mode with largest bandwidth</annotation>
+        </real>
+        <real name="/science/LSAR/GCOV/metadata/sourceData/swaths/frequencyB/processedRangeBandwidth"
               shape="scalar"
               width="64">
           <annotation app="conformance"
                       lang="en"
                       units="hertz">Source data processed range bandwidth in hertz</annotation>
         </real>
-        <real name="/science/LSAR/GCOV/metadata/sourceData/swaths/frequencyB/azimuthBandwidth"
+        <real name="/science/LSAR/GCOV/metadata/sourceData/swaths/frequencyB/processedAzimuthBandwidth"
               shape="scalar"
               width="64">
           <annotation app="conformance"
@@ -2371,6 +3126,20 @@
                           lang="en"
                           units="1">Number of slant range samples for each azimuth line within the source data</annotation>
         </integer>
+        <real name="/science/LSAR/GCOV/metadata/sourceData/swaths/frequencyB/nearRangeIncidenceAngle"
+              shape="scalar"
+              width="64">
+          <annotation app="conformance"
+                      lang="en"
+                      units="degrees">Near-range incidence angle in degrees at the central azimuth line. The incidence angle is defined as the angle between the LOS vector and the normal to the ellipsoid at the target height</annotation>
+        </real>
+        <real name="/science/LSAR/GCOV/metadata/sourceData/swaths/frequencyB/farRangeIncidenceAngle"
+              shape="scalar"
+              width="64">
+          <annotation app="conformance"
+                      lang="en"
+                      units="degrees">Far-range incidence angle in degrees at the central azimuth line. The incidence angle is defined as the angle between the LOS vector and the normal to the ellipsoid at the target height</annotation>
+        </real>
       </nodes>
     </science>
 
@@ -2425,6 +3194,13 @@
            <dimension extent="0"
                       name="numberOfFrequencyACovarianceTerms"/>
     </shape>
+    <shape name="numberOfSourceDataFrequencyAPolarizations"
+           order="slowest...fastest">
+           <annotation app="conformance"
+                       lang="en">Number of polarization layers associated with L-SAR frequency A</annotation>
+           <dimension extent="0"
+                      name="numberOfSourceDataFrequencyAPolarizations"/>
+    </shape>
     <shape name="frequencyAWidth"
            order="slowest...fastest">
            <annotation app="conformance"
@@ -2442,12 +3218,21 @@
     <shape name="complexDataFrequencyAShape"
            order="slowest...fastest">
            <annotation app="conformance"
-                       lang="en">Shape associated with L-SAR frequency A imagery datasets</annotation> 
+                       lang="en">Shape associated with L-SAR frequency A complex-valued imagery datasets</annotation>
            <dimension extent="0"
                       name="frequencyALength"/>
            <dimension extent="0"
                       name="frequencyAWidth"/>
            <dimension name="complex" extent="2"/>
+    </shape>
+    <shape name="realDataFrequencyAShape"
+           order="slowest...fastest">
+           <annotation app="conformance"
+                       lang="en">Shape associated with L-SAR frequency A real-valued imagery datasets</annotation>
+           <dimension extent="0"
+                      name="frequencyALength"/>
+           <dimension extent="0"
+                      name="frequencyAWidth"/>
     </shape>
 
     <!-- Frequency B related shapes -->
@@ -2464,6 +3249,13 @@
                        lang="en">Number of covariance terms associated with L-SAR frequency B</annotation>
            <dimension extent="0"
                       name="numberOfFrequencyBCovarianceTerms"/>
+    </shape>
+    <shape name="numberOfSourceDataFrequencyBPolarizations"
+           order="slowest...fastest">
+           <annotation app="conformance"
+                       lang="en">Number of polarization layers associated with L-SAR frequency B</annotation>
+           <dimension extent="0"
+                      name="numberOfSourceDataFrequencyBPolarizations"/>
     </shape>
     <shape name="frequencyBWidth"
            order="slowest...fastest">
@@ -2482,12 +3274,21 @@
     <shape name="complexDataFrequencyBShape"
            order="slowest...fastest">
            <annotation app="conformance"
-                       lang="en">Shape associated with L-SAR frequency B imagery datasets</annotation>
+                       lang="en">Shape associated with L-SAR frequency B complex-valued imagery datasets</annotation>
            <dimension extent="0"
                       name="frequencyBLength"/>
            <dimension extent="0"
                       name="frequencyBWidth"/>
-           <dimension name="complex" extent="2"/> 
+           <dimension name="complex" extent="2"/>
+    </shape>
+    <shape name="realDataFrequencyBShape"
+           order="slowest...fastest">
+           <annotation app="conformance"
+                       lang="en">Shape associated with L-SAR frequency B real-valued imagery datasets</annotation>
+           <dimension extent="0"
+                      name="frequencyBLength"/>
+           <dimension extent="0"
+                      name="frequencyBWidth"/>
     </shape>
 
     <!-- Geolocation cube related shapes -->
@@ -2530,7 +3331,7 @@
                        lang="en">Width dimension of the metadata cube</annotation>
            <dimension extent="0"
                       name="radarCubeWidth"/>
-    </shape>  
+    </shape>
 
     <!-- Processing parameters related shapes -->
     <shape name="dopplerCentroidLength"
@@ -2593,13 +3394,33 @@
            order="slowest...fastest">
            <annotation app="conformance"
                        lang="en">Shape of crosstalk datasets</annotation>
-           <dimension extent="0"
-                      name="calibrationLength"/>
-           <dimension extent="0"
-                      name="calibrationWidth"/>
            <dimension name="complex" extent="2"/>
     </shape>
 
+     <!-- Source data related shape -->
+    <shape name="sourceDataDopplerCentroidTimeLength"
+    order="slowest...fastest">
+    <annotation app="conformance"
+                lang="en">Length dimension of Doppler centroid grid corresponding to the source data</annotation>
+    <dimension extent="0"
+               name="sourceDataDopplerCentroidTimeLength"/>
+    </shape>
+    <shape name="sourceDataDopplerCentroidSlantRangeWidth"
+    order="slowest...fastest">
+    <annotation app="conformance"
+                lang="en">Length dimension of Doppler centroid grid corresponding to the source data</annotation>
+    <dimension extent="0"
+               name="sourceDataDopplerCentroidSlantRangeWidth"/>
+    </shape>
+    <shape name="sourceDataDopplerCentroidShape"
+    order="slowest...fastest">
+    <annotation app="conformance"
+                lang="en">Shape of the Doppler centroid grid corresponding to the source data</annotation>
+    <dimension extent="0"
+               name="sourceDataDopplerCentroidTimeLength"/>
+    <dimension extent="0"
+               name="sourceDataDopplerCentroidSlantRangeWidth"/>
+    </shape>
     <!-- Orbit related shape -->
     <shape name="orbitListLength"
            order="slowest...fastest">
@@ -2659,6 +3480,13 @@
                   lang="en">Number of input orbit files</annotation>
       <dimension extent="0"
                  name="numberOfInputOrbitFiles"/>
+    </shape>
+    <shape name="numberOfInputTecFiles"
+           order="slowest...fastest">
+      <annotation app="conformance"
+                  lang="en">Number of input total electon content (TEC) files</annotation>
+      <dimension extent="0"
+                 name="numberOfInputTecFiles"/>
     </shape>
     <shape name="numberOfInputConfigFiles"
            order="slowest...fastest">

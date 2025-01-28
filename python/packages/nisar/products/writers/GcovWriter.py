@@ -1,8 +1,498 @@
+import os
 import journal
 import isce3
+import h5py
+import tempfile
+from osgeo import gdal
+import numpy as np
 
 import nisar.workflows.helpers as helpers
 from nisar.products.writers import BaseL2WriterSingleInput
+from nisar.products.writers.BaseL2WriterSingleInput import save_dataset
+from nisar.workflows.h5_prep import set_get_geo_info
+
+
+def _save_list_cov_terms(cov_elements_list, dataset_group):
+
+    name = "listOfCovarianceTerms"
+    cov_elements_list.sort()
+    cov_elements_array = np.array(cov_elements_list, dtype="S4")
+    dset = dataset_group.create_dataset(name, data=cov_elements_array)
+    desc = "List of processed covariance terms"
+    dset.attrs["description"] = np.bytes_(desc)
+
+
+def run_geocode_cov(cfg, hdf5_obj, root_ds,
+                    frequency, pol_list,
+                    radar_grid, input_raster_list,
+                    grid_doppler,
+                    raster_scratch_dir,
+                    geogrid, orbit, gcov_terms_file_extension,
+                    output_gcov_terms_raster_files_format,
+                    secondary_layers_file_extension,
+                    secondary_layer_files_raster_files_format,
+                    flag_fullcovariance, radar_grid_nlooks,
+                    output_gcov_terms_kwargs,
+                    output_secondary_layers_kwargs,
+                    optional_geo_kwargs):
+
+    error_channel = journal.error("run_geocode_cov")
+
+    # DEM parameters
+    dem_file = cfg['dynamic_ancillary_file_group']['dem_file']
+    dem_interp_method_enum = cfg['processing']['dem_interpolation_method_enum']
+
+    # unpack RTC run parameters
+    rtc_dict = cfg['processing']['rtc']
+    output_terrain_radiometry = rtc_dict['output_type_enum']
+    rtc_algorithm = rtc_dict['algorithm_type_enum']
+    input_terrain_radiometry = rtc_dict['input_terrain_radiometry_enum']
+    rtc_min_value_db = rtc_dict['rtc_min_value_db']
+    rtc_upsampling = rtc_dict['dem_upsampling']
+
+    rtc_area_beta_mode = rtc_dict['area_beta_mode']
+    if rtc_area_beta_mode == 'pixel_area':
+        rtc_area_beta_mode_enum = \
+            isce3.geometry.RtcAreaBetaMode.PIXEL_AREA
+    elif rtc_area_beta_mode == 'projection_angle':
+        rtc_area_beta_mode_enum = \
+            isce3.geometry.RtcAreaBetaMode.PROJECTION_ANGLE
+    elif (rtc_area_beta_mode == 'auto' or
+            rtc_area_beta_mode is None):
+        rtc_area_beta_mode_enum = \
+            isce3.geometry.RtcAreaBetaMode.AUTO
+    else:
+        err_msg = ('ERROR invalid area beta mode:'
+                   f' {rtc_area_beta_mode}')
+        raise ValueError(err_msg)
+
+    # unpack geocode run parameters
+    geocode_dict = cfg['processing']['geocode']
+    geocode_algorithm = geocode_dict['algorithm_type']
+    output_mode = geocode_dict['output_mode']
+    flag_apply_rtc = geocode_dict['apply_rtc']
+
+    apply_valid_samples_sub_swath_masking = \
+        geocode_dict['apply_valid_samples_sub_swath_masking']
+    memory_mode = geocode_dict['memory_mode_enum']
+    save_nlooks = geocode_dict['save_nlooks']
+    save_rtc_anf, save_rtc_anf_gamma0_to_sigma0 = \
+        read_and_validate_rtc_anf_flags(geocode_dict, flag_apply_rtc,
+                                        output_terrain_radiometry)
+    save_mask = geocode_dict['save_mask']
+    save_dem = geocode_dict['save_dem']
+
+    min_block_size_mb = cfg["processing"]["geocode"]['min_block_size']
+    max_block_size_mb = cfg["processing"]["geocode"]['max_block_size']
+
+    # optional keyword arguments , i.e. arguments that may or may not be
+    # included in the call to geocode()
+    optional_geo_kwargs = {}
+
+    # read min/max block size converting MB to B
+    if min_block_size_mb is not None:
+        optional_geo_kwargs['min_block_size'] = min_block_size_mb * (2**20)
+    if max_block_size_mb is not None:
+        optional_geo_kwargs['max_block_size'] = max_block_size_mb * (2**20)
+
+    # unpack geo2rdr parameters
+    geo2rdr_dict = cfg['processing']['geo2rdr']
+    threshold = geo2rdr_dict['threshold']
+    maxiter = geo2rdr_dict['maxiter']
+
+    if (flag_apply_rtc and output_terrain_radiometry ==
+            isce3.geometry.RtcOutputTerrainRadiometry.SIGMA_NAUGHT):
+        output_radiometry_str = "radar backscatter sigma0"
+    elif (flag_apply_rtc and output_terrain_radiometry ==
+            isce3.geometry.RtcOutputTerrainRadiometry.GAMMA_NAUGHT):
+        output_radiometry_str = 'radar backscatter gamma0'
+    elif input_terrain_radiometry == \
+            isce3.geometry.RtcInputTerrainRadiometry.BETA_NAUGHT:
+        output_radiometry_str = 'radar backscatter beta0'
+    else:
+        output_radiometry_str = 'radar backscatter sigma0'
+
+    dem_raster = isce3.io.Raster(dem_file)
+    epsg = dem_raster.get_epsg()
+    proj = isce3.core.make_projection(epsg)
+    ellipsoid = proj.ellipsoid
+
+    # set paths temporary files
+    input_temp = tempfile.NamedTemporaryFile(
+        dir=raster_scratch_dir, suffix='.vrt')
+    input_raster_obj = isce3.io.Raster(
+        input_temp.name, raster_list=input_raster_list)
+
+    # init Geocode object depending on raster type
+    if input_raster_obj.datatype() == gdal.GDT_Float32:
+        geo = isce3.geocode.GeocodeFloat32()
+    elif input_raster_obj.datatype() == gdal.GDT_Float64:
+        geo = isce3.geocode.GeocodeFloat64()
+    elif input_raster_obj.datatype() == gdal.GDT_CFloat32:
+        geo = isce3.geocode.GeocodeCFloat32()
+    elif input_raster_obj.datatype() == gdal.GDT_CFloat64:
+        geo = isce3.geocode.GeocodeCFloat64()
+    else:
+        err_str = 'Unsupported raster type for geocoding'
+        error_channel.log(err_str)
+        raise NotImplementedError(err_str)
+
+    # init geocode members
+    geo.orbit = orbit
+    geo.ellipsoid = ellipsoid
+    geo.doppler = grid_doppler
+    geo.threshold_geo2rdr = threshold
+    geo.numiter_geo2rdr = maxiter
+
+    # set data interpolator based on the geocode algorithm
+    if output_mode == isce3.geocode.GeocodeOutputMode.INTERP:
+        geo.data_interpolator = geocode_algorithm
+
+    geo.geogrid(geogrid.start_x, geogrid.start_y,
+                geogrid.spacing_x, geogrid.spacing_y,
+                geogrid.width, geogrid.length, geogrid.epsg)
+
+    # create a NamedTemporaryFile and an ISCE3 Raster object to
+    # temporarily hold the output imagery
+    temp_output = tempfile.NamedTemporaryFile(
+        dir=raster_scratch_dir, suffix=gcov_terms_file_extension)
+
+    output_raster_obj = isce3.io.Raster(
+        temp_output.name,
+        geogrid.width, geogrid.length,
+        input_raster_obj.num_bands,
+        gdal.GDT_Float32, output_gcov_terms_raster_files_format)
+
+    # create a NamedTemporaryFile and an ISCE3 Raster object to
+    # temporarily hold the off-diagonal terms (if applicable)
+    nbands_off_diag_terms = 0
+    out_off_diag_terms_obj = None
+    if flag_fullcovariance:
+        nbands = input_raster_obj.num_bands
+        nbands_off_diag_terms = (nbands**2 - nbands) // 2
+        if nbands_off_diag_terms > 0:
+            temp_off_diag = tempfile.NamedTemporaryFile(
+                dir=raster_scratch_dir,
+                suffix=gcov_terms_file_extension)
+            out_off_diag_terms_obj = isce3.io.Raster(
+                temp_off_diag.name,
+                geogrid.width, geogrid.length,
+                nbands_off_diag_terms,
+                gdal.GDT_CFloat32, output_gcov_terms_raster_files_format)
+
+    # create a NamedTemporaryFile and an ISCE3 Raster object to
+    # temporarily hold the number of looks layer
+    if save_nlooks:
+        temp_nlooks = tempfile.NamedTemporaryFile(
+            dir=raster_scratch_dir,
+            suffix=secondary_layers_file_extension)
+        out_geo_nlooks_obj = isce3.io.Raster(
+            temp_nlooks.name,
+            geogrid.width, geogrid.length, 1,
+            gdal.GDT_Float32, secondary_layer_files_raster_files_format)
+    else:
+        temp_nlooks = None
+        out_geo_nlooks_obj = None
+
+    # create a NamedTemporaryFile and an ISCE3 Raster object to
+    # temporarily hold the radiometric terrain correction (RTC)
+    # area normalization factor (ANF) layer
+    if save_rtc_anf:
+        temp_rtc_anf = tempfile.NamedTemporaryFile(
+            dir=raster_scratch_dir,
+            suffix=secondary_layers_file_extension)
+        out_geo_rtc_obj = isce3.io.Raster(
+            temp_rtc_anf.name,
+            geogrid.width, geogrid.length, 1,
+            gdal.GDT_Float32, secondary_layer_files_raster_files_format)
+    else:
+        temp_rtc_anf = None
+        out_geo_rtc_obj = None
+
+    # create a NamedTemporaryFile and an ISCE3 Raster object to
+    # temporarily hold the layer to convert gamma0 backscatter into
+    # sigma0
+    if save_rtc_anf_gamma0_to_sigma0:
+        temp_rtc_anf_gamma0_to_sigma0 = tempfile.NamedTemporaryFile(
+            dir=raster_scratch_dir,
+            suffix=secondary_layers_file_extension)
+        out_geo_rtc_gamma0_to_sigma0_obj = isce3.io.Raster(
+            temp_rtc_anf_gamma0_to_sigma0.name,
+            geogrid.width, geogrid.length, 1,
+            gdal.GDT_Float32, secondary_layer_files_raster_files_format)
+    else:
+        temp_rtc_anf_gamma0_to_sigma0 = None
+        out_geo_rtc_gamma0_to_sigma0_obj = None
+
+    # create a NamedTemporaryFile and an ISCE3 Raster object to
+    # temporarily hold the interpolated DEM layer
+    if save_dem:
+        temp_interpolated_dem = tempfile.NamedTemporaryFile(
+            dir=raster_scratch_dir,
+            suffix=secondary_layers_file_extension)
+        if (output_mode ==
+                isce3.geocode.GeocodeOutputMode.AREA_PROJECTION):
+            interpolated_dem_width = geogrid.width + 1
+            interpolated_dem_length = geogrid.length + 1
+        else:
+            interpolated_dem_width = geogrid.width
+            interpolated_dem_length = geogrid.length
+        out_geo_dem_obj = isce3.io.Raster(
+            temp_interpolated_dem.name,
+            interpolated_dem_width,
+            interpolated_dem_length, 1,
+            gdal.GDT_Float32, secondary_layer_files_raster_files_format)
+    else:
+        temp_interpolated_dem = None
+        out_geo_dem_obj = None
+
+    # create a NamedTemporaryFile and an ISCE3 Raster object to
+    # temporarily hold the mask layer
+    if save_mask:
+        temp_mask_file = tempfile.NamedTemporaryFile(
+                dir=raster_scratch_dir,
+                suffix=secondary_layers_file_extension).name
+        out_mask_obj = isce3.io.Raster(
+            temp_mask_file,
+            geogrid.width, geogrid.length, 1,
+            gdal.GDT_Byte, secondary_layer_files_raster_files_format)
+    else:
+        temp_mask_file = None
+        out_mask_obj = None
+
+    # geocode rasters
+    geo.geocode(radar_grid=radar_grid,
+                input_raster=input_raster_obj,
+                output_raster=output_raster_obj,
+                dem_raster=dem_raster,
+                output_mode=output_mode,
+                flag_apply_rtc=flag_apply_rtc,
+                input_terrain_radiometry=input_terrain_radiometry,
+                output_terrain_radiometry=output_terrain_radiometry,
+                rtc_min_value_db=rtc_min_value_db,
+                rtc_upsampling=rtc_upsampling,
+                rtc_algorithm=rtc_algorithm,
+                radargrid_nlooks=radar_grid_nlooks,
+                out_off_diag_terms=out_off_diag_terms_obj,
+                out_geo_nlooks=out_geo_nlooks_obj,
+                out_geo_rtc=out_geo_rtc_obj,
+                rtc_area_beta_mode=rtc_area_beta_mode_enum,
+                out_geo_rtc_gamma0_to_sigma0=
+                    out_geo_rtc_gamma0_to_sigma0_obj,
+                out_mask=out_mask_obj,
+                input_rtc=None,
+                output_rtc=None,
+                apply_valid_samples_sub_swath_masking=
+                    apply_valid_samples_sub_swath_masking,
+                dem_interp_method=dem_interp_method_enum,
+                memory_mode=memory_mode,
+                **optional_geo_kwargs)
+
+    # delete Raster objects so their associated data is flushed to the disk
+    del input_raster_obj
+    del output_raster_obj
+
+    if save_nlooks:
+        del out_geo_nlooks_obj
+
+    if save_rtc_anf:
+        del out_geo_rtc_obj
+
+    if save_rtc_anf_gamma0_to_sigma0:
+        del out_geo_rtc_gamma0_to_sigma0_obj
+
+    if save_mask:
+        out_mask_obj.close_dataset()
+        del out_mask_obj
+
+    if save_dem:
+        del out_geo_dem_obj
+
+    if flag_fullcovariance:
+        # out_off_diag_terms_obj.close_dataset()
+        del out_off_diag_terms_obj
+
+    # For the GCOV workflow, `pol_list` will always be populated. For static layers
+    # generation, `pol_list` will be empty.
+    if pol_list:
+        h5_ds = os.path.join(root_ds, 'listOfPolarizations')
+        if h5_ds in hdf5_obj:
+            del hdf5_obj[h5_ds]
+
+        pol_list_s2 = np.array(pol_list, dtype='S2')
+        dset = hdf5_obj.create_dataset(h5_ds, data=pol_list_s2)
+        dset.attrs['description'] = np.bytes_(
+            'List of processed polarization layers with frequency ' +
+            frequency)
+
+    # save GCOV diagonal elements
+    yds, xds = set_get_geo_info(hdf5_obj, root_ds, geogrid)
+    cov_elements_list = [p.upper()+p.upper() for p in pol_list]
+
+    # save GCOV imagery
+    # `input_raster_list` is optional and not used in static layers generation.
+    if input_raster_list:
+        save_dataset(temp_output.name, hdf5_obj, root_ds,
+                     yds, xds, cov_elements_list,
+                     **output_gcov_terms_kwargs)
+
+    # save listOfCovarianceTerms
+    freq_group = hdf5_obj[root_ds]
+    if not flag_fullcovariance:
+        _save_list_cov_terms(cov_elements_list, freq_group)
+
+    # save nlooks
+    if save_nlooks:
+        save_dataset(temp_nlooks.name, hdf5_obj, root_ds,
+                     yds, xds, 'numberOfLooks',
+                     **output_secondary_layers_kwargs)
+
+    # save mask
+    if save_mask:
+        save_dataset(temp_mask_file,
+                     hdf5_obj, root_ds,
+                     yds, xds,
+                     'mask',
+                     fill_value=255,
+                     compute_stats=False)
+
+    # save rtc
+    if save_rtc_anf:
+        save_dataset(temp_rtc_anf.name, hdf5_obj, root_ds,
+                     yds, xds,
+                     'rtcAreaNormalizationFactor',
+                     **output_secondary_layers_kwargs)
+
+    # save rtc
+    if save_rtc_anf_gamma0_to_sigma0:
+        save_dataset(temp_rtc_anf_gamma0_to_sigma0.name,
+                     hdf5_obj, root_ds,
+                     yds, xds,
+                     'rtcGammaToSigmaFactor',
+                     **output_secondary_layers_kwargs)
+
+    # save interpolated DEM
+    if save_dem:
+
+        '''
+        The DEM is interpolated over the geogrid pixels vertices
+        rather than the pixels centers.
+        '''
+        if (output_mode ==
+                isce3.geocode.GeocodeOutputMode.AREA_PROJECTION):
+            dem_geogrid = isce3.product.GeoGridParameters(
+                start_x=geogrid.start_x - geogrid.spacing_x / 2,
+                start_y=geogrid.start_y - geogrid.spacing_y / 2,
+                spacing_x=geogrid.spacing_x,
+                spacing_y=geogrid.spacing_y,
+                width=int(geogrid.width) + 1,
+                length=int(geogrid.length) + 1,
+                epsg=geogrid.epsg)
+            yds_dem, xds_dem = \
+                set_get_geo_info(hdf5_obj, root_ds, dem_geogrid)
+        else:
+            yds_dem = yds
+            xds_dem = xds
+
+        save_dataset(temp_interpolated_dem.name, hdf5_obj,
+                     root_ds, yds_dem, xds_dem,
+                     'interpolatedDem',
+                     long_name='Interpolated DEM',
+                     units='1',
+                     **output_secondary_layers_kwargs)
+
+    # save GCOV off-diagonal elements
+    if flag_fullcovariance:
+        off_diag_terms_list = []
+        for b1, p1 in enumerate(pol_list):
+            for b2, p2 in enumerate(pol_list):
+                if (b2 <= b1):
+                    continue
+                off_diag_terms_list.append(p1.upper()+p2.upper())
+        _save_list_cov_terms(cov_elements_list + off_diag_terms_list,
+                             freq_group)
+
+        # if the complex data type has not been defined yet,
+        # define it. This is required to open the H5 dataset
+        # using the netCDF driver
+        if '/complex64' not in hdf5_obj:
+            complex_type = h5py.h5t.py_create(np.complex64)
+            complex_type.commit(hdf5_obj['/'].id,
+                                np.bytes_('complex64'))
+        else:
+            complex_type = hdf5_obj['/complex64']
+
+        save_dataset(temp_off_diag.name, hdf5_obj, root_ds,
+                     yds, xds, off_diag_terms_list,
+                     long_name=output_radiometry_str,
+                     hdf5_data_type=complex_type,
+                     **output_gcov_terms_kwargs)
+
+
+def read_and_validate_rtc_anf_flags(geocode_dict, flag_apply_rtc,
+                                    output_terrain_radiometry):
+    '''
+    Read and validate radiometric terrain correction (RTC) area
+    normalization factor (ANF) flags
+
+    Parameters
+    ----------
+    geocode_dict: dict
+        Runconfig geocode namespace
+    flag_apply_rtc: bool
+        Flag apply RTC (radiometric terrain correction)
+    output_terrain_radiometry: isce3.geometry.RtcOutputTerrainRadiometry
+        Output terrain radiometry (backscatter coefficient convention)
+
+    Returns
+    -------
+    save_rtc_anf: bool
+        Flag indicating whether the radiometric terrain correction (RTC)
+        area normalization factor (ANF) layer should be created.
+        This RTC ANF layer provides the conversion factor from
+        from gamma0 backscatter normalization convention
+        to input backscatter normalization convention
+        (e.g., beta0 or sigma0-ellipsoid)
+    save_rtc_anf_gamma0_to_sigma0: bool
+        Flag indicating whether the radiometric terrain correction (RTC)
+        area normalization factor (ANF) gamma0 to sigma0 layer should be
+        created
+    '''
+
+    info_channel = journal.info("gcov.read_and_validate_rtc_anf_flags")
+    error_channel = journal.error("gcov.read_and_validate_rtc_anf_flags")
+
+    save_rtc_anf = geocode_dict['save_rtc_anf']
+    save_rtc_anf_gamma0_to_sigma0 = \
+        geocode_dict['save_rtc_anf_gamma0_to_sigma0']
+
+    # Verify `flag save_rtc_anf_gamma0_to_sigma0`. The flag defaults to `True`,
+    # if `flag_apply_rtc` is enabled and RTC output_type is set to "gamma0", or
+    # `False`, otherwise.
+    if save_rtc_anf_gamma0_to_sigma0 is None:
+
+        save_rtc_anf_gamma0_to_sigma0 = \
+            (flag_apply_rtc and
+             output_terrain_radiometry ==
+             isce3.geometry.RtcOutputTerrainRadiometry.GAMMA_NAUGHT)
+
+    if not flag_apply_rtc and save_rtc_anf:
+        error_msg = (
+            "the option `save_rtc_anf` is not available"
+            " with radiometric terrain correction"
+            " disabled (`apply_rtc = False`).")
+        error_channel.log(error_msg)
+        raise ValueError(error_msg)
+
+    if not flag_apply_rtc and save_rtc_anf_gamma0_to_sigma0:
+        error_msg = (
+            "the option `save_rtc_anf_gamma0_to_sigma0`"
+            " is not available with radiometric terrain"
+            " correction disabled (`apply_rtc = False`).")
+        error_channel.log(error_msg)
+        raise ValueError(error_msg)
+
+    return save_rtc_anf, save_rtc_anf_gamma0_to_sigma0
 
 
 class GcovWriter(BaseL2WriterSingleInput):
@@ -42,6 +532,8 @@ class GcovWriter(BaseL2WriterSingleInput):
         self.populate_identification_common()
         self.populate_identification_l2_specific()
         self.populate_data_parameters()
+        self.populate_ceos_analysis_ready_data_parameters_l2_common()
+        self.populate_ceos_analysis_ready_data_parameters()
         self.populate_calibration_information()
         self.populate_source_data()
         self.populate_processing_information_l2_common()
@@ -56,156 +548,33 @@ class GcovWriter(BaseL2WriterSingleInput):
 
         self.check_and_decorate_product_using_specs_xml(specs_xml_file)
 
+    def populate_ceos_analysis_ready_data_parameters(self):
+        # Note: CEOS ARD documentation uses the British spelling "Normalised"
+        # rather than the American (US) spelling "Normalized"
+        self.set_value(
+            '{PRODUCT}/metadata/ceosAnalysisReadyData/ceosAnalysisReadyDataProductType',
+            'Normalised Radar Backscatter (NRB)')
+
+        self.set_value(
+            '{PRODUCT}/metadata/ceosAnalysisReadyData/'
+            'outputBackscatterDecibelConversionFormula',
+            '10*log10(<GCOV_TERM>)')
+
     def populate_data_parameters(self):
         """
         Populate the data group `grids` of the GCOV product
         """
         for frequency in self.freq_pols_dict.keys():
-            self.copy_from_input(
-                '{PRODUCT}/grids/'
-                f'frequency{frequency}/numberOfSubSwaths',
-                '{PRODUCT}/swaths/'
-                f'frequency{frequency}/numberOfSubSwaths',
-                skip_if_not_present=True)
 
-    def populate_source_data(self):
-        """
-        Populate the `sourceData` group of the GCOV product
-        """
-
-        self.copy_from_input(
-            '{PRODUCT}/metadata/sourceData/productVersion',
-            'identification/productVersion',
-            skip_if_not_present=True)
-
-        self.copy_from_input(
-            '{PRODUCT}/metadata/sourceData/lookDirection',
-            'identification/lookDirection',
-            format_function=str.title)
-
-        self.copy_from_input(
-            '{PRODUCT}/metadata/sourceData/productLevel',
-            'identification/productLevel',
-            default='L1')
-
-        self.copy_from_input(
-            '{PRODUCT}/metadata/sourceData/processingDateTime',
-            'identification/processingDateTime',
-            skip_if_not_present=True)
-
-        self.copy_from_input(
-            '{PRODUCT}/metadata/sourceData/processingInformation/'
-            'parameters/runConfigurationContents',
-            skip_if_not_present=True)
-
-        self.copy_from_input(
-            '{PRODUCT}/metadata/sourceData/processingInformation/'
-            'algorithms/rfiDetection',
-            '{PRODUCT}/metadata/processingInformation/algorithms/'
-            'rfiDetection',
-            skip_if_not_present=True)
-
-        self.copy_from_input(
-            '{PRODUCT}/metadata/sourceData/processingInformation/'
-            'algorithms/rfiMitigation',
-            '{PRODUCT}/metadata/processingInformation/algorithms/'
-            'rfiMitigation',
-            skip_if_not_present=True)
-
-        self.copy_from_input(
-            '{PRODUCT}/metadata/sourceData/processingInformation/'
-            'algorithms/rangeCompression',
-            '{PRODUCT}/metadata/processingInformation/algorithms/'
-            'rangeCompression',
-            skip_if_not_present=True)
-
-        self.copy_from_input(
-            '{PRODUCT}/metadata/sourceData/processingInformation/'
-            'algorithms/elevationAntennaPatternCorrection',
-            '{PRODUCT}/metadata/processingInformation/algorithms/'
-            'elevationAntennaPatternCorrection',
-            skip_if_not_present=True)
-
-        self.copy_from_input(
-            '{PRODUCT}/metadata/sourceData/processingInformation/'
-            'algorithms/rangeSpreadingLossCorrection',
-            '{PRODUCT}/metadata/processingInformation/algorithms/'
-            'rangeSpreadingLossCorrection',
-            skip_if_not_present=True)
-
-        self.copy_from_input(
-            '{PRODUCT}/metadata/sourceData/processingInformation/'
-            'algorithms/dopplerCentroidEstimation',
-            '{PRODUCT}/metadata/processingInformation/algorithms/'
-            'dopplerCentroidEstimation',
-            skip_if_not_present=True)
-
-        self.copy_from_input(
-            '{PRODUCT}/metadata/sourceData/processingInformation/'
-            'algorithms/azimuthPresumming',
-            '{PRODUCT}/metadata/processingInformation/algorithms/'
-            'azimuthPresumming',
-            skip_if_not_present=True)
-
-        self.copy_from_input(
-            '{PRODUCT}/metadata/sourceData/processingInformation/'
-            'algorithms/azimuthCompression',
-            '{PRODUCT}/metadata/processingInformation/algorithms/'
-            'azimuthCompression',
-            skip_if_not_present=True)
-
-        self.copy_from_input(
-            '{PRODUCT}/metadata/sourceData/processingInformation/'
-            'algorithms/softwareVersion',
-            '{PRODUCT}/metadata/processingInformation/algorithms/'
-            'softwareVersion',
-            skip_if_not_present=True)
-
-        self.copy_from_input(
-            '{PRODUCT}/metadata/sourceData/swaths/zeroDopplerStartTime',
-            'identification/zeroDopplerStartTime')
-
-        self.copy_from_input(
-            '{PRODUCT}/metadata/sourceData/swaths/zeroDopplerTimeSpacing',
-            '{PRODUCT}/swaths/zeroDopplerTimeSpacing')
-
-        for i, (frequency, _) in enumerate(self.freq_pols_dict.items()):
-            radar_grid_obj = self.input_product_obj.getRadarGrid(frequency)
-
-            output_swaths_freq_path = ('{PRODUCT}/metadata/sourceData/'
-                                       f'swaths/frequency{frequency}')
             input_swaths_freq_path = ('{PRODUCT}/swaths/'
                                       f'frequency{frequency}')
-
-            if i == 0:
-                self.set_value(
-                    '{PRODUCT}/metadata/sourceData/swaths/'
-                    'numberOfAzimuthLines',
-                    radar_grid_obj.length)
+            output_grids_freq_path = ('{PRODUCT}/grids/'
+                                       f'frequency{frequency}')
 
             self.copy_from_input(
-                f'{output_swaths_freq_path}/rangeBandwidth',
-                f'{input_swaths_freq_path}/processedRangeBandwidth')
-
-            self.copy_from_input(
-                f'{output_swaths_freq_path}/azimuthBandwidth',
-                f'{input_swaths_freq_path}/processedAzimuthBandwidth')
-
-            self.copy_from_input(
-                f'{output_swaths_freq_path}/centerFrequency',
-                f'{input_swaths_freq_path}/processedCenterFrequency')
-
-            self.set_value(
-                f'{output_swaths_freq_path}/slantRangeStart',
-                radar_grid_obj.starting_range)
-
-            self.copy_from_input(
-                f'{output_swaths_freq_path}/slantRangeSpacing',
-                f'{input_swaths_freq_path}/slantRangeSpacing')
-
-            self.set_value(
-                f'{output_swaths_freq_path}/numberOfRangeSamples',
-                radar_grid_obj.width)
+                f'{output_grids_freq_path}/numberOfSubSwaths',
+                f'{input_swaths_freq_path}/numberOfSubSwaths',
+                skip_if_not_present=True)
 
     def populate_processing_information(self):
         """
@@ -216,10 +585,9 @@ class GcovWriter(BaseL2WriterSingleInput):
         parameters_group = \
             '{PRODUCT}/metadata/processingInformation/parameters'
 
-        # TODO review this
         self.set_value(
             f'{parameters_group}/noiseCorrectionApplied',
-            True)
+            False)
 
         self.set_value(
             f'{parameters_group}/preprocessingMultilookingApplied',
@@ -332,30 +700,32 @@ class GcovWriter(BaseL2WriterSingleInput):
             'radiometricTerrainCorrection',
             rtc_algorithm_name)
 
-        # TODO fix this
-        flag_rfi = (f'{self.root_path}/'
-                    f'{self.input_product_hdf5_group_type}'
-                    '/metadata/processingInformation/algorithms/rfiMitigation')
-        if flag_rfi:
-            rfi_algorithm_reference = '(RFI correction not applied)'
-        else:
-            rfi_algorithm_reference = '(NOT SPECIFIED)'
-        self.set_value(
-            '{PRODUCT}/metadata/processingInformation/algorithms/'
-            'rfiCorrection',
-            rfi_algorithm_reference)
+        input_pol_list = list(self.input_freq_pols_dict.keys())
+        flag_hv_and_vh_in_pol_list = ['HV' in input_pol_list and
+                                      'VH' in input_pol_list]
 
-        # TODO fix this
-        flag_symmetrize = self.cfg['processing']['input_subset'][
-            'symmetrize_cross_pol_channels']
-        if flag_symmetrize:
-            symmetrization_algorithm_reference = '(RFI correction not applied)'
+        flag_symmetrize = (flag_hv_and_vh_in_pol_list and
+                           self.cfg['processing']['input_subset'][
+                            'symmetrize_cross_pol_channels'])
+
+        flag_full_covariance = self.cfg['processing']['input_subset'][
+            'fullcovariance']
+
+        if flag_symmetrize and not flag_full_covariance:
+            symmetrization_algorithm = \
+                ('Cross-Polarimetric Channels HV and VH Backscatter Average'
+                 ' (Incoherent Average)')
+        elif flag_symmetrize:
+            symmetrization_algorithm = \
+                ('Cross-Polarimetric Channels HV and VH SLCs Average'
+                 ' (Coherent Average)')
         else:
-            symmetrization_algorithm_reference = '(NOT SPECIFIED)'
+            symmetrization_algorithm = 'disabled'
+
         self.set_value(
             '{PRODUCT}/metadata/processingInformation/algorithms/'
             'polarimetricSymmetrization',
-            symmetrization_algorithm_reference)
+            symmetrization_algorithm)
 
         apply_rtc = self.cfg['processing']['geocode']['apply_rtc']
         rtc_algorithm_reference = '(RTC not applied)'
@@ -393,6 +763,8 @@ class GcovWriter(BaseL2WriterSingleInput):
                  ' Terrain Correction and Geocoding," in IEEE Transactions'
                  ' on Geoscience and Remote Sensing, vol. 60, pp. 1-23, 2022,'
                  ' Art no. 5222723, doi: 10.1109/TGRS.2022.3147472.')
+        else:
+            geocoding_algorithm_reference = '(NOT SPECIFIED)'
 
         self.set_value(
             '{PRODUCT}/metadata/processingInformation/algorithms/'
@@ -405,10 +777,12 @@ class GcovWriter(BaseL2WriterSingleInput):
                 f'{parameters_group}/preprocessing/frequency{frequency}/'
             self.copy_from_runconfig(
                 f'{preprocessing_group_path}/numberOfRangeLooks',
-                'processing/pre_process/range_looks')
+                'processing/pre_process/range_looks',
+                format_function=np.uint64)
             self.copy_from_runconfig(
                 f'{preprocessing_group_path}/numberOfAzimuthLooks',
-                'processing/pre_process/azimuth_looks')
+                'processing/pre_process/azimuth_looks',
+                format_function=np.uint64)
 
         # populate rtc parameters
         self.copy_from_runconfig(
@@ -426,10 +800,11 @@ class GcovWriter(BaseL2WriterSingleInput):
                 'outputBackscatterNormalizationConvention',
                 'beta0')
 
+        # CEOS ARD convention is 'Linear amplitude' or 'Linear power'.
         self.set_value(
             f'{parameters_group}/rtc/'
             'outputBackscatterExpressionConvention',
-            'backscatter intensity (linear)')
+            'Linear power')
 
         self.copy_from_runconfig(
             f'{parameters_group}/rtc/memoryMode',
@@ -458,12 +833,14 @@ class GcovWriter(BaseL2WriterSingleInput):
         self.copy_from_runconfig(
             f'{parameters_group}/geocoding/minBlockSize',
             'processing/geocode/min_block_size',
-            default=isce3.core.default_min_block_size)
+            default=isce3.core.default_min_block_size,
+            format_function=np.uint64)
 
         self.copy_from_runconfig(
             f'{parameters_group}/geocoding/maxBlockSize',
             'processing/geocode/max_block_size',
-            default=isce3.core.default_max_block_size)
+            default=isce3.core.default_max_block_size,
+            format_function=np.uint64)
 
         self.copy_from_runconfig(
             f'{parameters_group}/geocoding/isSourceDataUpsampled',
@@ -476,7 +853,8 @@ class GcovWriter(BaseL2WriterSingleInput):
 
         self.copy_from_runconfig(
             f'{parameters_group}/geo2rdr/maxNumberOfIterations',
-            'processing/geo2rdr/maxiter')
+            'processing/geo2rdr/maxiter',
+            format_function=np.uint64)
 
         # this value is hard-coded in the GeocodeCov module
         self.set_value(
@@ -507,7 +885,3 @@ class GcovWriter(BaseL2WriterSingleInput):
             self.set_value(
                 '{PRODUCT}/metadata/orbit/interpMethod',
                 orbit_interp_method_str)
-
-        self.set_value(
-            '{PRODUCT}/metadata/orbit/referenceEpoch',
-            self.orbit.reference_epoch.isoformat_usec())

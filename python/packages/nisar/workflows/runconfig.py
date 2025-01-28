@@ -13,7 +13,7 @@ import isce3
 from nisar.products.readers import SLC
 from nisar.workflows import geogrid
 import nisar.workflows.helpers as helpers
-
+from nisar.products.readers.orbit import load_orbit_from_xml
 
 class RunConfig:
     def __init__(self, args, workflow_name=''):
@@ -203,11 +203,39 @@ class RunConfig:
                     error_channel.log(err_str)
                     raise ValueError(err_str)
 
+
+    def check_temporal_coverage(self):
+        # Check the temporal coverage of radargrid, orbit, and TEC (if provided)
+        if self.workflow_name == 'insar':
+            input_path = self.cfg['input_file_group']['reference_rslc_file']
+            orbit_path = self.cfg['dynamic_ancillary_file_group']['orbit_files']['reference_orbit_file']
+        else:
+            input_path = self.cfg['input_file_group']['input_file_path']
+            orbit_path = self.cfg['dynamic_ancillary_file_group']['orbit_file']
+        freq_pols = self.cfg['processing']['input_subset']['list_of_frequencies']
+        tec_path = self.cfg['dynamic_ancillary_file_group']['tec_file']
+        
+        slc = SLC(hdf5file=input_path)
+
+        if orbit_path is not None:
+            # slc will get first radar grid whose frequency is available.
+            # orbit has not frequency dependency.
+            orbit = load_orbit_from_xml(orbit_path,
+                                        slc.getRadarGrid().ref_epoch)
+        else:
+            orbit = slc.getOrbit()
+
+        for freq, _ in freq_pols.items():
+            radar_grid = slc.getRadarGrid(freq)
+            helpers.check_radargrid_orbit_tec(radar_grid, orbit, tec_path)
+
+
     def prep_geocode_cfg(self):
         '''
         check geocode config and initialize as needed
         '''
         geocode_dict = self.cfg['processing']['geocode']
+        error_channel = journal.error('RunConfig.prep_geocode_cfg')
 
         # check for user provided EPSG and grab from DEM if none provided
         if geocode_dict['output_epsg'] is None:
@@ -235,14 +263,15 @@ class RunConfig:
             return
         self.cfg['processing']['geocode']['wrapped_igram_geogrids'] = wrapped_igram_geogrids
 
+
     def prep_geocode_metadata(self, group_name, workflow_name,
                               flag_cube=False):
         '''
-        check metadata groups config (radar_grid_cubes, 
-        calibration_information, or processing_information) and 
+        check metadata groups config (radar_grid_cubes,
+        calibration_information, or processing_information) and
         initialize as needed.
 
-        Metadata groups are optional. If not provided, the geocode 
+        Metadata groups are optional. If not provided, the geocode
         group should be used instead, but with coarser X and Y
         spacing defaults
         '''
@@ -308,16 +337,22 @@ class RunConfig:
         metadata_dict['x_snap'] = metadata_dict['output_posting']['x_posting']
         metadata_dict['y_snap'] = metadata_dict['output_posting']['y_posting']
 
+        # use the first available product geogrid as reference for creating
+        # the metadata cubes geogrid
+        geogrids_ref = self.cfg['processing']['geocode']['geogrids']
+        geogrid_ref = geogrids_ref[list(geogrids_ref.keys())[0]]
+
         # construct geogrid
-        frequency_ref = 'A'
         metadata_geogrid = geogrid.create(
-            self.cfg, 
+            self.cfg,
             workflow_name=workflow_name,
-            frequency_group=None, 
-            frequency=frequency_ref,
+            frequency_group=None,
+            frequency=None,
             geocode_dict=metadata_dict,
             default_spacing_x=default_metadata_geogrid_spacing_x,
-            default_spacing_y=default_metadata_geogrid_spacing_y)
+            default_spacing_y=default_metadata_geogrid_spacing_y,
+            flag_metadata_cubes=flag_cube,
+            geogrid_ref=geogrid_ref)
 
         # place geogrid in cfg for later processing
         self.cfg['processing'][group_name]['geogrid'] = metadata_geogrid
@@ -328,6 +363,7 @@ class RunConfig:
         '''
         self.prep_paths()
         self.prep_frequency_and_polarizations()
+        self.check_temporal_coverage()
         self.prep_geocode_cfg()
         self.prep_geocode_metadata('radar_grid_cubes',
                                    workflow_name=self.workflow_name,

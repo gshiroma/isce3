@@ -46,6 +46,14 @@ def get_hdf5_file_root_path(filename: str, root_path: str = None) -> str:
     error_channel.log(error_msg)
 
 
+def _join_paths(path1: str, path2: str) -> str:
+    """Join two paths to be used in HDF5"""
+    sep = '/'
+    if path1.endswith(sep):
+        sep = ''
+    return path1 + sep + path2
+
+
 class Base(pyre.component,
            family='nisar.productreader.base',
            implements=ProductReader):
@@ -71,6 +79,9 @@ class Base(pyre.component,
 
     _ProcessingInformation = pyre.properties.str(default='processingInformation')
     _ProcessingInformation.doc = 'Relative path to processing information associated with the product'
+
+    _CalibrationInformation = pyre.properties.str(default='calibrationInformation')
+    _CalibrationInformation.doc = 'Relative path to calibration information associated with the product'
 
     _SwathPath = pyre.properties.str(default='swaths')
     _SwathPath.doc = 'Relative path to swaths associated with standard product'
@@ -122,7 +133,7 @@ class Base(pyre.component,
             error_msg = 'The product does not contain any frequency'
             error_channel.log(error_msg)
             raise RuntimeError(error_msg)
-        return self.frequencies[0]
+        return sorted(self.frequencies)[0]
 
     @pyre.export
     def getSwathMetadata(self, frequency=None):
@@ -166,8 +177,9 @@ class Base(pyre.component,
         extracts attitude
         '''
         with h5py.File(self.filename, 'r', libver='latest', swmr=True) as fid:
-            attitudePath = os.path.join(self.MetadataPath, 'attitude')
+            attitudePath = _join_paths(self.MetadataPath, 'attitude')
             return isce3.core.Attitude.load_from_h5(fid[attitudePath])
+
 
     @pyre.export
     def getDopplerCentroid(self, frequency=None):
@@ -176,24 +188,42 @@ class Base(pyre.component,
         '''
         if frequency is None:
             frequency = self._getFirstFrequency()
-        dopplerPath = os.path.join(self.ProcessingInformationPath,
-                                'parameters', 'frequency' + frequency,
-                                'dopplerCentroid')
 
-        zeroDopplerTimePath = os.path.join(self.ProcessingInformationPath,
-                                            'parameters/zeroDopplerTime')
+        doppler_group_path = (f'{self.ProcessingInformationPath}/parameters/'
+                              f'frequency{frequency}')
 
-        slantRangePath = os.path.join(self.ProcessingInformationPath,
-                                        'parameters/slantRange')
+        # First, we look for the coordinate vectors `zeroDopplerTime`
+        # and `slantRange` in the same level of the `dopplerCentroid` LUT.
+        # If these vectors are not found, we look for the coordinate
+        # vectors two levels below, following old RSLC specs.
+        doppler_dataset_path = f'{doppler_group_path}/dopplerCentroid'
+        zero_doppler_time_dataset_path = (f'{doppler_group_path}/'
+                                          'zeroDopplerTime')
+        slant_range_dataset_path = f'{doppler_group_path}/slantRange'
+
+        zero_doppler_time_dataset_path_other = \
+            f'{self.ProcessingInformationPath}/parameters/zeroDopplerTime'
+        slant_range_dataset_path_other = (f'{self.ProcessingInformationPath}/'
+                                          'parameters/slantRange')
+
         # extract the native Doppler dataset
         with h5py.File(self.filename, 'r', libver='latest', swmr=True) as fid:
-            doppler = fid[dopplerPath][:]
-            zeroDopplerTime = fid[zeroDopplerTimePath][:]
-            slantRange = fid[slantRangePath][:]
+
+            if zero_doppler_time_dataset_path not in fid:
+                zero_doppler_time_dataset_path = \
+                    zero_doppler_time_dataset_path_other
+            if slant_range_dataset_path not in fid:
+                slant_range_dataset_path = \
+                    slant_range_dataset_path_other
+
+            doppler = fid[doppler_dataset_path][:]
+            zeroDopplerTime = fid[zero_doppler_time_dataset_path][:]
+            slantRange = fid[slant_range_dataset_path][:]
 
         dopplerCentroid = isce3.core.LUT2d(xcoord=slantRange,
-                ycoord=zeroDopplerTime,
-                data=doppler)
+                                           ycoord=zeroDopplerTime,
+                                           data=doppler)
+
         return dopplerCentroid
 
     @pyre.export
@@ -264,7 +294,7 @@ class Base(pyre.component,
     @property
     def sarBand(self):
         """SAR band string such as 'L' or 'S' for NISAR."""
-        return self.RootPath[-4]        
+        return self.RootPath[-4]
 
     @property
     def IdentificationPath(self):
@@ -281,6 +311,10 @@ class Base(pyre.component,
     @property
     def ProcessingInformationPath(self):
         return os.path.join(self.MetadataPath, self._ProcessingInformation)
+
+    @property
+    def CalibrationInformationPath(self):
+        return os.path.join(self.MetadataPath, self._CalibrationInformation)
 
     @property
     def SwathPath(self):

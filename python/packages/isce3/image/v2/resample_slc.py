@@ -7,7 +7,7 @@ import journal
 import numpy as np
 from isce3.core import SINC_HALF, LUT2d
 from isce3.core.resample_block_generators import get_blocks, get_blocks_by_offsets
-from isce3.ext.isce3.image.v2 import resample_to_coords
+from isce3.ext.isce3.image.v2 import _resample_to_coords
 from isce3.io.dataset import DatasetReader, DatasetWriter
 from isce3.product import RadarGridParameters
 
@@ -17,7 +17,7 @@ def resample_slc_blocks(
     input_slcs: Sequence[DatasetReader],
     az_offsets_dataset: DatasetReader,
     rg_offsets_dataset: DatasetReader,
-    in_grid: RadarGridParameters,
+    input_radar_grid: RadarGridParameters,
     doppler: LUT2d = LUT2d(),
     block_size_az: int = 1024,
     block_size_rg: int = 1024,
@@ -45,7 +45,7 @@ def resample_slc_blocks(
         A dataset containing range offsets, in pixels. Each offset defines the range
         component of the displacement from a pixel in the output grid to the
         corresponding pixel in the input grid.
-    in_grid : RadarGridParameters
+    input_radar_grid : RadarGridParameters
         The RadarGridParameters for the input data swath.
     doppler : LUT2d, optional
         The doppler lookup table, in Hertz, as a function of azimuth and range. Defaults
@@ -118,7 +118,8 @@ def resample_slc_blocks(
             raise ValueError(err_log)
 
     # Initialize the overall runtime timers, denoted in seconds, for benchmarking.
-    read_timer = 0
+    offsets_read_timer = 0
+    slc_read_timer = 0
     write_timer = 0
     processing_timer = 0
 
@@ -132,15 +133,16 @@ def resample_slc_blocks(
         # These take the time of major I/O and processing tasks by subtracting
         # their beginning time and then adding their end time, which leaves the
         # time committed per task.
-        block_read_timer = 0
+        block_offsets_read_timer = 0
+        block_slc_read_timer = 0
         block_write_timer = 0
         block_processing_timer = 0
 
         # Get the offsets blocks using the slices.
-        block_read_timer -= perf_counter()
+        block_offsets_read_timer -= perf_counter()
         az_offsets_block = np.array(az_offsets_dataset[out_block_slice], np.float64)
         rg_offsets_block = np.array(rg_offsets_dataset[out_block_slice], np.float64)
-        block_read_timer += perf_counter()
+        block_offsets_read_timer += perf_counter()
 
         # Interpret extremely low values as NaN
         block_processing_timer -= perf_counter()
@@ -167,27 +169,20 @@ def resample_slc_blocks(
 
         block_processing_timer += perf_counter()
 
-        # Get the shape of the output block.
-        az_slice, rg_slice = out_block_slice
-        out_block_length = az_slice.stop - az_slice.start
-        out_block_width = rg_slice.stop - rg_slice.start
-        out_block_shape = (out_block_length, out_block_width)
-
-        # The set of resampled processing blocks
-        output_blocks: list[np.ndarray] = []
         # The set of input processing blocks
         input_blocks: list[np.ndarray] = []
 
         # For each input SLC given, acquire a block of data to the in_blocks list
         # and create one in output_blocks that is filled with zeros to populate.
-        block_read_timer -= perf_counter()
+        block_slc_read_timer -= perf_counter()
         for input_slc in input_slcs:
             input_blocks.append(np.array(input_slc[in_slices], dtype=np.complex64))
-            output_block = np.full(
-                out_block_shape, fill_value=fill_value, dtype=np.complex64
-            )
-            output_blocks.append(output_block)
-        block_read_timer += perf_counter()
+        block_slc_read_timer += perf_counter()
+
+        # The set of resampled processing blocks. Initialize to a list of None.
+        # These will eventually be replaced by the resampled blocks output by
+        # the algorithm.
+        output_blocks: list[np.ndarray | None] = [None for _ in input_blocks]
 
         # Get the first positions in azimuth and range on both the resampled block
         # and input block.
@@ -202,35 +197,21 @@ def resample_slc_blocks(
             rg_offsets=rg_offsets_block,
         )
 
-        # First, check that the indices arrays and input array have equal shapes.
-        # We know at this point that output_blocks[0].shape is the size of all the
-        # other output_blocks because it has already passed dataset_shapes_consistent.
-        if (
-            output_blocks[0].shape != azimuth_index_grid.shape
-            or output_blocks[0].shape != range_index_grid.shape
-        ):
-            err_log = (
-                "Output block, azimuth indices block, and range indices block must "
-                "be the same shape. Shapes: "
-                f"Output block: {output_blocks[0].shape} "
-                f"Azimuth indices: {azimuth_index_grid.shape} "
-                f"Range indices: {range_index_grid.shape}"
-            )
-            error_channel.log(err_log)
-            raise ValueError(err_log)
-
         # Run the resampling algorithm on the given blocks.
-        for output_block, input_block in zip(output_blocks, input_blocks):
+        for i in range(len(input_blocks)):
+            input_block = input_blocks[i]
             if not quiet:
                 info_channel.log(
                     f"interpolating to output SLC for block {out_block_slice}..."
                 )
-            resample_to_coords(
-                output_block,
+                # Reporting input block shape for debugging
+                info_channel.log(f"Input block: {in_slices}")
+
+            output_blocks[i] = resample_to_coords(
                 input_block,
                 range_index_grid,
                 azimuth_index_grid,
-                in_grid,
+                input_radar_grid[in_slices],
                 doppler,
                 fill_value,
             )
@@ -245,17 +226,22 @@ def resample_slc_blocks(
         block_write_timer += perf_counter()
 
         # Add the accumulated times per block to the overall totals and report.
-        read_timer += block_read_timer
+        offsets_read_timer += block_offsets_read_timer
+        slc_read_timer += block_slc_read_timer
         write_timer += block_write_timer
         processing_timer += block_processing_timer
         if not quiet:
-            info_channel.log(f"Block I/O read time (sec): {block_read_timer}")
+            info_channel.log(f"Block SLC I/O read time (sec): {block_slc_read_timer}")
+            info_channel.log(
+                f"Block Offsets I/O read time (sec): {block_offsets_read_timer}"
+            )
             info_channel.log(f"Block I/O write time (sec): {block_write_timer}")
             info_channel.log(f"Block Processing time (sec): {block_processing_timer}")
 
     # Report the overall totals and return.
     if not quiet:
-        info_channel.log(f"Total I/O read time (sec): {read_timer}")
+        info_channel.log(f"Total SLC I/O read time (sec): {slc_read_timer}")
+        info_channel.log(f"Total Offsets I/O read time (sec): {offsets_read_timer}")
         info_channel.log(f"Total I/O write time (sec): {write_timer}")
         info_channel.log(f"Total Processing time (sec): {processing_timer}")
 
@@ -358,3 +344,81 @@ def offsets_to_indices(
     rg_indices += rg_offsets + rg_grid_offset
 
     return az_indices, rg_indices
+
+
+def resample_to_coords(
+    input_data_block: np.ndarray,
+    range_input_indices: np.ndarray,
+    azimuth_input_indices: np.ndarray,
+    input_radar_grid: RadarGridParameters,
+    native_doppler: LUT2d,
+    fill_value: np.complex64 = (np.nan + 1.0j * np.nan),
+) -> np.ndarray:
+    """
+    Interpolate input SLC block into the index values of the output block.
+
+    Parameters
+    ----------
+    input_data_block : numpy.ndarray (complex64)
+        Input SLC array in secondary coordinates.
+    range_input_indices : numpy.ndarray (float64)
+        The range (radar-coordinates x) index of the output pixels in the input
+        grid.
+    azimuth_input_indices : numpy.ndarray (float64)
+        The azimuth (radar-coordinates y) index of the output pixels in the input
+        grid.
+    input_radar_grid : isce3.product.RadarGridParameters
+        Radar grid parameters of the input SLC data.
+    native_doppler : isce3.core.LUT2d
+        2D LUT describing the native doppler of the input SLC image, in Hz.
+    fill_value : complex
+        The value to fill out-of-bounds pixels with. Defaults to NaN + j*NaN.
+
+    Returns
+    -------
+    resampled_block : numpy.ndarray (complex64)
+        The resampled data.
+    """
+    error_channel = journal.error("resample_slc.resample_to_coords")
+
+    # First, check that the indices arrays have equal shapes.
+    if azimuth_input_indices.shape != range_input_indices.shape:
+        err_log = (
+            "Azimuth indices block and range indices block must "
+            "be the same shape. Shapes: "
+            f"Azimuth indices: {azimuth_input_indices.shape} "
+            f"Range indices: {range_input_indices.shape}"
+        )
+        error_channel.log(err_log)
+        raise ValueError(err_log)
+
+    # Ensure that all of the input data blocks meet the requirements of the
+    # _resample_to_coords pybind (correct dtype, with flags C_CONTIGUOUS and WRITABLE)
+    # These function calls will return conforming copies of the data blocks if they
+    # are not already conforming.
+    input_data_block = np.require(
+        input_data_block, dtype=np.complex64, requirements=["C"]
+    )
+    range_input_indices = np.require(
+        range_input_indices, dtype=np.float64, requirements=["C"]
+    )
+    azimuth_input_indices = np.require(
+        azimuth_input_indices, dtype=np.float64, requirements=["C"]
+    )
+    
+    # The shape of the output block is the same as that of the indices shapes.
+    output_block = np.full(
+        range_input_indices.shape, fill_value=fill_value, dtype=np.complex64
+    )
+
+    _resample_to_coords(
+        output_data_block=output_block,
+        input_data_block=input_data_block,
+        range_input_indices=range_input_indices,
+        azimuth_input_indices=azimuth_input_indices,
+        in_radar_grid=input_radar_grid,
+        native_doppler=native_doppler,
+        fill_value=fill_value,
+    )
+
+    return output_block

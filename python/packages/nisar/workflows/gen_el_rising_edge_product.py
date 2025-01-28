@@ -9,7 +9,7 @@ import os
 import time
 import argparse as argp
 import numpy as np
-from datetime import datetime
+from datetime import datetime, timezone
 
 from nisar.products.readers.Raw import Raw
 from nisar.products.readers.antenna import AntennaParser
@@ -194,7 +194,7 @@ def gen_el_rising_edge_product(args):
             dt_utc_last = dt2str(az_dtm[-1])
             # get current time w/o fractional seconds in "%Y%m%dT%H%M%S" format
             # used as part of CSV product filename
-            dt_utc_cur = datetime.now().strftime('%Y%m%dT%H%M%S')
+            dt_utc_cur = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S')
 
             # naming convention of CSV file and product spec is defined in Doc:
             # See reference [1]
@@ -214,9 +214,9 @@ def gen_el_rising_edge_product(args):
                 # report edge-only product (null=0) w/ quality checking
                 # afterwards
                 for nn, roll in enumerate(el_ofs):
-                    # Simply report the first (rising edge) EL angles and
+                    # Simply report the last (rising edge) EL angles and
                     # slant ranges.
-                    el_true_deg = np.rad2deg(el_fl[nn, 0])
+                    el_true_deg = np.rad2deg(el_fl[nn, 1])
 
                     # Quality factor is defined by boolean product of valid
                     # range bin mask and the convergence in rising edge cost
@@ -228,7 +228,7 @@ def gen_el_rising_edge_product(args):
                     fid_csv.write(
                         '{:s},{:1s},{:d},{:.3f},{:.3f},{:.6f}\n'.format(
                             az_dtm[nn].isoformat_usec(), sar_band_char, 0,
-                            sr_fl[nn, 0], el_true_deg, quality_factor
+                            sr_fl[nn, 1], el_true_deg, quality_factor
                             )
                         )
                     # report possible invalid items/Rows

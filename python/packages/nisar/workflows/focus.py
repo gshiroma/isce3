@@ -7,8 +7,11 @@ import h5py
 from itertools import chain
 import json
 import logging
+import math
 import os
-from nisar.antenna import AntennaPattern
+from nisar.antenna import AntennaPattern, get_calib_range_line_idx
+from nisar.noise.noise_estimation_from_raw import (
+    est_noise_power_in_focus, NoiseEquivalentBackscatterProduct)
 from nisar.mixed_mode import (PolChannel, PolChannelSet, Band,
     find_overlapping_channel)
 from nisar.products.readers.antenna import AntennaParser
@@ -17,18 +20,21 @@ from nisar.products.readers.Raw import Raw, open_rrsd
 from nisar.products.readers.rslc_cal import (RslcCalibration,
     parse_rslc_calibration, get_scale_and_delay, check_cal_validity_dates)
 from nisar.products.writers import SLC
+from nisar.products.writers.SLC import fill_partial_granule_id
 from isce3.core.types import (complex32, to_complex32, read_c4_dataset_as_c8,
     truncate_mantissa)
 import nisar
 import numpy as np
 import isce3
 from isce3.core import DateTime, TimeDelta, LUT2d, Attitude, Orbit
+from isce3.focus import make_los_luts, fill_gaps, make_cal_luts, Notch
 from isce3.geometry import los2doppler
 from isce3.io.gdal import Raster, GDT_CFloat32
 from isce3.product import RadarGridParameters
 from nisar.workflows.yaml_argparse import YamlArgparse
 import nisar.workflows.helpers as helpers
 from ruamel.yaml import YAML
+import shapely
 import sys
 import tempfile
 from typing import Union, Optional, Callable, Iterable, overload
@@ -70,6 +76,8 @@ def dump_config(cfg: Struct, stream):
         for k in d:
             if isinstance(d[k], Struct):
                 d[k] = struct2dict(d[k])
+            elif isinstance(d[k], list):
+                d[k] = [struct2dict(v) if isinstance(v, Struct) else v for v in d[k]]
         return d
     parser = YAML()
     parser.indent = 4
@@ -303,8 +311,6 @@ def get_dem(cfg: Struct):
     fn = cfg.dynamic_ancillary_file_group.dem_file
     if fn:
         log.info(f"Loading DEM {fn}")
-        log.info("Out-of-bound DEM values will be set to "
-                 f"{cfg.processing.dem.reference_height} (m).")
         dem.load_dem(RasterIO(fn))
         dem.compute_min_max_mean_height()
     else:
@@ -391,6 +397,15 @@ def make_doppler_lut(rawfiles: list[str],
     # Now do the actual calculations.
     wvl = isce3.core.speed_of_light / fc
     epoch_in, t, r = get_total_grid(rawfiles, azimuth_spacing, range_spacing)
+
+    # If timespan is too small, only one time may be provided, causing the LUT
+    # construction to fail. Fall back to t ± Δt/2 to preserve az spacing.
+    # Also clip to orbit start/end times if the orbit timespan is too small.
+    if len(t) == 1:
+        tmin = max(t[0] - azimuth_spacing / 2, orbit.start_time)
+        tmax = min(t[0] + azimuth_spacing / 2, orbit.end_time)
+        t = [tmin, tmax]
+
     t = convert_epoch(t, epoch_in, epoch)
     dop = np.zeros((len(t), len(r)))
 
@@ -430,11 +445,20 @@ def make_doppler_lut(rawfiles: list[str],
     return fc, lut
 
 
-def make_doppler(cfg: Struct, epoch: Optional[DateTime] = None):
+def make_doppler(cfg: Struct, *, epoch: Optional[DateTime] = None,
+        orbit: Optional[Orbit] = None, attitude: Optional[Attitude] = None,
+        dem: Optional[DEMInterpolator] = None):
+    """
+    Generate Doppler LUT based on RSLC config file.  Optional inputs can
+    be used to avoid unnecessarily loading files again.
+    """
     log.info("Generating Doppler LUT from pointing")
-    orbit = get_orbit(cfg)
-    attitude = get_attitude(cfg)
-    dem = get_dem(cfg)
+    if orbit is None:
+        orbit = get_orbit(cfg)
+    if attitude is None:
+        attitude = get_attitude(cfg)
+    if dem is None:
+        dem = get_dem(cfg)
     opt = cfg.processing.doppler
     az = np.radians(opt.azimuth_boresight_deg)
     rawfiles = cfg.input_file_group.input_file_path
@@ -603,18 +627,35 @@ def make_output_grid(cfg: Struct,
     log.info(f"Approximate fully focusable time interval is [{dt0}, {dt1}]")
     log.info(f"Approximate fully focusable range interval is [{r0z}, {r1z}]")
 
-    # TODO snap start time to standard interval
-
+    # Save typing when handling defaults.
     p = cfg.processing.output_grid
+
+    # Usually for NISAR grid PRF should be specified as 1520 in the runconfig.
+    # If not then take max() as most conservative choice.
+    prf = p.output_prf if (p.output_prf is not None) else max_prf
+
+    # Snap default start time & range to integer grid.
+    # NOTE Current defaults mean range_snap_interval is never None, but cover
+    # that scenario in case somebody changes the default under our nose.  The
+    # reason for the non-null default is that with a dual-band system like NISAR
+    # you'd want to choose a default range snap based on knowledge of both
+    # subbands, which would require some refactoring.  For example, you'd want
+    # to snap the frequencyA grid to the coarser frequencyB spacing.
+    dt0 = isce3.math.snap_datetime(dt0,
+        p.time_snap_interval if p.time_snap_interval is not None else 1 / prf)
+    t0z = (dt0 - epoch).total_seconds()
+    r0z = isce3.math.snap(r0z,
+        p.range_snap_interval if p.range_snap_interval is not None else dr)
+
+    log.info(f"Snapped default start time to {dt0}")
+    log.info(f"Snapped default start range to {r0z} m")
+
     if p.start_time:
         t0z = (DateTime(p.start_time) - epoch).total_seconds()
     if p.end_time:
         t1z = (DateTime(p.end_time) - epoch).total_seconds()
     r0z = p.start_range if (p.start_range is not None) else r0z
     r1z = p.end_range if (p.end_range is not None) else r1z
-    # Usually for NISAR grid PRF should be specified as 1520 in the runconfig.
-    # If not then take max() as most conservative choice.
-    prf = p.output_prf if (p.output_prf is not None) else max_prf
 
     nr = round((r1z - r0z) / dr)
     nt = round((t1z - t0z) * prf)
@@ -887,7 +928,7 @@ class BackgroundWriter(isce3.io.BackgroundWriter):
         self.dset.write_direct(self.encode(z), dest_sel=block)
 
 
-def get_dataset_creation_options(cfg: Struct) -> dict:
+def get_dataset_creation_options(cfg: Struct, shape: tuple[int, int]) -> dict:
     """
     Get h5py keyword arguments needed for image dataset creation.
 
@@ -895,6 +936,8 @@ def get_dataset_creation_options(cfg: Struct) -> dict:
     ----------
     cfg : Struct
         RSLC runconfig data. Only reads `cfg.output` group.
+    shape : tuple[int, int]
+        Shape of dataset.  Used to determine upper bounds on chunk sizes.
 
     Returns
     -------
@@ -911,7 +954,7 @@ def get_dataset_creation_options(cfg: Struct) -> dict:
     # default value is not null, we need another non-null sentinel value to
     # indicate this.  Choose [-1, -1], which implies one full-sized chunk.
     if g.chunk_size != [-1, -1]:
-        opts["chunks"] = tuple(g.chunk_size)
+        opts["chunks"] = tuple(min(dims) for dims in zip(g.chunk_size, shape))
     if g.compression_enabled:
         if opts["chunks"] is None:
             raise ValueError("Chunk size cannot be None when "
@@ -1053,9 +1096,9 @@ def process_rfi(cfg: Struct, raw_data: np.ndarray,
             raise ValueError("Requested RFI mitigation but disabled detection.")
         log.info("Configured to skip RFI processing")
         return raw_data, np.nan
-    if opt.mitigation_algorithm != "ST-EVD":
-        raise NotImplementedError("Only ST-EVD RFI algorithm is supported")
-    msg = "Running radio frequency interference (RFI) detection"
+    if opt.mitigation_algorithm != "ST-EVD" and opt.mitigation_algorithm != "FDNF":
+        raise NotImplementedError("Only ST-EVD and FDNF RFI algorithms are supported")
+    msg = f"Running {opt.mitigation_algorithm} radio frequency interference (RFI) detection"
     if opt.mitigation_enabled:
         msg += " and mitigation"
     log.info(msg)
@@ -1070,21 +1113,39 @@ def process_rfi(cfg: Struct, raw_data: np.ndarray,
         raw_data_mitigated = np.memmap(fd, mode="w+", shape=raw_data.shape,
                            dtype=np.complex64)
 
-    threshold_params = isce3.signal.rfi_detection_evd.ThresholdParams(
-        opt.threshold_hyperparameters.x, opt.threshold_hyperparameters.y)
+    if opt.mitigation_algorithm == "ST-EVD":
+        opt_evd = opt.slow_time_evd
+        threshold_params = isce3.signal.rfi_detection_evd.ThresholdParams(
+            opt_evd.threshold_hyperparameters.x, opt_evd.threshold_hyperparameters.y)
 
-    rfi_likelihood = isce3.signal.rfi_process_evd.run_slow_time_evd(
-        raw_data,
-        opt.cpi_length,
-        opt.max_emitters,
-        num_max_trim=opt.num_max_trim,
-        num_min_trim=opt.num_min_trim,
-        max_num_rfi_ev=opt.max_num_rfi_ev,
-        num_rng_blks=opt.num_range_blocks,
-        threshold_params=threshold_params,
-        num_cpi_tb=opt.num_cpi_per_threshold_block,
-        mitigate_enable=opt.mitigation_enabled,
-        raw_data_mitigated=raw_data_mitigated)
+        rfi_likelihood = isce3.signal.rfi_process_evd.run_slow_time_evd(
+            raw_data,
+            opt_evd.cpi_length,
+            opt_evd.max_emitters,
+            num_max_trim=opt_evd.num_max_trim,
+            num_min_trim=opt_evd.num_min_trim,
+            max_num_rfi_ev=opt_evd.max_num_rfi_ev,
+            num_rng_blks=opt.num_range_blocks,
+            threshold_params=threshold_params,
+            num_cpi_tb=opt_evd.num_cpi_per_threshold_block,
+            mitigate_enable=opt.mitigation_enabled,
+            raw_data_mitigated=raw_data_mitigated)
+    else:
+        opt_fnf = opt.freq_notch_filter
+        rfi_likelihood = isce3.signal.rfi_freq_null.run_freq_notch(
+            raw_data,
+            opt_fnf.num_pulses_az,
+            num_rng_blks=opt.num_range_blocks,
+            az_winsize=opt_fnf.az_winsize,
+            rng_winsize=opt_fnf.rng_winsize,
+            trim_frac=opt_fnf.trim_frac,
+            pvalue_threshold=opt_fnf.pvalue_threshold,
+            cdf_threshold=opt_fnf.cdf_threshold,
+            nb_detect=opt_fnf.nb_detect,
+            wb_detect=opt_fnf.wb_detect,
+            mitigate_enable=opt.mitigation_enabled,
+            raw_data_mitigated=raw_data_mitigated)
+
 
     log.info(f"RFI likelihood = {rfi_likelihood}")
     return raw_data_mitigated, rfi_likelihood
@@ -1121,18 +1182,6 @@ def require_ephemeris_overlap(ephemeris: Ephemeris,
     raise ValueError(msg)
 
 
-def require_frequency_stability(rawlist: Iterable[Raw]) -> None:
-    """Check that center frequency doesn't depend on TX polarization since
-    this is assumed in RSLC Doppler metadata.
-    """
-    for raw in rawlist:
-        for frequency, polarizations in raw.polarizations.items():
-            fc_set = {raw.getCenterFrequency(frequency, pol[0])
-                for pol in polarizations}
-            if len(fc_set) > 1:
-                raise NotImplementedError("TX frequency agility not supported")
-
-
 def require_constant_look_side(rawlist: Iterable[Raw]) -> str:
     side_set = {raw.identification.lookDirection for raw in rawlist}
     if len(side_set) > 1:
@@ -1143,7 +1192,9 @@ def require_constant_look_side(rawlist: Iterable[Raw]) -> str:
 def get_common_mode(rawlist: list[Raw]) -> PolChannelSet:
     assert len(rawlist) > 0
     modes = [PolChannelSet.from_raw(raw) for raw in rawlist]
-    return reduce(lambda mode1, mode2: mode1.intersection(mode2), modes)
+    common = reduce(lambda mode1, mode2: mode1.intersection(mode2), modes)
+    # Make sure we regularize even if only one mode.
+    return common.regularized()
 
 
 def get_bands(mode: PolChannelSet) -> dict[str, Band]:
@@ -1204,7 +1255,7 @@ def prep_rangecomp(cfg, raw, raw_grid, channel_in, channel_out, cal=None):
     log.info(f"Chirp length = {len(chirp)}")
     win_kind, win_shape = check_window_input(cfg.processing.range_window)
 
-    _, fs, K, _ = raw.getChirpParameters(channel_in.freq_id, tx)
+    fc, fs, K, _ = raw.getChirpParameters(channel_in.freq_id, tx)
 
     if channel_in.band != channel_out.band:
         log.info("Filtering chirp for mixed-mode processing.")
@@ -1261,6 +1312,12 @@ def prep_rangecomp(cfg, raw, raw_grid, channel_in, channel_out, cal=None):
     na = cfg.processing.rangecomp.block_size.azimuth
     rc = isce3.focus.RangeComp(chirp, nr, maxbatch=na, mode=rcmode)
 
+    for notch_struct in cfg.processing.rangecomp.notches:
+        notch = Notch(**vars(notch_struct))
+        log.info("Applying notch %s", notch)
+        notch = notch.normalized(fs, fc)
+        rc.apply_notch(notch.frequency, notch.bandwidth)
+
     # Rangecomp modifies range grid.  Also update wavelength.
     # Careful that common-band filter delay is only half the filter
     # length but RangeComp bookkeeps the entire length of the ref. function.
@@ -1308,16 +1365,14 @@ def get_calibration(cfg: Struct, bandwidth: Optional[float] = None) -> RslcCalib
 def get_identification_data_from_runconfig(cfg: Struct) -> dict:
     """
     Populate a dict containing the keys
-        {"product_version", "processing_type", "mission_id",
-        "processing_center", "granule_id", "track", "frame"}
+        {"product_version", "processing_type", "composite_release_id",
+        "mission_id", "processing_center", "track", "frame", "product_doi"}
     using data from an RSLC runconfig.
     """
-    keys = ["product_version", "processing_type", "mission_id",
-        "processing_center"]
+    keys = ["product_version", "processing_type", "composite_release_id",
+        "mission_id", "processing_center", "product_doi"]
     exe = vars(cfg.primary_executable)
     d = {key: exe[key] for key in keys}
-    # TODO populate fields in partial granule ID
-    d["granule_id"] = exe["partial_granule_id"]
     d["track"] = cfg.geometry.relative_orbit_number
     d["frame"] = cfg.geometry.frame_number
     return d
@@ -1330,16 +1385,16 @@ def get_identification_data_from_raw(rawlist: list[Raw]) -> dict:
     by combining the relevant identification metadata keys from all raw data
     files in the provided list.
     """
-    def parse_urgent(raw: Raw) -> bool:
-        return raw.identification.isUrgentObservation.lower() == "true"
-
     return dict(
         # L0B always have a single entry
         planned_datatake_id = [raw.identification.plannedDatatake[0]
             for raw in rawlist],
         planned_observation_id = [raw.identification.plannedObservation[0]
             for raw in rawlist],
-        is_urgent = any(parse_urgent(raw) for raw in rawlist)
+        is_urgent = any(raw.identification.isUrgentObservation
+            for raw in rawlist),
+        is_joint = any(raw.identification.isJointObservation
+            for raw in rawlist)
     )
 
 
@@ -1396,6 +1451,130 @@ def reduce_swath_parameters(rawlist: list[Raw],
     return min(prfs), max(bandwidths), max(center_freqs)
 
 
+def get_output_range_spacings(rawlist: list[Raw], common_mode: PolChannelSet):
+    """
+    Get the output RSLC range spacing associated with each subband.  The
+    spacings will be chosen from among the range spacings in the input L0B data.
+
+    For example, if we do mixed mode processing of 20+5 and 40+5 data then the
+    common mode will be 20+5 and the returned range spacings will be the same as
+    the 20+5 L0B data.
+
+    Usually NISAR data are oversampled by a factor of 1.2, but this is not the
+    case for 77 MHz modes and may not be the case for other sensors.
+
+    Parameters
+    ----------
+    rawlist : list[Raw]
+        List of input L0B product readers.
+    common_mode : PolChannelSet
+        Set of PolChannel objects that will be generated in the RSLC.
+
+    Returns
+    -------
+    range_spacings : dict[str, float]
+        Range spacing in m for each subband.
+    """
+    # Get a PolChannel associated with the largest output bandwidth, e.g., a
+    # 20 MHz channel if we're generating 20+5 output.  Also want the smallest
+    # bandwidth channel.  If these are equal, e.g., 20+20 or 5+5 mode, make
+    # sure we get one from each frequency.
+    channels = sorted(common_mode,
+        key = lambda channel: (channel.band.width, channel.freq_id))
+    big_channel = channels[-1]
+    small_channel = channels[0]
+    # (These will be the same if there's no secondary band).
+
+    range_spacings = dict()
+    for channel in (small_channel, big_channel):
+        # Find the raw data PolChannels associated with that output, e.g.,
+        # corresponding to [20, 40, 20] MHz bands.
+        raw_spacings = []
+        for raw in rawlist:
+            raw_channel = find_overlapping_channel(raw, channel)
+            freq, tx = raw_channel.freq_id, raw_channel.pol[0]
+            # Get the range spacing (sample rate) for the associated raw data.
+            raw_spacings.append(raw.getRanges(freq, tx).spacing)
+
+        # We're filtering everything down to the coarsest mode, so return the
+        # max of these spacings, e.g., the one for bw=20 MHz
+        # (where usually fs=24 MHz).
+        range_spacings[channel.freq_id] = max(raw_spacings)
+
+    return range_spacings
+
+
+def get_focused_sub_swaths(rawlist, out_chan, grid, orbit, doppler, dem, azres,
+                           rdr2geo_params=dict(), geo2rdr_params=dict(),
+                           ignore_failure=False):
+    """
+    Determine fully-focused regions of the image in a format suitable for
+    populating the validSamplesSubSwathX RSLC datasets.
+
+    Parameters
+    ----------
+    rawlist : list[Raw]
+        List of raw data files (observations) that will be processed.
+    out_chan : PolChannel
+        Desired channel to process (will be matched with available raw data
+        using mixed-mode logic).
+    grid : RadarGridParameters
+        Grid for focused image (zero-Doppler).
+    orbit : Orbit
+        Trajectory of antenna phase center.  Its time span must cover the entire
+        collection of raw data plus any reskew time offset between the native-
+        and zero-Doppler radar coordinate systems.
+    doppler : LUT2d
+        Doppler centroid of raw data, in Hz.
+    dem : DEMInterpolator
+        Digital elevation model.
+    azres : float
+        Processed azimuth resolution, in meters.
+    rdr2geo_params : dict
+        Parameters for rdr2geo_bracket
+    geo2rdr_params : dict
+        Parameters for geo2rdr_bracket
+    ignore_failure : bool
+        If set to True and isce3.focus.get_focused_sub_swaths fails for any
+        reason, then a mask corresponding to all-pixels-valid will be returned.
+        Otherwise an exception will be raised on failures.  This can be useful
+        for datasets where the orbit data covers all the raw data but without
+        enough extra for the reskew to the zero-Doppler image grid.
+
+    Returns
+    -------
+    swaths : numpy.ndarray[np.uint32]
+        Array of [start, stop) valid data regions, shape = (nswath, npulse, 2)
+        where nswath is the number of valid sub-swaths and npulse is the length
+        of the focused image grid.
+    """
+    raw_bbox_lists = []
+    chirp_durations = []
+    for raw in rawlist:
+        raw_chan = find_overlapping_channel(raw, out_chan)
+
+        freq = raw_chan.freq_id
+        bboxes = raw.getSubSwathBboxes(freq, epoch=orbit.reference_epoch)
+        raw_bbox_lists.append(bboxes)
+
+        txpol = raw_chan.pol[0]
+        chirp_durations.append(raw.getChirpParameters(freq, txpol)[3])
+
+    try:
+        swaths = isce3.focus.get_focused_sub_swaths(raw_bbox_lists,
+            chirp_durations, orbit, doppler, azres, grid, dem=dem,
+            rdr2geo_params=rdr2geo_params, geo2rdr_params=geo2rdr_params)
+    except Exception as e:
+        if ignore_failure:
+            log.error("Failed to calculate valid subswath masks!  "
+                "The entire radar grid will be assumed valid.")
+            swaths = np.zeros((1, grid.length, 2), dtype=np.uint32)
+            swaths[..., 1] = grid.width
+        else:
+            raise e
+    return swaths
+
+
 def focus(runconfig, runconfig_path=""):
     # Strip off two leading namespaces.
     cfg = runconfig.runconfig.groups
@@ -1412,7 +1591,6 @@ def focus(runconfig, runconfig_path=""):
     scale = cfg.processing.encoding_scale_factor
     antparser, instparser = get_antpat_inst(cfg)
 
-    require_frequency_stability(rawlist)
     common_mode = get_common_mode(rawlist)
     log.info(f"output mode = {common_mode}")
 
@@ -1439,22 +1617,28 @@ def focus(runconfig, runconfig_path=""):
     log.info("Verifying ephemeris covers time span of raw data.")
     require_ephemeris_overlap(orbit, t0, t1, "Orbit")
     require_ephemeris_overlap(attitude, t0, t1, "Attitude")
-    fc_ref, dop_ref = make_doppler(cfg, epoch=grid_epoch)
+    fc_ref, dop_ref = make_doppler(cfg, epoch=grid_epoch, orbit=orbit,
+        attitude=attitude, dem=dem)
 
     max_chirplen = get_max_chirp_duration(cfg) * isce3.core.speed_of_light / 2
-    max_bandwidth = max([channel.band.width for channel in common_mode])
-    dr = isce3.core.speed_of_light / (2 * 1.2 * max_bandwidth)
+    range_spacings = get_output_range_spacings(rawlist, common_mode)
+    dr = min(range_spacings.values())
     max_prf = get_max_prf(rawlist)
     side = require_constant_look_side(rawlist)
     ref_grid = make_output_grid(cfg, grid_epoch, t0, t1, max_prf, r0, r1, dr,
                                 side, orbit, fc_ref, dop_ref, max_chirplen, dem)
+
+    wvl_ref = isce3.core.speed_of_light / fc_ref
+    el_lut, inc_lut, _ = make_los_luts(orbit, attitude, side, dop_ref, wvl_ref,
+                                       dem, get_rdr2geo_params(cfg))
+    beta0_lut, sigma0_lut, gamma0_lut = make_cal_luts(inc_lut)
 
     # Frequency A/B specific setup for output grid, doppler, and blocks.
     ogrid, dop, blocks_bounds = dict(), dict(), dict()
     for frequency, band in get_bands(common_mode).items():
         # Ensure aligned grids between A and B by just using an integer skip.
         # Sample rate of A is always an integer multiple of B for NISAR.
-        rskip = int(np.round(max_bandwidth / band.width))
+        rskip = int(np.round(range_spacings[frequency] / dr))
         ogrid[frequency] = ref_grid[:, ::rskip]
         ogrid[frequency].wavelength = isce3.core.speed_of_light / band.center
         log.info("Output grid %s is %s", frequency, ogrid[frequency])
@@ -1478,18 +1662,32 @@ def focus(runconfig, runconfig_path=""):
 
     product = cfg.primary_executable.product_type
     log.info(f"Creating output {product} product {output_slc_path}")
-    slc = SLC(output_slc_path, mode="w", product=product)
-    slc.set_orbit(orbit) # TODO acceleration, orbitType
+    helpers.validate_fs_page_size(cfg.output.fs_page_size, cfg.output.chunk_size)
+    slc = SLC(output_slc_path, mode="w", product=product,
+        fs_strategy=cfg.output.fs_strategy,
+        fs_page_size=cfg.output.fs_page_size)
+    slc.set_orbit(orbit)
     slc.set_attitude(attitude, orbit)
-    og = next(iter(ogrid.values()))
+
     id_data = get_identification_data_from_runconfig(cfg)
     id_data.update(get_identification_data_from_raw(rawlist))
+
+    og = next(iter(ogrid.values()))
+    start_time = og.sensing_datetime(0)
+    end_time = og.sensing_datetime(og.length - 1)
+    granule_id, is_full_frame, overlap = fill_partial_granule_id(
+        cfg.primary_executable.partial_granule_id, common_mode, start_time,
+        end_time, shapely.from_geojson(cfg.geometry.track_frame_polygon),
+        shapely.from_wkt(polygon),
+        coverage_threshold = cfg.geometry.full_coverage_threshold_percent / 100)
+
     is_dithered=any(raw.isDithered(raw.frequencies[0]) for raw in rawlist)
     slc.copy_identification(rawlist[0], polygon=polygon,
-        start_time=og.sensing_datetime(0),
-        end_time=og.sensing_datetime(og.length - 1),
+        start_time=start_time, end_time=end_time,
         frequencies=common_mode.frequencies,
-        is_dithered=is_dithered,
+        is_full_frame=is_full_frame, frame_coverage=overlap,
+        coverage_threshold=cfg.geometry.full_coverage_threshold_percent / 100,
+        is_dithered=is_dithered, granule_id=granule_id,
         is_mixed_mode=any(PolChannelSet.from_raw(raw) != common_mode
             for raw in rawlist),
         **id_data)
@@ -1521,22 +1719,30 @@ def focus(runconfig, runconfig_path=""):
 
         # Support nominal != processed parameters for mixed-mode case.
         pols = [chan.pol for chan in common_mode if chan.freq_id == frequency]
+        chan = PolChannel(frequency, pols[0], band)
         acquired_prf, acquired_bw, acquired_fc = reduce_swath_parameters(
-            rawlist, PolChannel(frequency, pols[0], band))
+            rawlist, chan)
+
+        log.info("computing valid swaths")
+        valid_swaths = get_focused_sub_swaths(rawlist, chan, og, orbit,
+            dop[frequency], dem, azres, rdr2geo_params=get_rdr2geo_params(cfg),
+            geo2rdr_params=get_geo2rdr_params(cfg), ignore_failure=False)
 
         slc.update_swath(og, orbit, band.width, frequency,  azimuth_bandwidth,
-            acquired_prf, acquired_bw, acquired_fc),
+            acquired_prf, acquired_bw, acquired_fc, valid_swaths)
         cal = get_calibration(cfg, band.width)
         slc.set_calibration(cal, frequency)
 
         # add calibration section for each polarization
         for pol in pols:
             slc.add_calibration_section(frequency, pol, og.sensing_times,
-                                        orbit.reference_epoch, og.slant_ranges)
+                                        orbit.reference_epoch, og.slant_ranges,
+                                        beta0_lut, sigma0_lut, gamma0_lut)
+
 
     freq = next(iter(get_bands(common_mode)))
     slc.set_geolocation_grid(orbit, ogrid[freq], dop[freq],
-                             epsg=4326, dem=dem,
+                             epsg=cfg.processing.metadata_cube_epsg, dem=dem,
                              **get_geo2rdr_params(cfg, orbit))
 
     # Scratch directory for intermediate outputs
@@ -1550,6 +1756,19 @@ def focus(runconfig, runconfig_path=""):
     dump_height = (cfg.processing.debug_dump_height and
                    not cfg.processing.delete_tempfiles)
 
+    if cfg.processing.dem.require_full_coverage:
+        log.info("Checking DEM coverage.")
+        fraction_outside = isce3.geometry.compute_dem_overlap(polygon, dem,
+            plot=temp("_dem_overlap.png"))
+        if fraction_outside > 0.0:
+            percent_outside = f"{100 * fraction_outside:.1f}%"
+            raise ValueError(f"{percent_outside} of the swath falls outside of "
+                "the area covered by the DEM.  If you enabled tempfiles you "
+                "can find a plot in the scratch directory.  You can disable "
+                "this coverage check by setting dem.require_full_coverage to "
+                "False in the runconfig.groups.processing section.")
+
+
     rfi_results = defaultdict(list)
 
     # main processing loop
@@ -1557,10 +1776,15 @@ def focus(runconfig, runconfig_path=""):
         frequency, pol = channel_out.freq_id, channel_out.pol
         log.info(f"Processing frequency{channel_out.freq_id} {channel_out.pol}")
         acdata = slc.create_image(frequency, pol, shape=ogrid[frequency].shape,
-            **get_dataset_creation_options(cfg))
+            **get_dataset_creation_options(cfg, ogrid[frequency].shape))
         deramp_ac = get_range_deramp(ogrid[frequency])
         writer = BackgroundWriter(scale * deramp_ac, acdata,
             cfg.output.data_type, mantissa_nbits=cfg.output.mantissa_nbits)
+
+        # store noise powers and its azimuth times in containers
+        # over all Raw files for a common band and pol.
+        azt_noise_all = []
+        pow_noise_all = []
 
         for raw in rawlist:
             channel_in = find_overlapping_channel(raw, channel_out)
@@ -1594,6 +1818,9 @@ def focus(runconfig, runconfig_path=""):
             log.info(f"Decoding raw data to memory map {rawfd.name}.")
             raw_mm = np.memmap(rawfd, mode="w+", shape=raw_grid.shape,
                                dtype=np.complex64)
+            if cfg.processing.zero_fill_gaps:
+                log.info("Will fill gaps between sub-swaths with zeros.")
+
             for i in range(0, raw_grid.shape[0], na):
                 pulse = i + pulse_begin
                 nblock = min(na, rawdata.shape[0] - pulse, raw_mm.shape[0] - i)
@@ -1602,6 +1829,8 @@ def focus(runconfig, runconfig_path=""):
                 z = rawdata[block_in]
                 # Remove NaNs.  TODO could incorporate into gap mask.
                 z[np.isnan(z)] = 0.0
+                if cfg.processing.zero_fill_gaps:
+                    fill_gaps(z, swaths[:, pulse:pulse+nblock, :], 0.0)
                 raw_mm[block_out] = z
 
             raw_clean, rfi_likelihood = process_rfi(cfg, raw_mm, temp)
@@ -1620,22 +1849,137 @@ def focus(runconfig, runconfig_path=""):
                                     dop[frequency], fn=regridfd,
                                     L=cfg.processing.nominal_antenna_size.azimuth)
 
-            del raw_clean
 
             # Do range compression.
             rc, rc_grid, shift, deramp_rc = prep_rangecomp(cfg, raw, raw_grid,
                                         channel_in, channel_out, cal)
+
+            # Precompute antenna patterns at downsampled spacing
+            if cfg.processing.is_enabled.eap:
+                antpat = AntennaPattern(raw, dem, antparser,
+                                        instparser, orbit, attitude,
+                                        el_lut=el_lut)
+
+                log.info("Precomputing antenna patterns")
+                i = np.arange(rc_grid.shape[0])
+                ti = np.array(rc_grid.sensing_start + i / rc_grid.prf)
+
+                spacing = cfg.processing.elevation_antenna_pattern.spacing
+                span = rc_grid.slant_ranges[-1] - rc_grid.slant_ranges[0]
+                nbins = math.ceil(span / spacing) + 1
+                pat_ranges = isce3.core.Linspace(rc_grid.slant_ranges[0], spacing, nbins)
+                patterns = antpat.form_pattern(
+                    ti, pat_ranges, nearest=not uniform_pri, txrx_pols=[pol])
 
             fd = temp("_rc.c8")
             log.info(f"Writing range compressed data to {fd.name}")
             rcfile = Raster(fd.name, rc.output_size, rc_grid.shape[0], GDT_CFloat32)
             log.info(f"Range compressed data shape = {rcfile.data.shape}")
 
-            # And do radiometric corrections at the same time.
-            if cfg.processing.is_enabled.eap:
-                antpat = AntennaPattern(raw, dem, antparser,
-                                        instparser, orbit, attitude)
+            # Compute NESZ if there exist noise-only range lines
+            # get noise only range line indexes within processing interval
+            cal_path_mask = raw.getCalType(
+                channel_in.freq_id, pol[0])[pulse_begin:pulse_end]
+            _, _, _, idx_noise = get_calib_range_line_idx(cal_path_mask)
 
+            # form output slant range vector for all noise products
+            if cfg.processing.noise_equivalent_backscatter.fill_nan_ends:
+                nrgb_noise = cfg.processing.noise_equivalent_backscatter.num_range_block + 2
+            else:
+                log.warning('Noise powers will be non-uniform in range '
+                            'with possible NaN values!')
+                nrgb_noise = cfg.processing.noise_equivalent_backscatter.num_range_block
+            sr_noise = np.linspace(
+                    ogrid[frequency].slant_ranges.first,
+                    ogrid[frequency].slant_ranges.last,
+                    num=nrgb_noise
+                    )
+            if idx_noise.size == 0:
+                log.warning(
+                    'No noise-only range lines within the specified pulse '
+                    'interval. Skip noise estimation and set noise equivalent '
+                    'backscatter to zero.')
+                pow_noise = np.zeros_like(sr_noise, dtype='f4')
+            else: # there is at least one noise-only range line
+                nrgl_noise = idx_noise.size
+                log.info(f'Number of noise-only range lines is {nrgl_noise}')
+                # create a dedicated memory map for noise data and processing.
+                # set the number of range bins to rangecomp output size.
+                fid_noise = temp("_noise.c8")
+                data_noise = np.memmap(
+                    fid_noise, mode='w+', shape=(nrgl_noise, rc.output_size),
+                    dtype=np.complex64)
+                rc.rangecompress(data_noise, raw_clean[idx_noise])
+                # build and apply antenna pattern correction for noise
+                # pulses if EAP is True
+                if cfg.processing.is_enabled.eap:
+                    log.info('Compensating dynamic antenna pattern for '
+                             'noise-only range lines')
+                    for pp in range(nrgl_noise):
+                        tm = raw_times[idx_noise[pp]]
+                        # get 2-way pattern for noise-only pulse time over
+                        # a coarser slant range vector than that of echo.
+                        # 2-way antenna pattern in EAP correction is slightly
+                        # different for noise-only range lines than for
+                        # re-grided echo range lines in dithering case
+                        # w/ BLU interpolator. This is why the process
+                        # is repeated here for noise estimation.
+                        pat2w = antpat.form_pattern(
+                            tm, pat_ranges, nearest=False, txrx_pols=[pol])
+                        # interpolated pattern to a finer range spacing
+                        pat_int = np.interp(
+                            rc_grid.slant_ranges, pat_ranges, pat2w[pol])
+                        # apply antenna pattern, replace bad value by NaN
+                        mask_zero = np.isclose(abs(pat_int), 0)
+                        mask_non_zero = ~mask_zero
+                        data_noise[pp, mask_non_zero] /= pat_int[mask_non_zero]
+                        data_noise[pp, mask_zero] = complex(np.nan, np.nan)
+
+                if cfg.processing.is_enabled.range_cor:
+                    log.info('Compensating range loss for noise range lines')
+                    data_noise *= np.array(rc_grid.slant_ranges) / ref_range
+
+                # correct for non-unity AZ Reference function given noise
+                # data will not be run through AZ compression.
+                # get SAR duration at the starting slant range and mid noise
+                # range line.
+                tm_mid_noise = raw_times[idx_noise[nrgl_noise // 2]]
+                sar_dur_near = isce3.focus.get_sar_duration(
+                    tm_mid_noise, rc_grid.starting_range, orbit,
+                    isce3.core.Ellipsoid(), azres, rc_grid.wavelength
+                    )
+                n_pulse_sar =  sar_dur_near * rc_grid.prf
+                # Multiply by the number of pulses within a SAR at the nearest
+                # range and apply the encoding scalar from the config file
+                data_noise *= scale * np.sqrt(
+                    n_pulse_sar * np.array(rc_grid.slant_ranges) /
+                    rc_grid.starting_range)
+                # perform noise estimation
+                # get valid subswath for noise-only range lines
+                idx_noise_abs = pulse_begin + np.asarray(idx_noise)
+                sbsw_noise = swaths[:, idx_noise_abs]
+                pow_noise, sr_noise_rc = est_noise_power_in_focus(
+                    data_noise, rc_grid.slant_ranges, sbsw_noise,
+                    logger=log,
+                    **vars(cfg.processing.noise_equivalent_backscatter)
+                )
+                # regrid noise power to match common output grid in range.
+                # Use linear interpolation given small changes in slant range
+                # and smoothed noise power if `fill_nan_end`.
+                pow_noise[...] = np.interp(sr_noise, sr_noise_rc, pow_noise)
+                del data_noise
+            # store noise power and its AZ time for a particular Raw
+            # over a particular AZ interval.
+            # Use the very first and last AZ time stamp of the Raw.
+            # Note that there is only one unique vector of noise power
+            # as a function of slant range per a Raw file. Thus,
+            # the noise power shall be repeated twice per L0B!
+            azt_noise_all.extend(raw_times[::raw_times.size - 1])
+            pow_noise_all.extend(2 * [pow_noise])
+
+            del raw_clean
+
+            # And do radiometric corrections at the same time.
             for pulse in range(0, rc_grid.shape[0], na):
                 log.info(f"Range compressing block at pulse {pulse}")
                 block = np.s_[pulse:pulse+na, :]
@@ -1646,12 +1990,8 @@ def focus(runconfig, runconfig_path=""):
                 if cfg.processing.is_enabled.eap:
                     log.info("Compensating dynamic antenna pattern")
                     for i in range(rc_grid[block].shape[0]):
-                        ti = rc_grid.sensing_start + (pulse + i) / rc_grid.prf
-                        # FIXME move this out of pulse loop to avoid redundant
-                        # pattern calculations.
-                        patterns = antpat.form_pattern(
-                            ti, rc_grid.slant_ranges, nearest=not uniform_pri)
-                        rcfile.data[pulse + i, :] /= patterns[pol]
+                        interp_pattern = np.interp(rc_grid.slant_ranges, pat_ranges, patterns[pol][pulse + i])
+                        rcfile.data[pulse + i, :] /= interp_pattern
                 if cfg.processing.is_enabled.range_cor:
                     log.info("Compensating range loss")
                     # Two-way power drops with R^4, so amplitude drops with R^2.
@@ -1707,6 +2047,16 @@ def focus(runconfig, runconfig_path=""):
         slc.write_stats(frequency, pol, writer.stats)
         slc.set_rfi_results(rfi_results)
 
+        # Dump the noise product for a certain band and pol over entire
+        # AZ times covering all Raw files.
+        noise_prod = NoiseEquivalentBackscatterProduct(
+            np.asarray(pow_noise_all), sr_noise, np.asarray(azt_noise_all),
+            grid_epoch, frequency, pol
+            )
+        # dump the noise product into RSLC product
+        slc.set_noise(noise_prod)
+        del pow_noise_all, azt_noise_all, sr_noise
+
     log.info("All done!")
 
 
@@ -1721,7 +2071,8 @@ def configure_logging():
     sh.setLevel(log_level)
     sh.setFormatter(fmt)
     log.addHandler(sh)
-    for friend in ("Raw", "SLCWriter", "nisar.antenna.pattern", "rslc_cal"):
+    for friend in ("Raw", "SLCWriter", "nisar.antenna.pattern", "rslc_cal",
+                   "isce3.focus.notch"):
         l = logging.getLogger(friend)
         l.setLevel(log_level)
         l.addHandler(sh)

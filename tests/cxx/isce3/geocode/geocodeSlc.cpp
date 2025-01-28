@@ -5,6 +5,7 @@
 #include <iostream>
 #include <sstream>
 #include <vector>
+#include <optional>
 
 #include <gtest/gtest.h>
 
@@ -196,14 +197,28 @@ TEST(GeocodeTest, TestGeocodeSlc)
                     default_carrier_lut2d, az_correction, srange_correction);
             geocodedSlcRaster.setGeoTransform(_geoTrans);
 
-            // geocodeSlc in array mode and write array to raster
+            // insert references to geo and radar arrays in a vector
             std::vector<isce3::geocode::EArray2dc64> geoDataVec = {geoDataArr};
             std::vector<isce3::geocode::EArray2dc64> rdrDataVec = {rdrDataArr};
+
+            // create reference to mask array
+            auto maskArr2d = isce3::core::EArray2D<unsigned char>(geoGridLength,
+                                                                  geoGridWidth);
+            maskArr2d.fill(0);
+            auto maskArr2dRef = isce3::geocode::EArray2duc8(maskArr2d);
+            auto maskArr2dRefOpt = std::make_optional(maskArr2dRef);
+
+            // create empty array for carrier and flattening phases
+            // empty arrays do not affect processing
             auto dummy = isce3::core::EArray2D<double>();
-            isce3::geocode::geocodeSlc(geoDataVec, dummy, dummy, rdrDataVec,
-                    demRaster, radarGrid, radarGrid, geoGrid, orbit,
+
+            // geocodeSlc in array mode and write array to raster
+            isce3::geocode::geocodeSlc(geoDataVec, dummy, dummy,
+                    rdrDataVec, demRaster, radarGrid, radarGrid, geoGrid, orbit,
                     nativeDoppler, imageGridDoppler, ellipsoid,
-                    thresholdGeo2rdr, numiterGeo2rdr, 0, 0, flatten, reramp);
+                    thresholdGeo2rdr, numiterGeo2rdr,
+                    maskArr2dRefOpt,
+                    0, 0, flatten, reramp);
             isce3::io::Raster geocodedSlcArr(filePrefix + "_array.bin",
                     geoGridWidth, geoGridLength, 1, GDT_CFloat32, "ENVI");
             geocodedSlcArr.setBlock(geoDataArr.data(), 0, 0, geoGridWidth,

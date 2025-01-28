@@ -124,7 +124,8 @@ runconfig:
                 write_layover_shadow: True
 
             coarse_resample:
-                lines_per_tile: 100
+                lines_per_tile: 1000
+                columns_per_tile: 1000
 
             dense_offsets:
                 enabled: True
@@ -137,6 +138,7 @@ runconfig:
                 correlation_surface_zoom: 8
                 correlation_surface_oversampling_factor: 32
                 correlation_surface_oversampling_method: 'sinc'
+                deramping_method: 'magnitude'
 
             rubbersheet:
                 threshold: 0.01

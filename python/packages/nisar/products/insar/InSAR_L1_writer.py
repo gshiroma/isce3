@@ -1,15 +1,19 @@
+import os
+
 import numpy as np
 from isce3.core import LUT2d
-from isce3.product import RadarGridParameters
-from nisar.workflows.h5_prep import (add_geolocation_grid_cubes_to_hdf5,
-                                     get_off_params)
-from nisar.workflows.helpers import get_cfg_freq_pols
+from nisar.workflows import geo2rdr, rdr2geo
+from nisar.workflows.h5_prep import add_geolocation_grid_cubes_to_hdf5
+from nisar.workflows.helpers import (get_cfg_freq_pols, get_offset_radar_grid,
+                                     get_pixel_offsets_dataset_shape,
+                                     get_pixel_offsets_params)
 
 from .dataset_params import DatasetParams, add_dataset_and_attrs
 from .InSAR_base_writer import InSARBaseWriter
 from .product_paths import L1GroupsPaths
 from .units import Units
-from .utils import extract_datetime_from_string, number_to_ordinal
+from .utils import (extract_datetime_from_string, generate_insar_subswath_mask,
+                    get_geolocation_grid_cube_obj)
 
 
 class L1InSARWriter(InSARBaseWriter):
@@ -53,58 +57,33 @@ class L1InSARWriter(InSARBaseWriter):
         # Pull the heights and espg from the radar_grid_cubes group
         # in the runconfig
         radar_grid_cfg = self.cfg["processing"]["radar_grid_cubes"]
-        heights = np.array(radar_grid_cfg["heights"])
+        heights = np.array(radar_grid_cfg["heights"]).astype(np.float64)
         epsg = radar_grid_cfg["output_epsg"]
 
         # Retrieve the group
         geolocationGrid_path = self.group_paths.GeolocationGridPath
-        self.require_group(geolocationGrid_path)
 
         # Pull the radar frequency
         cube_freq = "A" if "A" in self.freq_pols else "B"
-        radargrid = RadarGridParameters(self.ref_h5_slc_file)
-
-        # Figure out decimation factors that give < 500 m spacing.
-        # NOTE: same with the RSLC, the max spacing = 500m is hardcoded.
-        # In addition, we cannot have the exact 500m spacing for both azimuth
-        # and range directions.
-        max_spacing = 500.0
-        t = radargrid.sensing_mid + \
-            (radargrid.ref_epoch - self.ref_orbit.reference_epoch).total_seconds()
-
-        _, v = self.ref_orbit.interpolate(t)
-        dx = np.linalg.norm(v) / radargrid.prf
-
         grid_doppler = LUT2d()
         native_doppler = self.ref_rslc.getDopplerCentroid(
             frequency=cube_freq
         )
-
         native_doppler.bounds_error = False
-
         geo2rdr_params = dict(threshold_geo2rdr=1e-8,
                               numiter_geo2rdr=50,
                               delta_range=10)
 
-        # Create a new geolocation radar grid with 5 extra points
-        # before and after the starting and ending
-        # zeroDopplerTime and slantRange
-        extra_points = 5
-
-        # Total number of samples along the azimuth and slant range
-        # using around 500m sampling interval
-        ysize = int(np.ceil(radargrid.length / (max_spacing / dx)))
-        xsize = int(np.ceil(radargrid.width / \
-            (max_spacing / radargrid.range_pixel_spacing)))
-
-        # New geolocation grid
-        geolocation_radargrid = \
-            radargrid.resize_and_keep_startstop(ysize, xsize)
-        geolocation_radargrid = \
-            geolocation_radargrid.add_margin(extra_points,
-                                             extra_points)
+        geolocation_radargrid = get_geolocation_grid_cube_obj(self.cfg)
 
         # Add geolocation grid cubes to hdf5
+        if self.hdf5_optimizer_config.chunk_size is None:
+            chunk_size = None
+        else:
+            chunk_size = (1,
+                          self.hdf5_optimizer_config.chunk_size[0],
+                          self.hdf5_optimizer_config.chunk_size[1])
+
         add_geolocation_grid_cubes_to_hdf5(
             self,
             geolocationGrid_path,
@@ -114,34 +93,34 @@ class L1InSARWriter(InSARBaseWriter):
             native_doppler,
             grid_doppler,
             epsg,
+            chunk_size=chunk_size,
+            compression_enabled=\
+                self.hdf5_optimizer_config.compression_enabled,
+            compression_type=\
+                self.hdf5_optimizer_config.compression_type,
+            compression_level=\
+                self.hdf5_optimizer_config.compression_level,
+            shuffle_filter=\
+                self.hdf5_optimizer_config.shuffle_filter,
             **geo2rdr_params,
         )
 
-        # Add the min and max attributes to the following dataset
-        ds_names = ["incidenceAngle",
-                    "losUnitVectorX",
-                    "losUnitVectorY",
-                    "alongTrackUnitVectorX",
-                    "alongTrackUnitVectorY",
-                    "elevationAngle"]
+        geolocationGrid_group = self.require_group(geolocationGrid_path)
+        # Add baseline to the geolocation grid
+        self.add_baseline_info_to_cubes(geolocationGrid_group,
+                                        geolocation_radargrid,
+                                        is_geogrid=False)
+
 
         geolocation_grid_group = self[geolocationGrid_path]
-        for ds_name in ds_names:
-            ds = geolocation_grid_group[ds_name][()]
-            valid_min, valid_max = np.nanmin(ds), np.nanmax(ds)
-            geolocation_grid_group[ds_name].attrs["min"] = valid_min
-            geolocation_grid_group[ds_name].attrs["max"] = valid_max
 
         geolocation_grid_group['epsg'][...] = \
             geolocation_grid_group['epsg'][()].astype(np.uint32)
         geolocation_grid_group['epsg'].attrs['description'] = \
-            np.string_("EPSG code corresponding to the coordinate system"
+            np.bytes_("EPSG code corresponding to the coordinate system"
                        " used for representing the geolocation grid")
-        geolocation_grid_group['epsg'].attrs['units'] = Units.unitless
         geolocation_grid_group['losUnitVectorX'].attrs['units'] = Units.unitless
         geolocation_grid_group['losUnitVectorY'].attrs['units'] = Units.unitless
-        geolocation_grid_group['losUnitVectorY'].attrs['description'] = \
-            np.string_("LOS unit vector Y")
 
         geolocation_grid_group['alongTrackUnitVectorX'].attrs['units'] = \
             Units.unitless
@@ -155,7 +134,7 @@ class L1InSARWriter(InSARBaseWriter):
                                                             'seconds since ')
         if zero_dopp_time_units is not None:
             geolocation_grid_group['zeroDopplerTime'].attrs['units']\
-                = np.string_(zero_dopp_time_units)
+                = np.bytes_(zero_dopp_time_units)
 
     def add_algorithms_to_procinfo_group(self):
         """
@@ -177,7 +156,7 @@ class L1InSARWriter(InSARBaseWriter):
         interferogram_ds_params = [
             DatasetParams(
                 "commonBandRangeFilterApplied",
-                np.string_(str(range_filter)),
+                np.bytes_(str(range_filter)),
                 (
                     "Flag to indicate if common band range filter has been"
                     " applied"
@@ -185,7 +164,7 @@ class L1InSARWriter(InSARBaseWriter):
             ),
             DatasetParams(
                 "commonBandAzimuthFilterApplied",
-                np.string_(str(azimuth_filter)),
+                np.bytes_(str(azimuth_filter)),
                 (
                     "Flag to indicate if common band azimuth filter has been"
                     " applied"
@@ -193,7 +172,7 @@ class L1InSARWriter(InSARBaseWriter):
             ),
             DatasetParams(
                 "ellipsoidalFlatteningApplied",
-                np.string_(str(flatten)),
+                np.bytes_(str(flatten)),
                 (
                     "Flag to indicate if the interferometric phase has been "
                     "flattened with respect to a zero height ellipsoid"
@@ -201,7 +180,7 @@ class L1InSARWriter(InSARBaseWriter):
             ),
             DatasetParams(
                 "topographicFlatteningApplied",
-                np.string_(str(flatten)),
+                np.bytes_(str(flatten)),
                 (
                     "Flag to indicate if the interferometric phase has been "
                     "flattened with respect to topographic height using a DEM"
@@ -248,7 +227,7 @@ class L1InSARWriter(InSARBaseWriter):
                 "azimuthBandwidth",
             )
             igram_group['azimuthBandwidth'].attrs['description'] = \
-                np.string_("Processed azimuth bandwidth for frequency " + \
+                np.bytes_("Processed azimuth bandwidth for frequency " + \
                            f"{freq} interferometric layers")
             igram_group['azimuthBandwidth'].attrs['units'] = Units.hertz
 
@@ -258,7 +237,7 @@ class L1InSARWriter(InSARBaseWriter):
                 "rangeBandwidth",
             )
             igram_group['rangeBandwidth'].attrs['description'] = \
-                np.string_("Processed slant range bandwidth for frequency " + \
+                np.bytes_("Processed slant range bandwidth for frequency " + \
                            f"{freq} interferometric layers")
             igram_group['rangeBandwidth'].attrs['units'] = Units.hertz
 
@@ -301,46 +280,6 @@ class L1InSARWriter(InSARBaseWriter):
 
         return igram_shape
 
-    def _get_pixeloffsets_dataset_shape(self, freq : str, pol : str):
-        """
-        Get the pixel offsets dataset shape at a given frequency and polarization
-
-        Parameters
-        ---------
-        freq: str
-            frequency ('A' or 'B')
-        pol : str
-            polarization ('HH', 'HV', 'VH', or 'VV')
-
-        Returns
-        ----------
-        tuple
-            (off_length, off_width):
-        """
-        proc_cfg = self.cfg["processing"]
-        is_roff,  margin, _, _,\
-        rg_skip, az_skip, rg_search, az_search,\
-        rg_chip, az_chip, _ = self._pull_pixel_offsets_params()
-
-        # get the RSLC lines and columns
-        slc_dset = \
-            self.ref_h5py_file_obj[
-                f"{self.ref_rslc.SwathPath}/frequency{freq}/{pol}"]
-
-        slc_lines, slc_cols = slc_dset.shape
-
-        off_length = get_off_params(proc_cfg, "offset_length", is_roff)
-        off_width = get_off_params(proc_cfg, "offset_width", is_roff)
-        if off_length is None:
-            margin_az = 2 * margin + 2 * az_search + az_chip
-            off_length = (slc_lines - margin_az) // az_skip
-        if off_width is None:
-            margin_rg = 2 * margin + 2 * rg_search + rg_chip
-            off_width = (slc_cols - margin_rg) // rg_skip
-
-        # shape of offset product
-        return (off_length, off_width)
-
 
     def _add_datasets_to_pixel_offset_group(self):
         """
@@ -353,8 +292,7 @@ class L1InSARWriter(InSARBaseWriter):
                 f"{self.group_paths.SwathsPath}/frequency{freq}"
 
             # get the shape of offset product
-            off_shape = self._get_pixeloffsets_dataset_shape(freq,
-                                                             pol_list[0])
+            off_shape = get_pixel_offsets_dataset_shape(self.cfg, freq)
 
             # add the interferogram and pixelOffsets groups to the polarization group
             for pol in pol_list:
@@ -392,10 +330,6 @@ class L1InSARWriter(InSARBaseWriter):
                         np.float32,
                         ds_description,
                         units=ds_unit,
-                        compression_enabled=self.cfg['output']['compression_enabled'],
-                        compression_level=self.cfg['output']['compression_level'],
-                        chunk_size=self.cfg['output']['chunk_size'],
-                        shuffle_filter=self.cfg['output']['shuffle']
                     )
 
     def add_pixel_offsets_to_swaths_group(self):
@@ -404,7 +338,7 @@ class L1InSARWriter(InSARBaseWriter):
         """
         is_roff,  margin, rg_start, az_start,\
         rg_skip, az_skip, rg_search, az_search,\
-        rg_chip, az_chip, _ = self._pull_pixel_offsets_params()
+        rg_chip, az_chip, _ = get_pixel_offsets_params(self.cfg)
 
         for freq, pol_list, _ in get_cfg_freq_pols(self.cfg):
             # Create the swath group
@@ -421,19 +355,24 @@ class L1InSARWriter(InSARBaseWriter):
                 f"{self.ref_rslc.SwathPath}/frequency{freq}"
             ]
 
+            # Update the offset radar grid
+            rslc_radar_grid = self.ref_rslc.getRadarGrid(freq)
+            off_radargrid = get_offset_radar_grid(self.cfg, rslc_radar_grid)
+
             # shape of offset product
-            off_length, off_width = self._get_pixeloffsets_dataset_shape(freq,
-                                                                         pol_list[0])
+            off_length, off_width = off_radargrid.length, off_radargrid.width
 
             # add the slantRange, zeroDopplerTime, and their spacings to pixel offset group
-            offset_slant_range = \
-                rslc_freq_group["slantRange"][()][rg_start::rg_skip][:off_width]
-            offset_zero_doppler_time = \
-                rslc_swaths_group["zeroDopplerTime"][()][az_start::az_skip][:off_length]
-            offset_zero_doppler_time_spacing = \
-                rslc_swaths_group["zeroDopplerTimeSpacing"][()] * az_skip
-            offset_slant_range_spacing = \
-                rslc_freq_group["slantRangeSpacing"][()] * rg_skip
+            # where the starting range/sensing start of the offsets radar grid
+            # is at the center of the matching window
+            offset_slant_range = np.array(
+                [off_radargrid.starting_range +
+                 i*off_radargrid.range_pixel_spacing
+                 for i in range(off_radargrid.width)])
+            offset_zero_doppler_time = np.array(
+                [off_radargrid.sensing_start +
+                 i/off_radargrid.prf
+                 for i in range(off_radargrid.length)])
 
             zero_dopp_time_units = \
                 rslc_swaths_group["zeroDopplerTime"].attrs['units']
@@ -441,6 +380,7 @@ class L1InSARWriter(InSARBaseWriter):
                                                     'seconds since ')
             if time_str is not None:
                 zero_dopp_time_units = time_str
+
 
             ds_offsets_params = [
                 DatasetParams(
@@ -452,26 +392,115 @@ class L1InSARWriter(InSARBaseWriter):
                 DatasetParams(
                     "zeroDopplerTime",
                     offset_zero_doppler_time,
-                    "Zero Doppler azimuth time vector",
+                    "Zero Doppler azimuth time since UTC epoch vector",
                     {'units': zero_dopp_time_units},
                 ),
                 DatasetParams(
                     "zeroDopplerTimeSpacing",
-                    offset_zero_doppler_time_spacing,
+                    1.0/off_radargrid.prf,
                     "Along-track spacing of the offset grid",
                     {'units': Units.second},
                 ),
                 DatasetParams(
                     "slantRangeSpacing",
-                    offset_slant_range_spacing,
+                    off_radargrid.range_pixel_spacing,
                     "Slant range spacing of the offset grid",
                     {'units': Units.meter},
+                ),
+                DatasetParams(
+                    "sceneCenterAlongTrackSpacing",
+                    rslc_freq_group["sceneCenterAlongTrackSpacing"][()]
+                    * az_skip,
+                    (
+                        "Nominal along-track spacing in meters between"
+                        " consecutive lines near mid-swath of the product images"
+                    ),
+                    {"units": Units.meter},
+                ),
+                DatasetParams(
+                    "sceneCenterGroundRangeSpacing",
+                    rslc_freq_group["sceneCenterGroundRangeSpacing"][()]
+                    * rg_skip,
+                    (
+                        "Nominal ground range spacing in meters between"
+                        " consecutive pixels near mid-swath of the product images"
+                    ),
+                    {"units": Units.meter},
                 ),
             ]
             offset_group_name = f"{swaths_freq_group_name}/pixelOffsets"
             offset_group = self.require_group(offset_group_name)
             for ds_param in ds_offsets_params:
                 add_dataset_and_attrs(offset_group, ds_param)
+
+            # add the digital elevation model layer to the pixelOffsets group
+            self._create_2d_dataset(offset_group,
+                                    'digitalElevationModel',
+                                    shape=(off_length, off_width),
+                                    dtype=np.float32,
+                                    description=("Digital Elevation Model (DEM) in radar coordinates."
+                                                 " This dataset is produced using Copernicus WorldDEM-30"
+                                                 " Copyright DLR e.V. 2010-2014 and Copyright Airbus Defence and"
+                                                 " Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA;"
+                                                 " all rights reserved. This dataset is generated by referencing the"
+                                                 " Copernicus DEM elevations to the WGS84 ellipsoid and"
+                                                 " projecting them onto a range/Doppler grid"),
+                                    units=Units.meter)
+
+            # temporarily add stats attributes to the 'digitalElevationModel' dataset
+            # TODO: remove this placeholder for setting stats values
+            # to 0.0 once the actual values are being computed.
+            for attr in ['mean_value', 'min_value',
+                         'max_value', 'sample_stddev']:
+                offset_group['digitalElevationModel'].attrs[attr] = 0.0
+
+            # add the subswath mask layer to the pixel offset group
+            self._create_2d_dataset(offset_group,
+                                    'mask',
+                                    shape=(off_length, off_width),
+                                    dtype=np.uint8,
+                                    description=("Mask indicating the subswaths of valid samples in the reference RSLC"
+                                                 " and geometrically-coregistered secondary RSLC."
+                                                 " Each pixel value is a two-digit number:"
+                                                 " the least significant digit represents the"
+                                                 " subswath number of that pixel in the secondary RSLC,"
+                                                 " and the most significant digit represents"
+                                                 " the subswath number of that pixel in the reference RSLC."
+                                                 " A value of '0' in either digit indicates an invalid sample"
+                                                 " in the corresponding RSLC"),
+                                    fill_value=255)
+            offset_group['mask'].attrs['long_name'] = np.bytes_("Valid samples subswath mask")
+            offset_group['mask'].attrs['valid_min'] = 0
+
+            range_offset_path = \
+                os.path.join( self.topo_path,
+                                f'geo2rdr/freq{freq}/range.off')
+            azimuth_offset_path = \
+                os.path.join( self.topo_path,
+                                f'geo2rdr/freq{freq}/azimuth.off')
+
+            # If there are no offset products, run the rdr2geo and
+            # geo2rdr to generate the offsets products
+            if ((not os.path.exists(range_offset_path)) or
+                (not os.path.exists(azimuth_offset_path))):
+                rdr2geo.run(self.cfg)
+                geo2rdr.run(self.cfg)
+
+            # get the nearest neighbor slant range and azimuth index in the RSLC radar grid
+            # to generate subswath mask
+            rg_idx = np.round([rslc_radar_grid.slant_range_index(rg)
+                               for rg in offset_slant_range])
+            az_idx = np.round([rslc_radar_grid.azimuth_index(az)
+                               for az in offset_zero_doppler_time])
+
+            offset_group['mask'][...] = \
+                generate_insar_subswath_mask(self.ref_rslc,
+                                             self.sec_rslc,
+                                             range_offset_path,
+                                             azimuth_offset_path,
+                                             freq,
+                                             az_idx,
+                                             rg_idx)
 
         # add the datasets to pixel offsets group
         self._add_datasets_to_pixel_offset_group()
@@ -496,8 +525,70 @@ class L1InSARWriter(InSARBaseWriter):
                 f"{self.ref_rslc.SwathPath}/frequency{freq}"
             ]
 
-            # add scene center parameters
-            scene_center_params = [
+            # shape of the interferogram product
+            igram_shape = self._get_interferogram_dataset_shape(freq,
+                                                                pol_list[0])
+
+            # add the slantRange, zeroDopplerTime, and their spacings to inteferogram group
+
+            rslc_radar_grid = self.ref_rslc.getRadarGrid(freq)
+
+            # multilook the radar grid of the reference RSLC to
+            # get the radar grid of the interferogram
+            igram_radargrid = rslc_radar_grid.multilook(
+                self.igram_azimuth_looks,
+                self.igram_range_looks)
+
+            # compute the slant range and zero doppler time vector
+            # for the interferogram
+            igram_slant_range = np.array(
+                [igram_radargrid.starting_range +
+                 i*igram_radargrid.range_pixel_spacing
+                 for i in range(igram_radargrid.width)])
+            igram_zero_doppler_time = np.array(
+                [igram_radargrid.sensing_start +
+                 i/igram_radargrid.prf
+                 for i in range(igram_radargrid.length)])
+
+            zero_dopp_time_units = \
+                rslc_swaths_group["zeroDopplerTime"].attrs['units']
+            time_str = extract_datetime_from_string(str(zero_dopp_time_units),
+                                                    'seconds since ')
+            if time_str is not None:
+                zero_dopp_time_units = time_str
+
+            ds_igram_params = [
+                DatasetParams(
+                    "slantRange",
+                    igram_slant_range,
+                    "Slant range vector",
+                    {'units': Units.meter},
+                ),
+                DatasetParams(
+                    "zeroDopplerTime",
+                    igram_zero_doppler_time,
+                    "Zero Doppler azimuth time since UTC epoch vector",
+                    {'units': zero_dopp_time_units},
+                ),
+                DatasetParams(
+                    "zeroDopplerTimeSpacing",
+                    1.0/igram_radargrid.prf,
+                    (
+                        "Time interval in the along-track direction for raster"
+                        " layers. This is same as the spacing between"
+                        " consecutive entries in the zeroDopplerTime array"
+                    ),
+                    {'units': Units.second},
+                ),
+                DatasetParams(
+                    "slantRangeSpacing",
+                    igram_radargrid.range_pixel_spacing,
+                    (
+                        "Slant range spacing of grid. Same as difference"
+                        " between consecutive samples in slantRange array"
+                    ),
+                    {'units': Units.meter},
+                ),
                 DatasetParams(
                     "sceneCenterAlongTrackSpacing",
                     rslc_freq_group["sceneCenterAlongTrackSpacing"][()]
@@ -519,85 +610,80 @@ class L1InSARWriter(InSARBaseWriter):
                     {"units": Units.meter},
                 ),
             ]
-            for ds_param in scene_center_params:
-                add_dataset_and_attrs(swaths_freq_group, ds_param)
 
-            # shape of the interferogram product
-            igram_shape = self._get_interferogram_dataset_shape(freq,
-                                                                pol_list[0])
-
-            #  add the slantRange, zeroDopplerTime, and their spacings to inteferogram group
-            igram_slant_range = rslc_freq_group["slantRange"][()]
-            igram_zero_doppler_time = rslc_swaths_group["zeroDopplerTime"][()]
-
-            def max_look_idx(max_val, n_looks):
-                # internal convenience function to get max multilooked index value
-                return (
-                    np.arange((len(max_val) // n_looks) * n_looks)[::n_looks]
-                    + n_looks // 2
-                )
-
-            rg_idx, az_idx = (
-                max_look_idx(max_val, n_looks)
-                for max_val, n_looks in (
-                    (igram_slant_range, self.igram_range_looks),
-                    (igram_zero_doppler_time, self.igram_azimuth_looks),
-                )
-            )
-
-            igram_slant_range = igram_slant_range[rg_idx]
-            igram_zero_doppler_time = igram_zero_doppler_time[az_idx]
-            igram_zero_doppler_time_spacing = \
-                rslc_swaths_group["zeroDopplerTimeSpacing"][()] * \
-                    self.igram_azimuth_looks
-            igram_slant_range_spacing = \
-                rslc_freq_group["slantRangeSpacing"][()] * \
-                    self.igram_range_looks
-
-            zero_dopp_time_units = \
-                rslc_swaths_group["zeroDopplerTime"].attrs['units']
-            time_str = extract_datetime_from_string(str(zero_dopp_time_units),
-                                                    'seconds since ')
-            if time_str is not None:
-                zero_dopp_time_units = time_str
-
-            ds_igram_params = [
-                DatasetParams(
-                    "slantRange",
-                    igram_slant_range,
-                    "Slant range vector",
-                    {'units': Units.meter},
-                ),
-                DatasetParams(
-                    "zeroDopplerTime",
-                    igram_zero_doppler_time,
-                    "Zero Doppler azimuth time vector",
-                    {'units': zero_dopp_time_units},
-                ),
-                DatasetParams(
-                    "zeroDopplerTimeSpacing",
-                    igram_zero_doppler_time_spacing,
-                    (
-                        "Time interval in the along-track direction for raster"
-                        " layers. This is same as the spacing between"
-                        " consecutive entries in the zeroDopplerTime array"
-                    ),
-                    {'units': Units.second},
-                ),
-                DatasetParams(
-                    "slantRangeSpacing",
-                    igram_slant_range_spacing,
-                    (
-                        "Slant range spacing of grid. Same as difference"
-                        " between consecutive samples in slantRange array"
-                    ),
-                    {'units': Units.meter},
-                ),
-            ]
             igram_group_name = f"{swaths_freq_group_name}/interferogram"
             igram_group = self.require_group(igram_group_name)
             for ds_param in ds_igram_params:
                 add_dataset_and_attrs(igram_group, ds_param)
+
+            # add the digital elevation model layer to the interferogram group
+            self._create_2d_dataset(igram_group,
+                                    'digitalElevationModel',
+                                    shape=igram_shape,
+                                    dtype=np.float32,
+                                    description=("Digital Elevation Model (DEM) in radar coordinates."
+                                                 " This dataset is produced using Copernicus WorldDEM-30"
+                                                 " Copyright DLR e.V. 2010-2014 and Copyright Airbus Defence and"
+                                                 " Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA;"
+                                                 " all rights reserved. This dataset is generated by referencing the"
+                                                 " Copernicus DEM elevations to the WGS84 ellipsoid and"
+                                                 " projecting them onto a range/Doppler grid"),
+                                    units=Units.meter)
+
+            # temporarily add stats attributes to the 'digitalElevationModel' dataset
+            # TODO: remove this placeholder for setting stats values
+            # to 0.0 once the actual values are being computed.
+            for attr in ['mean_value', 'min_value',
+                         'max_value', 'sample_stddev']:
+                igram_group['digitalElevationModel'].attrs[attr] = 0.0
+
+            # add the subswath mask layer to the interferogram group
+            self._create_2d_dataset(igram_group,
+                                    'mask',
+                                    shape=igram_shape,
+                                    dtype=np.uint8,
+                                    description=("Mask indicating the subswaths of valid samples in the reference RSLC"
+                                                 " and geometrically-coregistered secondary RSLC."
+                                                 " Each pixel value is a two-digit number:"
+                                                 " the least significant digit represents the"
+                                                 " subswath number of that pixel in the secondary RSLC,"
+                                                 " and the most significant digit represents"
+                                                 " the subswath number of that pixel in the reference RSLC."
+                                                 " A value of '0' in either digit indicates an invalid sample"
+                                                 " in the corresponding RSLC"),
+                                    fill_value=255)
+            igram_group['mask'].attrs['valid_min'] = 0
+            igram_group['mask'].attrs['long_name'] = np.bytes_("Valid samples subswath mask")
+
+            range_offset_path = \
+                os.path.join(self.topo_path,
+                                f'geo2rdr/freq{freq}/range.off')
+            azimuth_offset_path = \
+                os.path.join(self.topo_path,
+                                f'geo2rdr/freq{freq}/azimuth.off')
+
+            # If there are no offset products, run the rdr2geo and
+            # geo2rdr to generate the offsets products
+            if ((not os.path.exists(range_offset_path)) or
+                (not os.path.exists(azimuth_offset_path))):
+                rdr2geo.run(self.cfg)
+                geo2rdr.run(self.cfg)
+
+            # get the nearest neighbor slant range and azimuth index in the RSLC radar grid
+            # to generate subswath mask
+            rg_idx = np.round([rslc_radar_grid.slant_range_index(rg)
+                               for rg in igram_slant_range])
+            az_idx = np.round([rslc_radar_grid.azimuth_index(az)
+                               for az in igram_zero_doppler_time])
+
+            igram_group['mask'][...] = \
+                generate_insar_subswath_mask(self.ref_rslc,
+                                             self.sec_rslc,
+                                             range_offset_path,
+                                             azimuth_offset_path,
+                                             freq,
+                                             az_idx,
+                                             rg_idx)
 
             # add the interferogram and pixelOffsets groups to the polarization group
             for pol in pol_list:
@@ -625,70 +711,7 @@ class L1InSARWriter(InSARBaseWriter):
                         ds_dtype,
                         ds_description,
                         units=ds_unit,
-                        compression_enabled=self.cfg['output']['compression_enabled'],
-                        compression_level=self.cfg['output']['compression_level'],
-                        chunk_size=self.cfg['output']['chunk_size'],
-                        shuffle_filter=self.cfg['output']['shuffle']
                     )
-
-
-    def add_subswaths_to_swaths_group(self):
-        """
-        Add subswaths to the swaths group
-        """
-        for freq, *_ in get_cfg_freq_pols(self.cfg):
-            # Create the swath group
-            swaths_freq_group_name = (
-                f"{self.group_paths.SwathsPath}/frequency{freq}"
-            )
-            swaths_freq_group = self.require_group(swaths_freq_group_name)
-
-            # Sub swaths groups of the RSLC
-            rslc_freq_group = self.ref_h5py_file_obj[
-                f"{self.ref_rslc.SwathPath}/frequency{freq}"
-            ]
-            number_of_subswaths = rslc_freq_group["numberOfSubSwaths"]
-            number_of_subwaths_ds = \
-                swaths_freq_group.require_dataset("numberOfSubSwaths",
-                                                  shape=number_of_subswaths.shape,
-                                                  dtype=np.uint8,
-                                                  data=number_of_subswaths[...])
-            number_of_subwaths_ds.attrs['description'] = \
-                np.string_('Number of swaths of continuous imagery, due to transmit gaps')
-            number_of_subwaths_ds.attrs['units'] = Units.unitless
-
-            # valid samples subswath
-            num_of_subswaths = rslc_freq_group["numberOfSubSwaths"][()]
-            for sub in range(num_of_subswaths):
-                subswath = sub + 1
-                # Get RSLC subswath dataset, range looks, and destination
-                # dataset name based on keys in RSLC
-                valid_samples_subswath_name = f"validSamplesSubSwath{subswath}"
-                description = \
-                    "First and last valid sample in each line of" +\
-                    f" {number_to_ordinal(subswath)} subswath"
-
-                if valid_samples_subswath_name in rslc_freq_group.keys():
-                    rslc_freq_subswath_ds = \
-                        rslc_freq_group[valid_samples_subswath_name]
-                    number_of_range_looks =rslc_freq_subswath_ds[()] \
-                            // self.igram_range_looks
-                else:
-                    rslc_freq_subswath_ds = rslc_freq_group["validSamples"]
-                    number_of_range_looks = rslc_freq_subswath_ds[()] // \
-                        self.igram_range_looks
-                    valid_samples_subswath_name = "validSamples"
-
-                # Create subswath dataset and update attributes from RSLC
-                dst_subswath_ds = swaths_freq_group.require_dataset(
-                    name=valid_samples_subswath_name,
-                    data=number_of_range_looks,
-                    shape=number_of_range_looks.shape,
-                    dtype=np.uint32,
-                )
-                dst_subswath_ds.attrs['units'] = Units.unitless
-                dst_subswath_ds.attrs['description'] = np.string_(description)
-
 
     def add_swaths_to_hdf5(self):
         """
@@ -706,7 +729,7 @@ class L1InSARWriter(InSARBaseWriter):
 
             list_of_pols = DatasetParams(
                 "listOfPolarizations",
-                np.string_(pol_list),
+                np.bytes_(pol_list),
                 f"List of processed polarization layers with frequency {freq}",
             )
             add_dataset_and_attrs(swaths_freq_group, list_of_pols)
@@ -721,7 +744,7 @@ class L1InSARWriter(InSARBaseWriter):
 
             # Add the description and units
             cfreq = swaths_freq_group["centerFrequency"]
-            cfreq.attrs['description'] = np.string_("Center frequency of"
+            cfreq.attrs['description'] = np.bytes_("Center frequency of"
                                                     " the processed image in hertz")
             cfreq.attrs['units'] = Units.hertz
 

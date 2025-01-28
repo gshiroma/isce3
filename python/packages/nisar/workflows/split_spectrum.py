@@ -8,6 +8,7 @@ import h5py
 import isce3
 import journal
 import numpy as np
+from isce3.io import HDF5OptimizedReader
 from isce3.splitspectrum import splitspectrum
 from nisar.h5 import cp_h5_meta_data
 from nisar.products.readers import SLC
@@ -36,7 +37,7 @@ def prep_subband_h5(src_rslc_hdf5: str,
     # Instantiate product obj to avoid product hard-coded paths
     product_obj = CommonPaths()
 
-    with h5py.File(src_rslc_hdf5, 'r', libver='latest', swmr=True) as src_h5, \
+    with HDF5OptimizedReader(name=src_rslc_hdf5, mode='r', libver='latest', swmr=True) as src_h5, \
         h5py.File(sub_band_hdf5, 'w') as dst_h5:
 
         # copy non-frequency metadata
@@ -154,9 +155,9 @@ def run(cfg: dict):
             prep_subband_h5(hdf5_str, low_band_output, iono_freq_pol)
             prep_subband_h5(hdf5_str, high_band_output, iono_freq_pol)
 
-            with h5py.File(hdf5_str, 'r', libver='latest', swmr=True) as src_h5, \
-                    h5py.File(low_band_output, 'r+') as dst_h5_low, \
-                    h5py.File(high_band_output, 'r+') as dst_h5_high:
+            with HDF5OptimizedReader(name=hdf5_str, mode='r', libver='latest', swmr=True) as src_h5, \
+                    HDF5OptimizedReader(name=low_band_output, mode='r+') as dst_h5_low, \
+                    HDF5OptimizedReader(name=high_band_output, mode='r+') as dst_h5_high:
 
                 # Copy HDF5 metadata for low high band
                 for pol in pol_list:
@@ -241,10 +242,14 @@ def run(cfg: dict):
                 data[...] = subband_meta_low['center_frequency']
                 data = dst_h5_low[f"{dest_freq_path}/processedRangeBandwidth"]
                 data[...] = subband_meta_low['rg_bandwidth']
+                data = dst_h5_low[f"{dest_freq_path}/listOfPolarizations"]
+                data[...] = pol_list
                 data = dst_h5_high[f"{dest_freq_path}/processedCenterFrequency"]
                 data[...] = subband_meta_high['center_frequency']
                 data = dst_h5_high[f"{dest_freq_path}/processedRangeBandwidth"]
                 data[...] = subband_meta_high['rg_bandwidth']
+                data = dst_h5_high[f"{dest_freq_path}/listOfPolarizations"]
+                data[...] = pol_list
     else:
         info_channel.log('Split spectrum is not needed')
 

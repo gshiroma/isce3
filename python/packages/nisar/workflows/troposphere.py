@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 from datetime import datetime
-import h5py
 import journal
 import numpy as np
 import os
@@ -10,6 +9,7 @@ import pyaps3 as pa
 
 import isce3
 from isce3.core import transform_xy_to_latlon
+from isce3.io import HDF5OptimizedReader
 from nisar.workflows import h5_prep
 from nisar.workflows.troposphere_runconfig import InsarTroposphereRunConfig
 from nisar.products.insar.product_paths import GUNWGroupsPaths
@@ -70,7 +70,7 @@ def compute_troposphere_delay(cfg: dict, gunw_hdf5: str):
     # Troposphere delay datacube
     troposphere_delay_datacube = dict()
 
-    with h5py.File(gunw_hdf5, 'r', libver='latest', swmr=True) as h5_obj:
+    with HDF5OptimizedReader(name=gunw_hdf5, mode='r', libver='latest', swmr=True) as h5_obj:
 
         # Fetch the GUWN Incidence Angle Datacube
         rdr_grid_path = gunw_obj.RadarGridPath
@@ -151,6 +151,7 @@ def compute_troposphere_delay(cfg: dict, gunw_hdf5: str):
         # raider package
         else:
             import xarray as xr
+            import RAiDER
             from RAiDER.llreader import BoundingBox
             from RAiDER.losreader import Zenith, Raytracing
             from RAiDER.delay import tropo_delay as raider_tropo_delay
@@ -186,6 +187,12 @@ def compute_troposphere_delay(cfg: dict, gunw_hdf5: str):
                 # the lat/lon bounds are applied to clip the global
                 # weather model to minimize the data processing
                 hres.setTime(weather_model_time)
+
+                # Workaround for a RAiDER bug in the version of '0.5.2' and '0.5.3'
+                # (see https://github.com/dbekaert/RAiDER/issues/682)
+                if RAiDER.__version__ in ['0.5.2','0.5.3']:
+                    hres._time = hres._time.replace(tzinfo=None)
+
                 hres.set_latlon_bounds(ll_bounds = lat_lon_bounds)
                 hres.set_wmLoc(weather_model_output_dir)
 
@@ -323,7 +330,7 @@ def write_to_GUNW_product(tropo_delay_datacubes: dict, gunw_hdf5: str):
     '''
     # Instantiate GUNW object to avoid hard-coded path to GUNW datasets
     gunw_obj = GUNWGroupsPaths()
-    with h5py.File(gunw_hdf5, 'a', libver='latest', swmr=True) as f:
+    with HDF5OptimizedReader(name=gunw_hdf5, mode='a', libver='latest', swmr=True) as f:
 
         for product_name, product_cube in tropo_delay_datacubes.items():
 

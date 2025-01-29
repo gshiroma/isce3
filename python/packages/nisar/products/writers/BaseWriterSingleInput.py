@@ -505,7 +505,7 @@ class BaseWriterSingleInput():
 
         self.output_product_path = f'{self.root_path}/{self.product_type}'
 
-        self.input_hdf5_obj = h5py.File(self.input_file, mode='r')
+        self.input_hdf5_obj = h5py.File(self.input_file, mode='r', swmr=True)
         self.output_hdf5_obj = h5py.File(self.output_file, mode='a')
 
     def populate_metadata(self):
@@ -667,11 +667,13 @@ class BaseWriterSingleInput():
             self.cfg['primary_executable']['processing_type']
 
         if processing_type_runconfig == 'PR':
-            processing_type = np.bytes_('NOMINAL')
+            processing_type = np.bytes_('Nominal')
         elif processing_type_runconfig == 'UR':
-            processing_type = np.bytes_('URGENT')
+            processing_type = np.bytes_('Urgent')
+        elif processing_type_runconfig == 'OD':
+            processing_type = np.bytes_('Custom')
         else:
-            processing_type = np.bytes_('UNDEFINED')
+            processing_type = np.bytes_('Undefined')
         self.set_value(
             'identification/processingType',
             processing_type,

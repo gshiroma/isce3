@@ -3,8 +3,7 @@ import h5py
 import journal
 import numpy as np
 
-from nisar.products.readers.Base import Base, get_hdf5_file_root_path
-
+from nisar.products.readers.Base import Base, get_hdf5_file_root_path, open_h5_file
 
 def get_hdf5_file_product_type(filename: str, root_path: str = None) -> str:
     """
@@ -26,7 +25,7 @@ def get_hdf5_file_product_type(filename: str, root_path: str = None) -> str:
     if root_path is None:
         root_path = get_hdf5_file_root_path(filename, root_path=root_path)
 
-    with h5py.File(filename, 'r', libver='latest', swmr=True) as f:
+    with open_h5_file(filename, 'r', libver='latest', swmr=True) as f:
         product_type_ds = f[root_path+'/identification/productType']
         product_type = str(np.asarray(product_type_ds, dtype=str))
 
@@ -79,7 +78,7 @@ class GenericProduct(Base, family='nisar.productreader.product'):
         folder_list = [self.SwathPath, self.GridPath]
 
         flag_found_folder = False
-        with h5py.File(self.filename, 'r', libver='latest', swmr=True) as fid:
+        with open_h5_file(self.filename, 'r', libver='latest', swmr=True) as fid:
             for folder in folder_list:
                 for freq in frequencyList:
                     root = f"{folder}/frequency{freq}"
@@ -134,7 +133,7 @@ class GenericProduct(Base, family='nisar.productreader.product'):
             frequency and polarization, in its native format.
         """
         # open H5 with swmr mode enabled
-        fid = h5py.File(self.filename, 'r', libver='latest', swmr=True)
+        fid = open_h5_file(self.filename, 'r', libver='latest', swmr=True)
 
         # build path the desired dataset
         ds_path = self.imageDatasetPath(frequency, polarization, **kwargs)

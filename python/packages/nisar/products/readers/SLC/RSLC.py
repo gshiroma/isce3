@@ -13,6 +13,7 @@ from isce3.core import DateTime
 from isce3.core.types import ComplexFloat16Decoder, is_complex32
 
 from .SLCBase import SLCBase
+from nisar.products.readers.Base import open_h5_file
 
 PRODUCT = 'RSLC'
 
@@ -35,7 +36,7 @@ class RSLC(SLCBase, family='nisar.productreader.rslc'):
         # The product group name should be "RSLC" per the spec. However, early
         # sample products used "SLC" instead, and identification.productType is
         # not reliable, either. We maintain compatibility with both options.
-        with h5py.File(self.filename, 'r', libver='latest', swmr=True) as f:
+        with open_h5_file(self.filename, 'r', libver='latest', swmr=True) as f:
             g = f[self.RootPath]
             if "RSLC" in g:
                 return f"{g.name}/RSLC"
@@ -104,7 +105,7 @@ class RSLC(SLCBase, family='nisar.productreader.rslc'):
         # Set error channel
         error_channel = journal.error('SLC.is_dataset_complex32')
 
-        with h5py.File(self.filename, 'r', libver='latest', swmr=True) as h:
+        with open_h5_file(self.filename, 'r', libver='latest', swmr=True) as h:
             freq_path = f'/{self.SwathPath}/frequency{freq}'
             if freq_path not in h:
                 err_str = f'Frequency {freq} not found in SLC'
@@ -182,7 +183,7 @@ class RSLC(SLCBase, family='nisar.productreader.rslc'):
         }
 
         # parse all fields for NESZ
-        with h5py.File(self.filename, 'r', libver='latest', swmr=True) as fid:
+        with open_h5_file(self.filename, 'r', libver='latest', swmr=True) as fid:
             for version, paths in layouts.items():
                 if paths["noise"] in fid:
                     break

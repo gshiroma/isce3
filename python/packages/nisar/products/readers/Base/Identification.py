@@ -4,7 +4,7 @@ import journal
 import numpy as np
 from numbers import Integral
 from warnings import warn
-
+from .Base import open_h5_file
 
 def get_scalar_or_first(group, key, typeconv = lambda x: x):
     """
@@ -120,7 +120,7 @@ class Identification(object):
             self.unpack(inobj[path])
         #User provides HDF5 file and path inside it
         elif isinstance(inobj, str):
-            with h5py.File(inobj, 'r') as fid:
+            with open_h5_file(inobj, 'r') as fid:
                 self.unpack(fid, path)
 
 

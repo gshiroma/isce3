@@ -5,7 +5,85 @@ import os
 import journal
 import pyre
 import isce3
+import boto3
 from ..protocols import ProductReader
+
+def _get_driver_kwds():
+    """
+    Example function to fetch AWS credentials.
+    Adjust this to your environment or fetch from boto3.
+    """
+    import boto3
+    session = boto3.Session()
+    creds = session.get_credentials()
+    if creds is None:
+        return {}
+    frozen_creds = creds.get_frozen_credentials()
+
+    driver_kwds = {
+        "aws_region": b"us-west-2",  # Hard-coded or detect from environment
+        "secret_id": frozen_creds.access_key.encode(),
+        "secret_key": frozen_creds.secret_key.encode(),
+    }
+    # If temporary creds, include session token (watch out for length limits!)
+    if frozen_creds.token:
+        driver_kwds["session_token"] = frozen_creds.token.encode()
+    return driver_kwds
+
+def open_h5_file(
+    path_or_url,
+    mode='r',
+    libver='latest',
+    swmr=True,
+    use_ros3=None
+):
+    """
+    Open an HDF5 file either from local disk or S3 using ROS3 driver.
+
+    Parameters
+    ----------
+    path_or_url : str
+        - Local file path (e.g. '/path/to/file.h5')
+        - S3 URL (e.g. 's3://bucket/path/to/file.h5')
+    mode : str
+        File mode, default 'r'.
+    libver : str
+        HDF5 library version setting, default 'latest'.
+    swmr : bool
+        Enable single-writer/multiple-reader, default True.
+    use_ros3 : bool or None
+        Force usage of ROS3 driver (True), or local driver (False).
+        If None, auto-detect from path_or_url.
+
+    Returns
+    -------
+    h5py.File object
+    """
+    # Auto-detect if path_or_url starts with 's3://' if use_ros3 is not specified
+    if use_ros3 is None:
+        use_ros3 = path_or_url.startswith("s3://")
+
+    if use_ros3:
+        # h5py requires you to specify the driver='ros3'
+        # and optionally pass AWS credentials if needed
+        driver_kwds = _get_driver_kwds()
+
+        return h5py.File(
+            path_or_url,
+            mode=mode,
+            driver="ros3",
+            libver=libver,
+            #swmr=swmr,
+            **driver_kwds
+        )
+    else:
+        # Open a local file
+        return h5py.File(
+            path_or_url,
+            mode=mode,
+            libver=libver,
+            swmr=swmr
+        )
 
 
 def get_hdf5_file_root_path(filename: str, root_path: str = None) -> str:
@@ -31,7 +109,7 @@ def get_hdf5_file_root_path(filename: str, root_path: str = None) -> str:
 
     SCIENCE_PATH = '/science/'
     NISAR_SENSOR_LIST = ['SSAR', 'LSAR']
-    with h5py.File(filename, 'r', libver='latest', swmr=True) as f:
+    with open_h5_file(filename, 'r', libver='latest', swmr=True) as f:
         if root_path is not None and root_path in f:
             return root_path
         science_group = f[SCIENCE_PATH]
@@ -167,7 +245,7 @@ class Base(pyre.component,
         '''
         extracts orbit
         '''
-        with h5py.File(self.filename, 'r', libver='latest', swmr=True) as fid:
+        with open_h5_file(self.filename, 'r', libver='latest', swmr=True) as fid:
             orbitPath = os.path.join(self.MetadataPath, 'orbit')
             return isce3.core.load_orbit_from_h5_group(fid[orbitPath])
 
@@ -176,7 +254,7 @@ class Base(pyre.component,
         '''
         extracts attitude
         '''
-        with h5py.File(self.filename, 'r', libver='latest', swmr=True) as fid:
+        with open_h5_file(self.filename, 'r', libver='latest', swmr=True) as fid:
             attitudePath = _join_paths(self.MetadataPath, 'attitude')
             return isce3.core.Attitude.load_from_h5(fid[attitudePath])
 
@@ -207,7 +285,7 @@ class Base(pyre.component,
                                           'parameters/slantRange')
 
         # extract the native Doppler dataset
-        with h5py.File(self.filename, 'r', libver='latest', swmr=True) as fid:
+        with open_h5_file(self.filename, 'r', libver='latest', swmr=True) as fid:
 
             if zero_doppler_time_dataset_path not in fid:
                 zero_doppler_time_dataset_path = \
@@ -234,7 +312,7 @@ class Base(pyre.component,
 
         zeroDopplerTimePath = os.path.join(self.SwathPath,
                                           'zeroDopplerTime')
-        with h5py.File(self.filename, 'r', libver='latest', swmr=True) as fid:
+        with open_h5_file(self.filename, 'r', libver='latest', swmr=True) as fid:
             zeroDopplerTime = fid[zeroDopplerTimePath][:]
 
         return zeroDopplerTime
@@ -249,7 +327,7 @@ class Base(pyre.component,
         slantRangePath = os.path.join(self.SwathPath,
                                       'frequency' + frequency, 'slantRange')
 
-        with h5py.File(self.filename, 'r', libver='latest', swmr=True) as fid:
+        with open_h5_file(self.filename, 'r', libver='latest', swmr=True) as fid:
             slantRange = fid[slantRangePath][:]
 
         return slantRange
@@ -271,7 +349,7 @@ class Base(pyre.component,
         else:
             folder = self.SwathPath
 
-        with h5py.File(self.filename, 'r', libver='latest', swmr=True) as fid:
+        with open_h5_file(self.filename, 'r', libver='latest', swmr=True) as fid:
             for freq in frequencyList:
                 root = os.path.join(folder, 'frequency{0}'.format(freq))
                 polList = extractWithIterator(fid[root], 'listOfPolarizations', bytestring,
@@ -334,7 +412,7 @@ class Base(pyre.component,
         '''
         from .Identification import Identification
 
-        with h5py.File(self.filename, 'r', libver='latest', swmr=True) as fileID:
+        with open_h5_file(self.filename, 'r', libver='latest', swmr=True) as fileID:
             h5grp = fileID[self.IdentificationPath]
             self.identification = Identification(h5grp)
 

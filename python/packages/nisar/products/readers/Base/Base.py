@@ -13,7 +13,6 @@ def _get_driver_kwds():
     Example function to fetch AWS credentials.
     Adjust this to your environment or fetch from boto3.
     """
-    import boto3
     session = boto3.Session()
     creds = session.get_credentials()
     if creds is None:
@@ -73,7 +72,7 @@ def open_h5_file(
             mode=mode,
             driver="ros3",
             libver=libver,
-            #swmr=swmr,
+            #swmr=swmr, it looks like this option not supported with ros3
             **driver_kwds
         )
     else:

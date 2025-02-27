@@ -365,8 +365,8 @@ def run_geocode_cov(cfg, hdf5_obj, root_ds,
         rtc_anf_dataset_name_output_str = \
             output_terrain_radiometry_str.replace('0', '').title()
         rtc_anf_dataset_name = (
-            f'rtc{rtc_anf_dataset_name_input_str}to'
-            f'{rtc_anf_dataset_name_output_str}Factor')
+            f'rtc{rtc_anf_dataset_name_output_str}to'
+            f'{rtc_anf_dataset_name_input_str}Factor')
 
         save_dataset(temp_rtc_anf.name, hdf5_obj, root_ds,
                      yds, xds,

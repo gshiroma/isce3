@@ -395,6 +395,7 @@ def run_geocode_cov(cfg, hdf5_obj, root_ds,
                      hdf5_obj, root_ds,
                      yds, xds,
                      'mask',
+                     fill_value=255,
                      compute_stats=False)
 
     # save rtc
@@ -735,14 +736,14 @@ class GcovWriter(BaseL2WriterSingleInput):
         # Note: CEOS ARD documentation uses the British spelling "Normalised"
         # rather than the American (US) spelling "Normalized"
         self.set_value(
-            'metadata/ceosAnalysisReadyData/ceosAnalysisReadyDataProductType',
+            '{PRODUCT}/metadata/ceosAnalysisReadyData/ceosAnalysisReadyDataProductType',
             'Normalised Radar Backscatter (NRB)')
 
         self.set_value(
-            'metadata/ceosAnalysisReadyData/'
+            '{PRODUCT}/metadata/ceosAnalysisReadyData/'
             'outputBackscatterDecibelConversionFormula',
             '10*log10(<GCOV_TERM>)')
- 
+
     def populate_data_parameters(self):
         """
         Populate the data group `grids` of the GCOV product

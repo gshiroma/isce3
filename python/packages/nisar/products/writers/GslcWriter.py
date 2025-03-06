@@ -11,9 +11,6 @@ class GslcWriter(BaseL2WriterSingleInput):
 
         super().__init__(runconfig, *args, **kwargs)
 
-        self.freq_pols_dict = self.cfg['processing']['input_subset'][
-            'list_of_frequencies']
-
         # populate the granule ID
         self.get_granule_id(self.freq_pols_dict)
 
@@ -43,7 +40,7 @@ class GslcWriter(BaseL2WriterSingleInput):
 
     def populate_ceos_analysis_ready_data_parameters(self):
         self.set_value(
-            'metadata/ceosAnalysisReadyData/ceosAnalysisReadyDataProductType',
+            '{PRODUCT}/metadata/ceosAnalysisReadyData/ceosAnalysisReadyDataProductType',
             'Geocoded Single-Look Complex (GSLC)')
 
     def populate_data_parameters(self):

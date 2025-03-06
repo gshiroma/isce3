@@ -1,25 +1,15 @@
 import h5py
 import warnings
 import numpy as np
-from datetime import datetime
+from datetime import datetime, timezone
 import xml.etree.ElementTree as ET
 import journal
 
+from nisar.products.granule_id import get_polarization_code, format_datetime
 from nisar.products.readers import open_product
 from nisar.h5 import cp_h5_meta_data
 
-DATE_TIME_METADATA_FORMAT = '%Y-%m-%dT%H:%M:%S.%fZ'
-
-pol_mode_dict = {
-    'SH': ['HH'],
-    'SV': ['VV'],
-    'DH': ['HH', 'HV'],
-    'DV': ['VV', 'VH'],
-    'CL': ['LH', 'LV'],
-    'CR': ['RH', 'RV'],
-    'FP': ['HH', 'HV', 'VV'],  # Note: FP (full-pol) is updated to QP
-    'QP': ['HH', 'HV', 'VV', 'VH']
-}
+DATE_TIME_METADATA_FORMAT = '%Y-%m-%dT%H:%M:%S'
 
 
 def get_granule_id_single_input(input_obj, partial_granule_id, freq_pols_dict):
@@ -94,19 +84,14 @@ def get_granule_id_single_input(input_obj, partial_granule_id, freq_pols_dict):
             warning_channel.log(warning_msg)
         mode_str += mode
 
-        for freq_pol_mode, pol_list in pol_mode_dict.items():
-            if set(freq_pols_dict[freq]) == set(pol_list):
-
-                # Store polarization mode for given frequency.
-                # "FP" (full-pol) does not exist in NISAR modes
-                # and therefore it is substituted by "QP"
-                pol_mode_str += freq_pol_mode.replace('FP', 'QP')
-                break
-        else:
+        pols = freq_pols_dict[freq]
+        pols_code = get_polarization_code(pols, default="XX")
+        if pols_code == "XX":   # pol set not found
             error_msg = ('Could not find polarization mode for input'
-                         f' set of polarizations: {freq_pols_dict[freq]}')
+                         f' set of polarizations: {pols}')
             error_channel.log(error_msg)
             raise NotImplementedError(error_msg)
+        pol_mode_str += pols_code
 
     # mode_str should have 4 characters
     if len(mode_str) != 4:
@@ -125,10 +110,8 @@ def get_granule_id_single_input(input_obj, partial_granule_id, freq_pols_dict):
         raise RuntimeError(error_msg)
 
     # start and end time
-    start_datetime = str(input_obj.identification.zdStartTime).split('.')[0]
-    start_datetime = start_datetime.replace('-', '').replace(':', '')
-    end_datetime = str(input_obj.identification.zdEndTime).split('.')[0]
-    end_datetime = end_datetime.replace('-', '').replace(':', '')
+    start_datetime = format_datetime(input_obj.identification.zdStartTime)
+    end_datetime = format_datetime(input_obj.identification.zdEndTime)
     if len(start_datetime) != 15:
         error_msg = ("Expected exactly 15 characters for the starting datetime"
                      f", but {len(start_datetime)} characters were found: "
@@ -483,7 +466,7 @@ class BaseWriterSingleInput():
     def __init__(self, runconfig):
 
         # set up processing datetime
-        self.processing_datetime = datetime.now()
+        self.processing_datetime = datetime.now(timezone.utc)
 
         # read main parameters from the runconfig
         self.runconfig = runconfig
@@ -522,7 +505,7 @@ class BaseWriterSingleInput():
 
         self.output_product_path = f'{self.root_path}/{self.product_type}'
 
-        self.input_hdf5_obj = h5py.File(self.input_file, mode='r')
+        self.input_hdf5_obj = h5py.File(self.input_file, mode='r', swmr=True)
         self.output_hdf5_obj = h5py.File(self.output_file, mode='a')
 
     def populate_metadata(self):
@@ -584,13 +567,29 @@ class BaseWriterSingleInput():
         Populate common parameters in the identification group
         """
 
+        product_doi = self.cfg['primary_executable']['product_doi']
+
+        if product_doi is None:
+            product_doi = '(NOT SPECIFIED)'
+
+        self.set_value(
+            'identification/productDoi',
+            product_doi)
+
         self.copy_from_input(
             'identification/absoluteOrbitNumber',
             format_function=np.uint32)
 
-        self.copy_from_input(
-            'identification/trackNumber',
-            format_function=np.uint8)
+        try:
+            self.copy_from_input(
+                'identification/trackNumber',
+                format_function=np.uint32)
+        except ValueError:
+            # Handle the case in which the input product contains a
+            # trackNumber that cannot be converted to a numeric value
+            # Example: UAVSAR flight ID (FLID)
+            self.copy_from_input(
+                'identification/trackNumber')
 
         self.copy_from_input(
             'identification/frameNumber',
@@ -630,7 +629,7 @@ class BaseWriterSingleInput():
 
         self.set_value(
             'identification/productSpecificationVersion',
-            '1.1.2')
+            '1.2.1')
 
         self.copy_from_input(
             'identification/lookDirection',
@@ -668,11 +667,13 @@ class BaseWriterSingleInput():
             self.cfg['primary_executable']['processing_type']
 
         if processing_type_runconfig == 'PR':
-            processing_type = np.bytes_('NOMINAL')
+            processing_type = np.bytes_('Nominal')
         elif processing_type_runconfig == 'UR':
-            processing_type = np.bytes_('URGENT')
+            processing_type = np.bytes_('Urgent')
+        elif processing_type_runconfig == 'OD':
+            processing_type = np.bytes_('Custom')
         else:
-            processing_type = np.bytes_('UNDEFINED')
+            processing_type = np.bytes_('Undefined')
         self.set_value(
             'identification/processingType',
             processing_type,
@@ -680,6 +681,10 @@ class BaseWriterSingleInput():
 
         self.copy_from_input('identification/isDithered', default=False)
         self.copy_from_input('identification/isMixedMode', default=False)
+        self.copy_from_input('identification/isFullFrame',
+                             skip_if_not_present=True)
+        self.copy_from_input('identification/isJointObservation',
+                             skip_if_not_present=True)
 
         # Copy CRID from runconfig (defaults to "A10000")
         self.copy_from_runconfig(
@@ -717,8 +722,11 @@ class BaseWriterSingleInput():
 
         # if `data` is a numpy fixed-length string, remove trailing null
         # characters
+        # NOTE: It is necessary to check the object's shape to determine
+        # whether it is a single string or a list of strings. If it is a
+        # list of string, then it will be kept as it is.
         if ((isinstance(data, np.bytes_) or isinstance(data, np.ndarray))
-                and (data.dtype.char == 'S')):
+                and (data.dtype.char == 'S') and (data.shape == ())):
             data = np.bytes_(data)
             try:
                 data = data.decode()
@@ -842,7 +850,10 @@ class BaseWriterSingleInput():
 
             # check if dataset contains a string. If so, read it using method
             # `asstr()``
-            if h5py.check_string_dtype(input_h5_dataset_obj.dtype):
+            # NOTE: It is necessary to check the object's shape to determine
+            # whether it is a single string or a list of strings. If it is a
+            # list of string, then it will be kept as it is.
+            if h5py.check_string_dtype(input_h5_dataset_obj.dtype) and input_h5_dataset_obj.shape == ():
                 # use asstr() to read the dataset
                 data = str(input_h5_dataset_obj.asstr()[...])
 
@@ -940,7 +951,7 @@ class BaseWriterSingleInput():
 
             check_h5_dtype_vs_xml_spec(xml_metadata_entry, h5_dataset_obj)
             write_xml_spec_attrs_to_h5_dataset(xml_metadata_entry,
-                                              h5_dataset_obj)
+                                               h5_dataset_obj)
             write_xml_description_to_hdf5(xml_metadata_entry, h5_dataset_obj)
 
     def __enter__(self):

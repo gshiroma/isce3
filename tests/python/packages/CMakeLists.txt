@@ -65,6 +65,7 @@ nisar/workflows/filter_interferogram.py
 nisar/workflows/bandpass_insar.py
 nisar/workflows/ionosphere.py
 nisar/workflows/troposphere.py
+nisar/workflows/solid_earth_tides.py
 nisar/workflows/baseline.py
 nisar/workflows/process_args.py
 nisar/workflows/rdr2geo.py
@@ -81,10 +82,11 @@ nisar/workflows/geocode_corrections.py
 
 if(WITH_CUDA)
     list(APPEND TESTFILES
-            nisar/workflows/dense_offsets.py
-            nisar/workflows/rubbersheet.py
-            nisar/workflows/cuda_insar.py
-        )
+        isce3/cuda/image/resample_slc.py
+        nisar/workflows/dense_offsets.py
+        nisar/workflows/rubbersheet.py
+        nisar/workflows/cuda_insar.py
+    )
 endif()
 
 foreach(TESTFILE ${TESTFILES})

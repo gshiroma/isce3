@@ -74,8 +74,8 @@ void getGeolocationGrid(isce3::io::Raster& dem_raster,
     info << "wavelength: " << radar_grid.wavelength() << pyre::journal::newline;
     info << "lookside: " << radar_grid.lookSide() << pyre::journal::newline;
     info << "rdr2geo threshold: " << rdr2geo_params.threshold << pyre::journal::newline;
-    info << "rdr2geo max. number of iterations: " << rdr2geo_params.extraiter << pyre::journal::newline;
-    info << "rdr2geo extra number of iterations: " << rdr2geo_params.maxiter << pyre::journal::endl;
+    info << "rdr2geo max. number of iterations: " << rdr2geo_params.maxiter << pyre::journal::newline;
+    info << "rdr2geo extra number of iterations: " << rdr2geo_params.extraiter << pyre::journal::endl;
     info << "geo2rdr threshold: " << geo2rdr_params.threshold << pyre::journal::newline;
     info << "geo2rdr max. number of iterations: " << geo2rdr_params.maxiter << pyre::journal::newline;
     info << "geo2rdr delta range: " << geo2rdr_params.delta_range << pyre::journal::endl;

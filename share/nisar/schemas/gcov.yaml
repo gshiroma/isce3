@@ -92,7 +92,11 @@ runconfig:
             # Processing information options
             processing_information: include('processing_information_options', required=False)
 
+            # Options to run geo2rdr (used by GeocodeCov and RTC)
             geo2rdr: include('geo2rdr_options', required=False)
+
+            # Options to run rdr2geo (used by topo when computing the layover shadow mask)
+            rdr2geo: include('rdr2geo_options', required=False)
 
             dem_interpolation_method: enum('sinc', 'bilinear', 'bicubic', 'nearest', 'biquintic', required=False)
 
@@ -333,7 +337,7 @@ geocode_options:
     # PLACEHOLDER - Save interpolated DEM used to compute GCOV
     save_dem: bool(required=False)
 
-    # PLACEHOLDER - Save the layover shadow mask
+    # Save the layover shadow mask
     save_layover_shadow_mask: bool(required=False)
 
     # PLACEHOLDER - Save the incidence angle

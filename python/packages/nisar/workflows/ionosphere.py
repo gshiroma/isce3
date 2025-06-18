@@ -434,6 +434,20 @@ def insar_ionosphere_pair(original_cfg, runw_hdf5):
     iono_insar_cfg = original_cfg.copy()
     iono_insar_cfg['primary_executable'][
                 'product_type'] = 'RUNW'
+    
+    # It is sufficient to compute crossmul once at 80 m posting for computing the ionosphere
+    # Therefore, we switch off the number of looks from crossmul (30 m) with that 
+    # of unwrapping (80 m)
+  
+    runw_rg_looks = iono_insar_cfg['processing']['phase_unwrap']['range_looks']
+    runw_az_looks = iono_insar_cfg['processing']['phase_unwrap']['azimuth_looks']
+
+    if runw_rg_looks != 1 or runw_az_looks !=1:
+        iono_insar_cfg['processing']['crossmul']['range_looks'] = runw_rg_looks
+        iono_insar_cfg['processing']['crossmul']['azimuth_looks'] = runw_az_looks
+
+        iono_insar_cfg['processing']['phase_unwrap']['range_looks'] = 1
+        iono_insar_cfg['processing']['phase_unwrap']['azimuth_looks'] = 1
 
     # update processing parameter
     # water mask for ionosphere is not supported now.

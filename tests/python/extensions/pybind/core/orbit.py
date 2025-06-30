@@ -46,7 +46,7 @@ def test_save_fractional():
 
         # First assert that an exception is raised if
         # `ensure_epoch_integer_seconds` is `False`
-        with pytest.raises(Exception):
+        with pytest.raises(RuntimeError):
             orbit.save_to_h5(g, ensure_epoch_integer_seconds=True)
 
         orbit.save_to_h5(g, ensure_epoch_integer_seconds=False)

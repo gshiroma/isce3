@@ -144,6 +144,9 @@ public:
      * @param[in]  min_block_size      Minimum block size (per thread)
      * @param[in]  max_block_size      Maximum block size (per thread)
      * @param[in]  dem_interp_method   DEM interpolation method
+     * @param[in]  use_platform_doppler Flag indicating whether the platform
+     * Doppler LUT should be used to estimate the platform position. If disabled,
+     * the grid Doppler LUT will be used instead
      */
     void geocode(const isce3::product::RadarGridParameters& radar_grid,
             isce3::io::Raster& input_raster, isce3::io::Raster& output_raster,
@@ -193,7 +196,8 @@ public:
             const long long max_block_size =
                     isce3::core::DEFAULT_MAX_BLOCK_SIZE,
             isce3::core::dataInterpMethod dem_interp_method =
-                    isce3::core::dataInterpMethod::BIQUINTIC_METHOD);
+                    isce3::core::dataInterpMethod::BIQUINTIC_METHOD,
+            const bool use_platform_doppler = false);
 
     /** Geocode using the interpolation algorithm.
      *
@@ -284,6 +288,9 @@ public:
      * @param[in]  min_block_size      Minimum block size (per thread)
      * @param[in]  max_block_size      Maximum block size (per thread)
      * @param[in]  dem_interp_method   DEM interpolation method
+     * @param[in]  use_platform_doppler Flag indicating whether the platform
+     * Doppler LUT should be used to estimate the platform position. If disabled,
+     * the grid Doppler LUT will be used instead
      */
     template<class T_out>
     void geocodeInterp(const isce3::product::RadarGridParameters& radar_grid,
@@ -326,7 +333,8 @@ public:
             const long long max_block_size =
                     isce3::core::DEFAULT_MAX_BLOCK_SIZE,
             isce3::core::dataInterpMethod dem_interp_method =
-                    isce3::core::dataInterpMethod::BIQUINTIC_METHOD);
+                    isce3::core::dataInterpMethod::BIQUINTIC_METHOD,
+            const bool use_platform_doppler = false);
 
     /** Geocode using the area projection algorithm (adaptive multilooking)
      *
@@ -426,6 +434,9 @@ public:
      * @param[in]  min_block_size      Minimum block size (per thread)
      * @param[in]  max_block_size      Maximum block size (per thread)
      * @param[in]  dem_interp_method   DEM interpolation method
+     * @param[in]  use_platform_doppler Flag indicating whether the platform
+     * Doppler LUT should be used to estimate the platform position. If disabled,
+     * the grid Doppler LUT will be used instead
      */
     template<class T_out>
     void geocodeAreaProj(
@@ -473,7 +484,8 @@ public:
             const long long max_block_size =
                     isce3::core::DEFAULT_MAX_BLOCK_SIZE,
             isce3::core::dataInterpMethod dem_interp_method =
-                    isce3::core::dataInterpMethod::BIQUINTIC_METHOD);
+                    isce3::core::dataInterpMethod::BIQUINTIC_METHOD,
+            const bool use_platform_doppler = false);
 
     /** Set the output geogrid
      * @param[in]  geoGridStartY       Starting Lat/Northing position

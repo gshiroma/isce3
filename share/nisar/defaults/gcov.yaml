@@ -418,9 +418,16 @@ runconfig:
                 threshold: 1.0e-7
                 maxiter: 50
 
+            # DEM interpolation method
             dem_interpolation_method: biquintic
 
-            # OPTIONAL
+            # Grid Doppler
+            grid_doppler: zero_doppler
+
+            # Doppler to compute the platform position
+            platform_doppler: native_doppler
+
+            # OPTIONAL - if noise correction desired
             noise_correction:
                 # Enable/disable noise correction
                 apply_correction: False

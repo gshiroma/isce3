@@ -340,9 +340,9 @@ namespace isce3 { namespace core {
         int right = array.size() - 1;
         int index;
 
-        long long counter = 0;
+        long long count = 0;
         long long MAX_NUM_ITERATIONS = 1e11;
-        while (left <= right and counter < MAX_NUM_ITERATIONS) {
+        while (left <= right and count < MAX_NUM_ITERATIONS) {
             const int middle = static_cast<int>(std::round(0.5 * (left + right)));
             if (left == (right - 1)) {
                 index = left;
@@ -353,6 +353,7 @@ namespace isce3 { namespace core {
             } else if (array[middle] > value) {
                 right = middle;
             }
+            count++;
         }
         index = left;
         return index;

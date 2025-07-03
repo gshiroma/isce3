@@ -344,13 +344,17 @@ namespace isce3 { namespace core {
         long long MAX_NUM_ITERATIONS = 1e11;
         while (left <= right and count < MAX_NUM_ITERATIONS) {
             const int middle = static_cast<int>(std::round(0.5 * (left + right)));
+            const auto middle_value = array[middle];
+            if (std::isnan(middle_value)) {
+                throw std::invalid_argument("input array may not contain NaN values");
+            }
             if (left == (right - 1)) {
                 index = left;
                 return index;
             }
-            if (array[middle] <= value) {
+            if (middle_value <= value) {
                 left = middle;
-            } else if (array[middle] > value) {
+            } else if (middle_value > value) {
                 right = middle;
             }
             count++;

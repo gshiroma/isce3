@@ -356,7 +356,7 @@ namespace isce3 { namespace core {
             }
             if (middle_value <= value) {
                 left = middle;
-            } else if (middle_value > value) {
+            } else {
                 right = middle;
             }
             count++;

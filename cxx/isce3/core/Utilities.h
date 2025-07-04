@@ -16,6 +16,8 @@
 #include <vector>
 #include <valarray>
 #include <complex>
+#include <cmath>
+#include <stdexcept>
 
 // Macro wrappers to check vector lengths 
 // (adds calling function and variable name information to the exception)

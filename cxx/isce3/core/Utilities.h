@@ -342,7 +342,7 @@ namespace isce3 { namespace core {
         int right = array.size() - 1;
         int index;
 
-        long long count = 0;
+        std::size_t count = 0;
         while (left <= right) {
             const int middle = static_cast<int>(std::round(0.5 * (left + right)));
             const auto middle_value = array[middle];
@@ -359,7 +359,7 @@ namespace isce3 { namespace core {
                 right = middle;
             }
             count++;
-            if (count >= array.size()) {
+            if (count > array.size()) {
                 throw std::runtime_error(
                     "Binary search failed to converge within the allowed iterations.");
             }

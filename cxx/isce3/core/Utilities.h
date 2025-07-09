@@ -357,7 +357,6 @@ namespace isce3 { namespace core {
         // The loop is guaranteed to converge with correct input, but we include
         // this check as a safe measure for unexpected edge cases.
         std::size_t max_iter = std::ceil(std::log2(array.size())) + 1;
-        // std::cout << "binary search" << std::endl;
         while (left + 1 < right) {
             const int middle = static_cast<int>(std::round(0.5 * (left + right)));
             const auto middle_value = array[middle];
@@ -373,7 +372,6 @@ namespace isce3 { namespace core {
                 throw std::runtime_error(
                     "Binary search failed to converge within the allowed iterations.");
             }
-            // std::cout << "count:" << count << std::endl;
         }
 
         if (std::isnan(array[left]) || std::isnan(array[right])) {

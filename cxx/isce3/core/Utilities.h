@@ -334,38 +334,52 @@ namespace isce3 { namespace core {
         }
     }
     
-    /** Searches array for index closest to provided value */   
+    /** Searches array for index closest to provided value
+     *
+     *  Assumes the array is sorted in ascending order and contains no NaNs.
+    */
     inline int binarySearch(const std::valarray<double> & array, double value) {
-   
+
+        if (array.size() == 0) {
+                throw std::invalid_argument("input array must contain at least 1 element");
+        }
+        if (array.size() == 1) {
+                return 0;
+        }
+
         // Do the binary search 
         int left = 0;
         int right = array.size() - 1;
-        int index;
 
         std::size_t count = 0;
-        while (left <= right) {
+
+        // `max_iter` provides a safeguard against unexpected behavior.
+        // The loop is guaranteed to converge with correct input, but we include
+        // this check as a safe measure for unexpected edge cases.
+        std::size_t max_iter = std::ceil(std::log2(array.size())) + 1;
+        while (left + 1 < right) {
             const int middle = static_cast<int>(std::round(0.5 * (left + right)));
             const auto middle_value = array[middle];
             if (std::isnan(middle_value)) {
                 throw std::invalid_argument("input array may not contain NaN values");
             }
-            if (left == (right - 1)) {
-                index = left;
-                return index;
-            }
-            if (middle_value <= value) {
+            if (middle_value < value) {
                 left = middle;
             } else {
                 right = middle;
             }
-            count++;
-            if (count > array.size()) {
+            if (++count > max_iter) {
                 throw std::runtime_error(
                     "Binary search failed to converge within the allowed iterations.");
             }
         }
-        index = left;
-        return index;
+
+        // Return the closest of left and right
+        if (std::abs(array[left] - value) <= std::abs(array[right] - value)) {
+            return left;
+        }
+
+        return right;
     }
 
     /** Clip a number between an upper and lower range (implements std::clamp for older GCC) */

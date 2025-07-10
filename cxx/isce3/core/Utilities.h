@@ -337,11 +337,13 @@ namespace isce3 { namespace core {
     /** Searches array for index closest to provided value
      *
      *  Assumes the array is sorted in ascending order and contains no NaNs.
-     * @param array The input array, which must be sorted in ascending order and contain no NaNs.
+     * 
+     * @param array The input array, which must be sorted in ascending order
+     * and contain no NaNs.
      * @param value The value to search for.
-     * @param always_pick_left If true, and `value` is strictly between two array elements,
-     *                         the function will return the lower index (left). If false, the
-     *                         function returns the closest index (left or right).
+     * @param always_pick_left If true, and `value` is strictly between two
+     * array elements, the function will return the lower index (left).
+     * If false, the function returns the closest index (left or right).
      *
      * @return The index of the array element closest to `value`.
     */

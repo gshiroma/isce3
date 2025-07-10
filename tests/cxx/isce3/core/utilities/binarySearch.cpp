@@ -10,10 +10,25 @@ TEST(BinarySearchTest, SingleElementArray) {
     EXPECT_EQ(binarySearch(arr, 100.0), 0);
 }
 
+TEST(BinarySearchTest, SingleElementArrayPickLeft) {
+    const bool always_pick_left = true;
+    std::valarray<double> arr = {2.0};
+    EXPECT_EQ(binarySearch(arr, 0.0), 0, always_pick_left);
+    EXPECT_EQ(binarySearch(arr, 100.0), 0, always_pick_left);
+}
+
+
 TEST(BinarySearchTest, ClosestMatchExact) {
     std::valarray<double> arr = {1.0, 3.0, 5.0, 7.0};
     EXPECT_EQ(binarySearch(arr, 3.0), 1);
     EXPECT_EQ(binarySearch(arr, 7.0), 3);
+}
+
+TEST(BinarySearchTest, ClosestMatchExactPickLeft) {
+    const bool always_pick_left = true;
+    std::valarray<double> arr = {1.0, 3.0, 5.0, 7.0};
+    EXPECT_EQ(binarySearch(arr, 3.0), 1, always_pick_left);
+    EXPECT_EQ(binarySearch(arr, 7.0), 3, always_pick_left);
 }
 
 TEST(BinarySearchTest, ClosestMatchInBetween) {
@@ -23,14 +38,49 @@ TEST(BinarySearchTest, ClosestMatchInBetween) {
     EXPECT_EQ(binarySearch(arr, 6.4), 3); // closer to `7`
 }
 
+TEST(BinarySearchTest, ClosestMatchInBetweenPickLeft) {
+    const bool always_pick_left = true;
+    std::valarray<double> arr = {1.0, 3.0, 5.0, 7.0};
+    EXPECT_EQ(binarySearch(arr, 2.1), 0, always_pick_left);
+    EXPECT_EQ(binarySearch(arr, 4.1), 1, always_pick_left);
+    EXPECT_EQ(binarySearch(arr, 6.4), 2, always_pick_left);
+}
+
 TEST(BinarySearchTest, ValueBeforeFirstElement) {
     std::valarray<double> arr = {1.0, 2.0, 3.0};
     EXPECT_EQ(binarySearch(arr, -1.0), 0); // `-1` closest to `1`
 }
 
+TEST(BinarySearchTest, ValueBeforeFirstElementPickLeft) {
+    const bool always_pick_left = true;
+    std::valarray<double> arr = {1.0, 2.0, 3.0};
+    EXPECT_EQ(binarySearch(arr, -1.0), 0, always_pick_left);
+}
+
 TEST(BinarySearchTest, ValueAfterLastElement) {
     std::valarray<double> arr = {1.0, 2.0, 3.0};
     EXPECT_EQ(binarySearch(arr, 5.0), 2); // `5` closest to `3`
+}
+
+TEST(BinarySearchTest, ValueAfterLastElementPickLeft) {
+    const bool always_pick_left = true;
+    std::valarray<double> arr = {1.0, 2.0, 3.0};
+    EXPECT_EQ(binarySearch(arr, 5.0), 2, always_pick_left);
+}
+
+TEST(BinarySearchTest, EqualDistanceChoosesLeft) {
+    std::valarray<double> arr = {1.0, 2.0, 3.0, 4.0};
+
+    // `2` and `3` equally distant; picks left (`2`)
+    EXPECT_EQ(binarySearch(arr, 2.5), 1);
+}
+
+TEST(BinarySearchTest, EqualDistanceChoosesLeftPickLeft) {
+    const bool always_pick_left = true;
+    std::valarray<double> arr = {1.0, 2.0, 3.0, 4.0};
+
+    // `2` and `3` equally distant; picks left (`2`)
+    EXPECT_EQ(binarySearch(arr, 2.5), 1, always_pick_left);
 }
 
 TEST(BinarySearchTest, ThrowsOnEmptyArray) {

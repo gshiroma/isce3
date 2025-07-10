@@ -338,7 +338,8 @@ namespace isce3 { namespace core {
      *
      *  Assumes the array is sorted in ascending order and contains no NaNs.
     */
-    inline int binarySearch(const std::valarray<double> & array, double value) {
+    inline int binarySearch(const std::valarray<double> & array, double value,
+                            const bool always_pick_left = false) {
 
         if (array.size() == 0) {
                 throw std::invalid_argument("input array must contain at least 1 element");
@@ -358,7 +359,7 @@ namespace isce3 { namespace core {
         // this check as a safe measure for unexpected edge cases.
         std::size_t max_iter = std::ceil(std::log2(array.size())) + 1;
         while (left + 1 < right) {
-            const int middle = static_cast<int>(std::round(0.5 * (left + right)));
+            const int middle = left + (right - left) / 2;
             const auto middle_value = array[middle];
             if (std::isnan(middle_value)) {
                 throw std::invalid_argument("input array may not contain NaN values");
@@ -372,6 +373,10 @@ namespace isce3 { namespace core {
                 throw std::runtime_error(
                     "Binary search failed to converge within the allowed iterations.");
             }
+        }
+
+        if (always_pick_left) {
+            return left;
         }
 
         if (std::isnan(array[left]) || std::isnan(array[right])) {

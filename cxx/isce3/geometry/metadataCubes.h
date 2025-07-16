@@ -5,6 +5,7 @@
 #include <isce3/core/forward.h>
 #include <isce3/io/forward.h>
 #include <isce3/product/forward.h>
+#include <limits>
 
 namespace isce3 { namespace geometry {
 

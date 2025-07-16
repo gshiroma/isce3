@@ -233,7 +233,7 @@ void getGeolocationGrid(isce3::io::Raster& dem_raster,
                 continue;
             }
 
-            double doppler_centroid = native_doppler.eval(azimuth_time, slant_range);
+            double doppler_centroid = native_doppler.eval(az_time, slant_range);
 
             writeVectorDerivedCubes(i, j, native_azimuth_time, target_llh,
                     orbit, ellipsoid,

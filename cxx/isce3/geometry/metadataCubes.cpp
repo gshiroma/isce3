@@ -104,7 +104,7 @@ void writeVectorDerivedCubes(const int array_pos_i,
         isce3::core::Matrix<float>& simulated_radar_brightness_array,
         isce3::core::Vec3* terrain_normal_unit_vec_enu,
         isce3::core::LookSide* lookside,
-        const double wavelength;
+        const double wavelength,
         const double doppler_centroid)
 {
 

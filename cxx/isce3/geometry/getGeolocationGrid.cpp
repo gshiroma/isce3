@@ -258,7 +258,7 @@ void getGeolocationGrid(isce3::io::Raster& dem_raster,
                     local_incidence_angle_array, projection_angle_raster,
                     projection_angle_array, simulated_radar_brightness_raster,
                     simulated_radar_brightness_array, terrain_normal_vector,
-                    lookside, wavelength, doppler_centroid);
+                    lookside, radar_grid.wavelength(),, doppler_centroid);
         }
     }
 

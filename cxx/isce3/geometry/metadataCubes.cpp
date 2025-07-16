@@ -90,6 +90,12 @@ void writeVectorDerivedCubes(const int array_pos_i,
         isce3::core::Matrix<float>& elevation_angle_array,
         isce3::io::Raster* ground_track_velocity_raster,
         isce3::core::Matrix<double>& ground_track_velocity_array,
+        isce3::io::Raster* platform_velocity_raster,
+        isce3::core::Matrix<float>& platform_velocity_array,
+        isce3::io::Raster* heading_angle_raster,
+        isce3::core::Matrix<float>& heading_angle_array,
+        isce3::io::Raster* squint_angle_raster,
+        isce3::core::Matrix<float>& squint_angle_array,
         isce3::io::Raster* local_incidence_angle_raster,
         isce3::core::Matrix<float>& local_incidence_angle_array,
         isce3::io::Raster* projection_angle_raster,
@@ -97,7 +103,9 @@ void writeVectorDerivedCubes(const int array_pos_i,
         isce3::io::Raster* simulated_radar_brightness_raster,
         isce3::core::Matrix<float>& simulated_radar_brightness_array,
         isce3::core::Vec3* terrain_normal_unit_vec_enu,
-        isce3::core::LookSide* lookside)
+        isce3::core::LookSide* lookside,
+        const double wavelength;
+        const double doppler_centroid)
 {
 
     const int i = array_pos_i;
@@ -119,6 +127,15 @@ void writeVectorDerivedCubes(const int array_pos_i,
 
     // Get target position in ECEF (target_xyz)
     const isce3::core::Vec3 target_xyz = ellipsoid.lonLatToXyz(target_llh);
+
+    if (platform_velocity_raster != nullptr) {
+        platform_velocity_array(i, j) = vel_xyz.norm();
+    }
+
+    if (squint_angle_raster != nullptr) {
+        const double sin_squint_angle = wavelength * doppler_centroid / (2 * vel_xyz.norm());
+        squint_angle_array(i, j) = std::asin(sin_squint_angle) * 180.0 / M_PI;
+    }
 
     // Ground-track velocity
     if (ground_track_velocity_raster != nullptr) {
@@ -142,7 +159,8 @@ void writeVectorDerivedCubes(const int array_pos_i,
             (sat_xyz - target_xyz).normalized();
 
     // Compute elevation angle calculated in ENU (geodedic)
-    if (elevation_angle_raster != nullptr) {
+    if (elevation_angle_raster != nullptr ||
+            heading_angle_raster != nullptr) {
 
         // Get platform position in llh (sat_llh)
         const isce3::core::Vec3 sat_llh = ellipsoid.xyzToLonLat(sat_xyz);
@@ -152,8 +170,17 @@ void writeVectorDerivedCubes(const int array_pos_i,
                 isce3::core::Mat3::xyzToEnu(sat_llh[1], sat_llh[0]);
         const isce3::core::Vec3 look_vector_enu_sat =
                 xyz2enu_sat.dot(look_vector_xyz).normalized();
-        const double cos_elevation = look_vector_enu_sat[2];
-        elevation_angle_array(i, j) = std::acos(cos_elevation) * 180.0 / M_PI;
+
+        if (elevation_angle_raster != nullptr) {
+            const double cos_elevation = look_vector_enu_sat[2];
+            elevation_angle_array(i, j) = std::acos(cos_elevation) * 180.0 / M_PI;
+        }
+
+        if (heading_angle_raster != nullptr) {
+            // Heading angle from North: atan2(x, y) instead of atan2(y, x)
+            heading_angle_array(i, j) = std::atan2(look_vector_enu_sat[0],
+                                                   look_vector_enu_sat[1]) * 180.0 / M_PI;
+        }
 
     }
 
@@ -306,6 +333,14 @@ void makeRadarGridCubes(const isce3::product::RadarGridParameters& radar_grid,
     info << "EPSG: " << geogrid.epsg() << pyre::journal::endl;
 
     geogrid.print();
+
+    
+    isce3::io::Raster * platform_velocity_raster = nullptr;
+    isce3::core::Matrix<float> platform_velocity_array;
+    isce3::io::Raster * heading_angle_raster = nullptr;
+    isce3::core::Matrix<float> heading_angle_array;
+    isce3::io::Raster * squint_angle_raster = nullptr;
+    isce3::core::Matrix<float> squint_angle_array;
 
     isce3::io::Raster * local_incidence_angle_raster = nullptr;
     isce3::core::Matrix<float> local_incidence_angle_array;
@@ -536,6 +571,12 @@ void makeRadarGridCubes(const isce3::product::RadarGridParameters& radar_grid,
                         elevation_angle_array,
                         ground_track_velocity_theoretical_raster,
                         ground_track_velocity_array,
+                        platform_velocity_raster,
+                        platform_velocity_array,
+                        heading_angle_raster,
+                        heading_angle_array,
+                        squint_angle_raster,
+                        squint_angle_array,
                         local_incidence_angle_raster,
                         local_incidence_angle_array,
                         projection_angle_raster,
@@ -633,6 +674,13 @@ void makeGeolocationGridCubes(
     info << "cube length: " << radar_grid.length() << pyre::journal::newline;
     info << "cube width: " << radar_grid.width() << pyre::journal::endl;
     info << "EPSG: " << epsg << pyre::journal::endl;
+
+    isce3::io::Raster * platform_velocity_raster = nullptr;
+    isce3::core::Matrix<float> platform_velocity_array;
+    isce3::io::Raster * heading_angle_raster = nullptr;
+    isce3::core::Matrix<float> heading_angle_array;
+    isce3::io::Raster * squint_angle_raster = nullptr;
+    isce3::core::Matrix<float> squint_angle_array;
 
     isce3::io::Raster * local_incidence_angle_raster = nullptr;
     isce3::core::Matrix<float> local_incidence_angle_array;
@@ -822,6 +870,12 @@ void makeGeolocationGridCubes(
                         elevation_angle_array,
                         ground_track_velocity_theoretical_raster,
                         ground_track_velocity_array,
+                        platform_velocity_raster,
+                        platform_velocity_array,
+                        heading_angle_raster,
+                        heading_angle_array,
+                        squint_angle_raster,
+                        squint_angle_array,
                         local_incidence_angle_raster,
                         local_incidence_angle_array,
                         projection_angle_raster,

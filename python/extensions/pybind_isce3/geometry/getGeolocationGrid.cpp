@@ -31,6 +31,9 @@ void addbinding_get_geolocation_grid(pybind11::module& m)
           py::arg("along_track_unit_vector_y_raster") = nullptr,
           py::arg("elevation_angle_raster") = nullptr,
           py::arg("ground_track_velocity_raster") = nullptr,
+          py::arg("platform_velocity_raster") = nullptr,
+          py::arg("heading_angle_raster") = nullptr,
+          py::arg("squint_angle_raster") = nullptr,
           R"(Get geolocation grid from L1 products
 
             The target-to-sensor line-of-sight (LOS) and along-track unit vectors are

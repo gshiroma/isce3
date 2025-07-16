@@ -73,6 +73,9 @@ void getRadarGrid(isce3::core::LookSide lookside,
                     isce3::io::Raster* along_track_unit_vector_y_raster,
                     isce3::io::Raster* elevation_angle_raster,
                     isce3::io::Raster* ground_track_velocity_raster,
+                    isce3::io::Raster* platform_velocity_raster,
+                    isce3::io::Raster* heading_angle_raster,
+                    isce3::io::Raster* squint_angle_raster,
                     isce3::io::Raster* local_incidence_angle_raster,
                     isce3::io::Raster* projection_angle_raster,
                     isce3::io::Raster* simulated_radar_brightness_raster)
@@ -144,6 +147,12 @@ void getRadarGrid(isce3::core::LookSide lookside,
             getNanArray<float>(elevation_angle_raster, geogrid);
     auto ground_track_velocity_array =
             getNanArray<double>(ground_track_velocity_raster, geogrid);
+    auto platform_velocity_array =
+            getNanArray<float>(platform_velocity_raster, geogrid);
+    auto heading_angle_array =
+            getNanArray<float>(heading_angle_raster, geogrid);
+    auto squint_angle_array =
+            getNanArray<float>(squint_angle_raster, geogrid);
     auto local_incidence_angle_array =
             getNanArray<float>(local_incidence_angle_raster, geogrid);
     auto projection_angle_array =
@@ -181,6 +190,9 @@ void getRadarGrid(isce3::core::LookSide lookside,
                 along_track_unit_vector_y_raster == nullptr &&
                 elevation_angle_raster == nullptr &&
                 ground_track_velocity_raster == nullptr &&
+                platform_velocity_raster == nullptr &&
+                heading_angle_raster == nullptr &&
+                squint_angle_raster == nullptr &&
                 local_incidence_angle_raster == nullptr &&
                 projection_angle_raster == nullptr &&
                     simulated_radar_brightness_raster == nullptr) {
@@ -225,6 +237,9 @@ void getRadarGrid(isce3::core::LookSide lookside,
                 along_track_unit_vector_y_raster == nullptr &&
                 elevation_angle_raster == nullptr &&
                 ground_track_velocity_raster == nullptr &&
+                platform_velocity_raster == nullptr &&
+                heading_angle_raster == nullptr &&
+                squint_angle_raster == nullptr &&
                 local_incidence_angle_raster == nullptr &&
                 projection_angle_raster == nullptr &&
                     simulated_radar_brightness_raster == nullptr) {
@@ -344,6 +359,8 @@ void getRadarGrid(isce3::core::LookSide lookside,
                     terrain_normal_unit_vec_enu.normalized();
             }
 
+            double doppler_centroid = native_doppler.eval(azimuth_time, slant_range);
+
             isce3::geometry::writeVectorDerivedCubes(
                     i, j, native_azimuth_time, target_llh,
                     orbit, ellipsoid,
@@ -354,12 +371,20 @@ void getRadarGrid(isce3::core::LookSide lookside,
                     along_track_unit_vector_x_array,
                     along_track_unit_vector_y_raster,
                     along_track_unit_vector_y_array, elevation_angle_raster,
-                    elevation_angle_array, ground_track_velocity_raster,
-                    ground_track_velocity_array, local_incidence_angle_raster,
+                    elevation_angle_array, 
+                    ground_track_velocity_raster,
+                    ground_track_velocity_array,
+                    platform_velocity_raster,
+                    platform_velocity_array,
+                    heading_angle_raster,
+                    heading_angle_array,
+                    squint_angle_raster,
+                    squint_angle_array,
+                    local_incidence_angle_raster,
                     local_incidence_angle_array, projection_angle_raster,
                     projection_angle_array, simulated_radar_brightness_raster,
                     simulated_radar_brightness_array, &terrain_normal_unit_vec_enu,
-                    &lookside);
+                    &lookside, wavelength, doppler_centroid);
         }
     }
 
@@ -376,6 +401,12 @@ void getRadarGrid(isce3::core::LookSide lookside,
                along_track_unit_vector_y_array, band, geogrid);
     writeArray(elevation_angle_raster, elevation_angle_array, band, geogrid);
     writeArray(ground_track_velocity_raster, ground_track_velocity_array, 
+               band, geogrid);
+    writeArray(platform_velocity_raster, platform_velocity_array, 
+               band, geogrid);
+    writeArray(heading_angle_raster, heading_angle_array, 
+               band, geogrid);
+    writeArray(squint_angle_raster, squint_angle_array, 
                band, geogrid);
     writeArray(local_incidence_angle_raster, local_incidence_angle_array,
                band, geogrid);

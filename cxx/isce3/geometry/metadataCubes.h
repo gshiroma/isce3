@@ -76,6 +76,12 @@ void writeVectorDerivedCubes(const int array_pos_i,
         isce3::core::Matrix<float>& elevation_angle_array,
         isce3::io::Raster* ground_track_velocity_raster,
         isce3::core::Matrix<double>& ground_track_velocity_array,
+        isce3::io::Raster* platform_velocity_raster,
+        isce3::core::Matrix<float>& platform_velocity_array,
+        isce3::io::Raster* heading_angle_raster,
+        isce3::core::Matrix<float>& heading_angle_array,
+        isce3::io::Raster* squint_angle_raster,
+        isce3::core::Matrix<float>& squint_angle_array,
         isce3::io::Raster* local_incidence_angle_raster,
         isce3::core::Matrix<float>& local_incidence_angle_array,
         isce3::io::Raster* projection_angle_raster,
@@ -83,7 +89,9 @@ void writeVectorDerivedCubes(const int array_pos_i,
         isce3::io::Raster* simulated_radar_brightness_raster,
         isce3::core::Matrix<float>& simulated_radar_brightness_array,
         isce3::core::Vec3* terrain_normal_unit_vec_enu = nullptr,
-        isce3::core::LookSide* lookside = nullptr);
+        isce3::core::LookSide* lookside = nullptr,
+        const double wavelength = std::numeric_limits<double>::quiet_NaN(),
+        const double doppler_centroid = std::numeric_limits<double>::quiet_NaN());
 
 /** Make metadata radar grid cubes
  *

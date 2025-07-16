@@ -65,7 +65,10 @@ void getGeolocationGrid(isce3::io::Raster& dem_raster,
                         isce3::io::Raster* along_track_unit_vector_x_raster,
                         isce3::io::Raster* along_track_unit_vector_y_raster,
                         isce3::io::Raster* elevation_angle_raster,
-                        isce3::io::Raster* ground_track_velocity_raster)
+                        isce3::io::Raster* ground_track_velocity_raster,
+                        isce3::io::Raster* platform_velocity_raster,
+                        isce3::io::Raster* heading_angle_raster,
+                        isce3::io::Raster* squint_angle_raster)
 {
 
     pyre::journal::info_t info("isce.geometry.getGeolocationGrid");
@@ -108,6 +111,12 @@ void getGeolocationGrid(isce3::io::Raster& dem_raster,
     auto ground_track_velocity_array =
             getNanArrayRadarGrid<double>(ground_track_velocity_raster, 
                 radar_grid);
+    auto platform_velocity_array =
+            getNanArrayRadarGrid<float>(platform_velocity_raster, radar_grid);
+    auto heading_angle_array =
+            getNanArrayRadarGrid<float>(heading_angle_raster, radar_grid);
+    auto squint_angle_array =
+            getNanArrayRadarGrid<float>(squint_angle_raster, radar_grid);
 
     BoundingBox bbox = getGeoBoundingBoxHeightSearch(radar_grid, orbit,
                                                      proj.get(), grid_doppler);
@@ -188,7 +197,10 @@ void getGeolocationGrid(isce3::io::Raster& dem_raster,
                 along_track_unit_vector_x_raster == nullptr &&
                 along_track_unit_vector_y_raster == nullptr &&
                 elevation_angle_raster == nullptr &&
-                ground_track_velocity_raster == nullptr) {
+                ground_track_velocity_raster == nullptr &&
+                platform_velocity_raster == nullptr &&
+                heading_angle_raster == nullptr &&
+                squint_angle_raster == nullptr) {
                 continue;
             }
 
@@ -221,6 +233,8 @@ void getGeolocationGrid(isce3::io::Raster& dem_raster,
                 continue;
             }
 
+            double doppler_centroid = native_doppler.eval(azimuth_time, slant_range);
+
             writeVectorDerivedCubes(i, j, native_azimuth_time, target_llh,
                     orbit, ellipsoid,
                     incidence_angle_raster, incidence_angle_array,
@@ -233,11 +247,18 @@ void getGeolocationGrid(isce3::io::Raster& dem_raster,
                     elevation_angle_raster,
                     elevation_angle_array,
                     ground_track_velocity_raster,
-                    ground_track_velocity_array, local_incidence_angle_raster,
+                    ground_track_velocity_array,
+                    platform_velocity_raster,
+                    platform_velocity_array,
+                    heading_angle_raster,
+                    heading_angle_array,
+                    squint_angle_raster,
+                    squint_angle_array,
+                    local_incidence_angle_raster,
                     local_incidence_angle_array, projection_angle_raster,
                     projection_angle_array, simulated_radar_brightness_raster,
                     simulated_radar_brightness_array, terrain_normal_vector,
-                    lookside);
+                    lookside, wavelength, doppler_centroid);
         }
     }
 

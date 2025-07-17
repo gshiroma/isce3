@@ -133,8 +133,16 @@ void writeVectorDerivedCubes(const int array_pos_i,
     }
 
     if (squint_angle_raster != nullptr) {
+
         const double sin_squint_angle = wavelength * doppler_centroid / (2 * vel_xyz.norm());
         squint_angle_array(i, j) = std::asin(sin_squint_angle) * 180.0 / M_PI;
+
+        /*
+        std::cout << "wavelength: " << wavelength;
+        std::cout << "doppler_centroid: " << doppler_centroid;
+        std::cout << "sin_squint_angle: " << sin_squint_angle;
+        std::cout << "squint angle: " << std::asin(sin_squint_angle) * 180.0 / M_PI << std::endl;
+        */
     }
 
     // Ground-track velocity
@@ -159,8 +167,7 @@ void writeVectorDerivedCubes(const int array_pos_i,
             (sat_xyz - target_xyz).normalized();
 
     // Compute elevation angle calculated in ENU (geodedic)
-    if (elevation_angle_raster != nullptr ||
-            heading_angle_raster != nullptr) {
+    if (elevation_angle_raster != nullptr) {
 
         // Get platform position in llh (sat_llh)
         const isce3::core::Vec3 sat_llh = ellipsoid.xyzToLonLat(sat_xyz);
@@ -176,11 +183,14 @@ void writeVectorDerivedCubes(const int array_pos_i,
             elevation_angle_array(i, j) = std::acos(cos_elevation) * 180.0 / M_PI;
         }
 
+        /*
+        Heading angle from platform
         if (heading_angle_raster != nullptr) {
             // Heading angle from North: atan2(x, y) instead of atan2(y, x)
             heading_angle_array(i, j) = std::atan2(look_vector_enu_sat[0],
                                                    look_vector_enu_sat[1]) * 180.0 / M_PI;
         }
+        */
 
     }
 
@@ -189,6 +199,13 @@ void writeVectorDerivedCubes(const int array_pos_i,
             isce3::core::Mat3::xyzToEnu(target_llh[1], target_llh[0]);
     const isce3::core::Vec3 look_vector_enu =
             xyz2enu.dot(look_vector_xyz).normalized();
+
+    if (heading_angle_raster != nullptr) {
+        // Heading angle around the targe clock-wise from North:
+        // atan2(x, y) instead of atan2(y, x)
+        heading_angle_array(i, j) = std::atan2(look_vector_enu[0],
+                                               look_vector_enu[1]) * 180.0 / M_PI;
+    }
 
     // Compute incidence angle in ENU (geodetic)
     if (incidence_angle_raster != nullptr) {

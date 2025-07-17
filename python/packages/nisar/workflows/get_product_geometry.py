@@ -313,11 +313,11 @@ def get_radar_grid(nisar_product_obj, args):
         flag_all)
     heading_angle_raster = _get_raster(
         args.output_dir, 'headingAngle', gdal.GDT_Float32, shape,
-        output_file_list, output_obj_list, args.flag_heading_angle_velocity or
+        output_file_list, output_obj_list, args.flag_heading_angle or
         flag_all)
     squint_angle_raster = _get_raster(
         args.output_dir, 'squintAngle', gdal.GDT_Float32, shape,
-        output_file_list, output_obj_list, args.flag_squint_angle_velocity or
+        output_file_list, output_obj_list, args.flag_squint_angle or
         flag_all)
     local_incidence_angle_raster = _get_raster(
         args.output_dir, 'localIncidenceAngle', gdal.GDT_Float32, shape,
@@ -482,11 +482,11 @@ def get_geolocation_grid(nisar_product_obj, args,
         flag_all)
     heading_angle_raster = _get_raster(
         args.output_dir, 'headingAngle', gdal.GDT_Float32, shape,
-        output_file_list, output_obj_list, args.flag_heading_angle_velocity or
+        output_file_list, output_obj_list, args.flag_heading_angle or
         flag_all)
     squint_angle_raster = _get_raster(
         args.output_dir, 'squintAngle', gdal.GDT_Float32, shape,
-        output_file_list, output_obj_list, args.flag_squint_angle_velocity or
+        output_file_list, output_obj_list, args.flag_squint_angle or
         flag_all)
 
     dem_interp_method = get_dem_interp_method(args.dem_interp_method)

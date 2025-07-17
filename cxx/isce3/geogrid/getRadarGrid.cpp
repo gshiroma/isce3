@@ -264,6 +264,37 @@ void getRadarGrid(isce3::core::LookSide lookside,
                 continue;
             }
 
+            /*
+            Another method for computing the squint angle (for debugging)
+            if (squint_angle_raster != nullptr) {
+                isce3::core::cartesian_t sat_xyz, vel_xyz;
+                isce3::error::ErrorCode status =
+                orbit.interpolate(&sat_xyz, &vel_xyz, native_azimuth_time,
+                                  isce3::core::OrbitInterpBorderMode::FillNaN);
+
+                isce3::core::Vec3 target_llh_zero;
+                auto converged =
+                        rdr2geo(native_azimuth_time, slant_range, 0,
+                                orbit, ellipsoid,
+                                dem_interp, target_llh_zero,
+                                wavelength,
+                                lookside, geo2rdr_params.threshold,
+                                geo2rdr_params.maxiter, geo2rdr_params.delta_range);
+
+                // Check convergence
+                if (!converged) {
+                    continue;
+                }
+
+                const Vec3 sat_to_target_unit_xyz = (ellipsoid.lonLatToXyz(target_llh) - sat_xyz).normalized();
+                const Vec3 sat_to_target_unit_xyz_zero = (ellipsoid.lonLatToXyz(target_llh_zero) - sat_xyz).normalized();
+
+                const double cos_squint_angle = sat_to_target_unit_xyz.dot(sat_to_target_unit_xyz_zero);
+                squint_angle_array(i, j) = std::acos(cos_squint_angle) * 180.0 / M_PI;
+
+            }
+            */
+
             Vec3 terrain_normal_unit_vec_enu {0, 0, 1.};
 
             if (local_incidence_angle_raster != nullptr ||

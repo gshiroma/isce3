@@ -105,7 +105,7 @@
         </string>
         <string length="0"
                 name="/science/LSAR/identification/plannedDatatakeId"
-                shape="numberOfObservations">
+                shape="numberOfDatatakes">
           <annotation app="conformance"
                       lang="en">List of planned datatakes included in the product</annotation>
         </string>
@@ -127,19 +127,13 @@
           <annotation app="conformance"
                       lang="en">List of frequency layers available in the product</annotation>
         </string>
-        <string length="22"
-                name="/science/LSAR/identification/listOfObservationModes"
-                shape="numberOfObservations">
-          <annotation app="conformance"
-                      lang="en">List of each input raw dataset's observation mode</annotation>
-        </string>
-        <integer name="/science/LSAR/identification/diagnosticModeFlag"
+	  <integer name="/science/LSAR/identification/diagnosticModeFlag"
                  shape="scalar"
                  signed="false"
                  width="8">
-          <annotation app="conformance"
-                      lang="en">Indicates if the radar operation mode is a diagnostic mode (1-2) or DBFed science (0): 0, 1, or 2</annotation>
-        </integer>
+	    <annotation app="conformance"
+		      lang="en">Indicates if the radar operation mode is a diagnostic mode (1-2) or DBFed science (0): 0, 1, or 2</annotation>
+	  </integer>
         <string length="0"
                 name="/science/LSAR/identification/productLevel"
                 shape="scalar">
@@ -188,7 +182,7 @@
                 name="/science/LSAR/identification/processingType"
                 shape="scalar">
           <annotation app="conformance"
-                      lang="en">Processing pipeline used to generate this granule. "Nominal": standard production system; "Urgent": time-sensitive processing in response to urgent response events; "Custom": user-initiated processing outside the nominal production system</annotation>
+                      lang="en">Nominal (or) Urgent (or) Custom (or) Undefined</annotation>
         </string>
         <string length="0"
                 name="/science/LSAR/identification/isDithered"
@@ -291,14 +285,14 @@
             <annotation app="conformance"
                         ellipsoid="Projection ellipsoid"
                         epsg_code="Projection EPSG code"
-                        false_easting="The value added to all abscissa values in the rectangular coordinates for a map projection"
-                        false_northing="The value added to all ordinate values in the rectangular coordinates for a map projection"
+                        false_easting="The value added to all abscissa values in the rectangular coordinates for a map projection."
+                        false_northing="The value added to all ordinate values in the rectangular coordinates for a map projection."
                         grid_mapping_name="Grid mapping variable name"
                         inverse_flattening="Inverse flattening of the ellipsoidal figure"
-                        latitude_of_projection_origin="The latitude chosen as the origin of rectangular coordinates for a map projection"
-                        longitude_of_projection_origin="The longitude, with respect to Greenwich, of the prime meridian associated with the geodetic datum"
-                        longitude_of_central_meridian="The line of longitude at the center of a map projection generally used as the basis for constructing the projection"
-                        scale_factor_at_central_meridian="A multiplier for reducing a distance obtained from a map by computation or scaling to the actual distance along the central meridian"
+                        latitude_of_projection_origin="The latitude chosen as the origin of rectangular coordinates for a map projection."
+                        longitude_of_projection_origin="The longitude, with respect to Greenwich, of the prime meridian associated with the geodetic datum."
+                        longitude_of_central_meridian="The line of longitude at the center of a map projection generally used as the basis for constructing the projection."
+                        scale_factor_at_central_meridian="A multiplier for reducing a distance obtained from a map by computation or scaling to the actual distance along the central meridian."
                         semi_major_axis="Semi-major axis"
                         spatial_ref="Spatial reference"
                         utm_zone_number="UTM zone number"
@@ -343,7 +337,7 @@
                       grid_mapping="projection"
                       long_name="Valid samples subswath mask"
                       valid_min="0"
-                      _FillValue="255">Mask indicating the subswath number representing valid GSLC samples. Each GSLC pixel is assumed valid if all the pixels in the interpolation window are fully focused in the input RSLC. A value of 0 indicates that at least one RSLC pixel in the interpolation window is partially focused or invalid. Pixels outside of the radar acquisition extent are filled with the value 255.</annotation>
+                      _FillValue="255">Mask indicating the subswath number representing valid GSLC samples. Each GSLC pixel is assumed valid if all the pixels in the interpolation window are fully focused in the input RSLC. A value of `0` indicates that at least one RSLC pixel in the interpolation window is partially focused or invalid. Pixels outside of the radar acquisition extent are filled with the value `255`.</annotation>
         </integer>
         <real name="/science/LSAR/GSLC/grids/frequencyA/HH"
               shape="complexDataFrequencyAShape"
@@ -359,7 +353,7 @@
                       mean_real_value="Arithmetic average of the real part of the numeric data points"
                       sample_stddev_real="Standard deviation of the real part of the numeric data points"
                       long_name="Geocoded single-look complex image HH"
-                      grid_mapping="projection"
+                      grid_mapping='projection'
                       DIMENSION_LIST="HDF5 internal attribute"
                       _FillValue="(nan+nan*j)"
                       units="1">Focused SLC image (HH)</annotation>
@@ -379,7 +373,7 @@
                       mean_real_value="Arithmetic average of the real part of the numeric data points"
                       sample_stddev_real="Standard deviation of the real part of the numeric data points"
                       long_name="Geocoded single-look complex image HV"
-                      grid_mapping="projection"
+                      grid_mapping='projection'
                       DIMENSION_LIST="HDF5 internal attribute"
                       _FillValue="(nan+nan*j)"
                       units="1">Focused SLC image (HV)</annotation>
@@ -399,7 +393,7 @@
                       mean_real_value="Arithmetic average of the real part of the numeric data points"
                       sample_stddev_real="Standard deviation of the real part of the numeric data points"
                       long_name="Geocoded single-look complex image VH"
-                      grid_mapping="projection"
+                      grid_mapping='projection'
                       DIMENSION_LIST="HDF5 internal attribute"
                       _FillValue="(nan+nan*j)"
                       units="1">Focused SLC image (VH)</annotation>
@@ -419,7 +413,7 @@
                       mean_real_value="Arithmetic average of the real part of the numeric data points"
                       sample_stddev_real="Standard deviation of the real part of the numeric data points"
                       long_name="Geocoded single-look complex image VV"
-                      grid_mapping="projection"
+                      grid_mapping='projection'
                       DIMENSION_LIST="HDF5 internal attribute"
                       _FillValue="(nan+nan*j)"
                       units="1">Focused SLC image (VV)</annotation>
@@ -439,7 +433,7 @@
                       mean_real_value="Arithmetic average of the real part of the numeric data points"
                       sample_stddev_real="Standard deviation of the real part of the numeric data points"
                       long_name="Geocoded single-look complex image RH"
-                      grid_mapping="projection"
+                      grid_mapping='projection'
                       DIMENSION_LIST="HDF5 internal attribute"
                       _FillValue="(nan+nan*j)"
                       units="1">Focused SLC image (RH)</annotation>
@@ -459,7 +453,7 @@
                       mean_real_value="Arithmetic average of the real part of the numeric data points"
                       sample_stddev_real="Standard deviation of the real part of the numeric data points"
                       long_name="Geocoded single-look complex image RV"
-                      grid_mapping="projection"
+                      grid_mapping='projection'
                       DIMENSION_LIST="HDF5 internal attribute"
                       _FillValue="(nan+nan*j)"
                       units="1">Focused SLC image (RV)</annotation>
@@ -544,14 +538,14 @@
             <annotation app="conformance"
                         ellipsoid="Projection ellipsoid"
                         epsg_code="Projection EPSG code"
-                        false_easting="The value added to all abscissa values in the rectangular coordinates for a map projection"
-                        false_northing="The value added to all ordinate values in the rectangular coordinates for a map projection"
+                        false_easting="The value added to all abscissa values in the rectangular coordinates for a map projection."
+                        false_northing="The value added to all ordinate values in the rectangular coordinates for a map projection."
                         grid_mapping_name="Grid mapping variable name"
                         inverse_flattening="Inverse flattening of the ellipsoidal figure"
-                        latitude_of_projection_origin="The latitude chosen as the origin of rectangular coordinates for a map projection"
-                        longitude_of_projection_origin="The longitude, with respect to Greenwich, of the prime meridian associated with the geodetic datum"
-                        longitude_of_central_meridian="The line of longitude at the center of a map projection generally used as the basis for constructing the projection"
-                        scale_factor_at_central_meridian="A multiplier for reducing a distance obtained from a map by computation or scaling to the actual distance along the central meridian"
+                        latitude_of_projection_origin="The latitude chosen as the origin of rectangular coordinates for a map projection."
+                        longitude_of_projection_origin="The longitude, with respect to Greenwich, of the prime meridian associated with the geodetic datum."
+                        longitude_of_central_meridian="The line of longitude at the center of a map projection generally used as the basis for constructing the projection."
+                        scale_factor_at_central_meridian="A multiplier for reducing a distance obtained from a map by computation or scaling to the actual distance along the central meridian."
                         semi_major_axis="Semi-major axis"
                         spatial_ref="Spatial reference"
                         utm_zone_number="UTM zone number"
@@ -596,7 +590,7 @@
                       grid_mapping="projection"
                       long_name="Valid samples subswath mask"
                       valid_min="0"
-                      _FillValue="255">Mask indicating the subswath number representing valid GSLC samples. Each GSLC pixel is assumed valid if all the pixels in the interpolation window are fully focused in the input RSLC. A value of 0 indicates that at least one RSLC pixel in the interpolation window is partially focused or invalid. Pixels outside of the radar acquisition extent are filled with the value 255.</annotation>
+                      _FillValue="255">Mask indicating the subswath number representing valid GSLC samples. Each GSLC pixel is assumed valid if all the pixels in the interpolation window are fully focused in the input RSLC. A value of `0` indicates that at least one RSLC pixel in the interpolation window is partially focused or invalid. Pixels outside of the radar acquisition extent are filled with the value `255`.</annotation>
         </integer>
         <real name="/science/LSAR/GSLC/grids/frequencyB/HH"
               shape="complexDataFrequencyBShape"
@@ -612,7 +606,7 @@
                       mean_real_value="Arithmetic average of the real part of the numeric data points"
                       sample_stddev_real="Standard deviation of the real part of the numeric data points"
                       long_name="Geocoded single-look complex image HH"
-                      grid_mapping="projection"
+                      grid_mapping='projection'
                       DIMENSION_LIST="HDF5 internal attribute"
                       _FillValue="(nan+nan*j)"
                       units="1">Focused SLC image (HH)</annotation>
@@ -632,7 +626,7 @@
                       mean_real_value="Arithmetic average of the real part of the numeric data points"
                       sample_stddev_real="Standard deviation of the real part of the numeric data points"
                       long_name="Geocoded single-look complex image HV"
-                      grid_mapping="projection"
+                      grid_mapping='projection'
                       DIMENSION_LIST="HDF5 internal attribute"
                       _FillValue="(nan+nan*j)"
                       units="1">Focused SLC image (HV)</annotation>
@@ -652,7 +646,7 @@
                       mean_real_value="Arithmetic average of the real part of the numeric data points"
                       sample_stddev_real="Standard deviation of the real part of the numeric data points"
                       long_name="Geocoded single-look complex image VH"
-                      grid_mapping="projection"
+                      grid_mapping='projection'
                       DIMENSION_LIST="HDF5 internal attribute"
                       _FillValue="(nan+nan*j)"
                       units="1">Focused SLC image (VH)</annotation>
@@ -672,7 +666,7 @@
                       mean_real_value="Arithmetic average of the real part of the numeric data points"
                       sample_stddev_real="Standard deviation of the real part of the numeric data points"
                       long_name="Geocoded single-look complex image VV"
-                      grid_mapping="projection"
+                      grid_mapping='projection'
                       DIMENSION_LIST="HDF5 internal attribute"
                       _FillValue="(nan+nan*j)"
                       units="1">Focused SLC image (VV)</annotation>
@@ -692,7 +686,7 @@
                       mean_real_value="Arithmetic average of the real part of the numeric data points"
                       sample_stddev_real="Standard deviation of the real part of the numeric data points"
                       long_name="Geocoded single-look complex image RH"
-                      grid_mapping="projection"
+                      grid_mapping='projection'
                       DIMENSION_LIST="HDF5 internal attribute"
                       _FillValue="(nan+nan*j)"
                       units="1">Focused SLC image (RH)</annotation>
@@ -712,7 +706,7 @@
                       mean_real_value="Arithmetic average of the real part of the numeric data points"
                       sample_stddev_real="Standard deviation of the real part of the numeric data points"
                       long_name="Geocoded single-look complex image RVH"
-                      grid_mapping="projection"
+                      grid_mapping='projection'
                       DIMENSION_LIST="HDF5 internal attribute"
                       _FillValue="(nan+nan*j)"
                       units="1">Focused SLC image (RV)</annotation>
@@ -838,7 +832,7 @@
                       _FillValue="nan"
                       grid_mapping="projection"
                       long_name="LOS unit vector X"
-                      units="1">East component of the line-of-sight (LOS) unit vector, defined from the target to the sensor, expressed in the east-north-up (ENU) coordinate system with its origin at the target location</annotation>
+                      units="1">East component of unit vector of LOS from target to sensor</annotation>
         </real>
         <real name="/science/LSAR/GSLC/metadata/radarGrid/losUnitVectorY"
               shape="radarCubeShape"
@@ -851,7 +845,7 @@
                       _FillValue="nan"
                       grid_mapping="projection"
                       long_name="LOS unit vector Y"
-                      units="1">North component of the line-of-sight (LOS) unit vector, defined from the target to the sensor, expressed in the east-north-up (ENU) coordinate system with its origin at the target location</annotation>
+                      units="1">North component of unit vector of LOS from target to sensor</annotation>
         </real>
         <real name="/science/LSAR/GSLC/metadata/radarGrid/alongTrackUnitVectorX"
               shape="radarCubeShape"
@@ -864,7 +858,7 @@
                       _FillValue="nan"
                       grid_mapping="projection"
                       long_name="Along-track unit vector X"
-                      units="1">East component of the along-track unit vector at the target location, expressed in the east-north-up (ENU) coordinate system and projected onto the horizontal plane (i.e., excluding the up component)</annotation>
+                      units="1">East component of unit vector along ground track</annotation>
         </real>
         <real name="/science/LSAR/GSLC/metadata/radarGrid/alongTrackUnitVectorY"
               shape="radarCubeShape"
@@ -877,7 +871,7 @@
                       _FillValue="nan"
                       grid_mapping="projection"
                       long_name="Along-track unit vector Y"
-                      units="1">North component of the along-track unit vector at the target location, expressed in the east-north-up (ENU) coordinate system and projected onto the horizontal plane (i.e., excluding the up component)</annotation>
+                      units="1">North component of unit vector along ground track</annotation>
         </real>
         <real name="/science/LSAR/GSLC/metadata/radarGrid/elevationAngle"
               shape="radarCubeShape"
@@ -911,14 +905,14 @@
             <annotation app="conformance"
                         ellipsoid="Projection ellipsoid"
                         epsg_code="Projection EPSG code"
-                        false_easting="The value added to all abscissa values in the rectangular coordinates for a map projection"
-                        false_northing="The value added to all ordinate values in the rectangular coordinates for a map projection"
+                        false_easting="The value added to all abscissa values in the rectangular coordinates for a map projection."
+                        false_northing="The value added to all ordinate values in the rectangular coordinates for a map projection."
                         grid_mapping_name="Grid mapping variable name"
                         inverse_flattening="Inverse flattening of the ellipsoidal figure"
-                        latitude_of_projection_origin="The latitude chosen as the origin of rectangular coordinates for a map projection"
-                        longitude_of_projection_origin="The longitude, with respect to Greenwich, of the prime meridian associated with the geodetic datum"
-                        longitude_of_central_meridian="The line of longitude at the center of a map projection generally used as the basis for constructing the projection"
-                        scale_factor_at_central_meridian="A multiplier for reducing a distance obtained from a map by computation or scaling to the actual distance along the central meridian"
+                        latitude_of_projection_origin="The latitude chosen as the origin of rectangular coordinates for a map projection."
+                        longitude_of_projection_origin="The longitude, with respect to Greenwich, of the prime meridian associated with the geodetic datum."
+                        longitude_of_central_meridian="The line of longitude at the center of a map projection generally used as the basis for constructing the projection."
+                        scale_factor_at_central_meridian="A multiplier for reducing a distance obtained from a map by computation or scaling to the actual distance along the central meridian."
                         semi_major_axis="Semi-major axis"
                         spatial_ref="Spatial reference"
                         utm_zone_number="UTM zone number"
@@ -971,14 +965,14 @@
             <annotation app="conformance"
                         ellipsoid="Projection ellipsoid"
                         epsg_code="Projection EPSG code"
-                        false_easting="The value added to all abscissa values in the rectangular coordinates for a map projection"
-                        false_northing="The value added to all ordinate values in the rectangular coordinates for a map projection"
+                        false_easting="The value added to all abscissa values in the rectangular coordinates for a map projection."
+                        false_northing="The value added to all ordinate values in the rectangular coordinates for a map projection."
                         grid_mapping_name="Grid mapping variable name"
                         inverse_flattening="Inverse flattening of the ellipsoidal figure"
-                        latitude_of_projection_origin="The latitude chosen as the origin of rectangular coordinates for a map projection"
-                        longitude_of_projection_origin="The longitude, with respect to Greenwich, of the prime meridian associated with the geodetic datum"
-                        longitude_of_central_meridian="The line of longitude at the center of a map projection generally used as the basis for constructing the projection"
-                        scale_factor_at_central_meridian="A multiplier for reducing a distance obtained from a map by computation or scaling to the actual distance along the central meridian"
+                        latitude_of_projection_origin="The latitude chosen as the origin of rectangular coordinates for a map projection."
+                        longitude_of_projection_origin="The longitude, with respect to Greenwich, of the prime meridian associated with the geodetic datum."
+                        longitude_of_central_meridian="The line of longitude at the center of a map projection generally used as the basis for constructing the projection."
+                        scale_factor_at_central_meridian="A multiplier for reducing a distance obtained from a map by computation or scaling to the actual distance along the central meridian."
                         semi_major_axis="Semi-major axis"
                         spatial_ref="Spatial reference"
                         utm_zone_number="UTM zone number"
@@ -1049,14 +1043,14 @@
             <annotation app="conformance"
                         ellipsoid="Projection ellipsoid"
                         epsg_code="Projection EPSG code"
-                        false_easting="The value added to all abscissa values in the rectangular coordinates for a map projection"
-                        false_northing="The value added to all ordinate values in the rectangular coordinates for a map projection"
+                        false_easting="The value added to all abscissa values in the rectangular coordinates for a map projection."
+                        false_northing="The value added to all ordinate values in the rectangular coordinates for a map projection."
                         grid_mapping_name="Grid mapping variable name"
                         inverse_flattening="Inverse flattening of the ellipsoidal figure"
-                        latitude_of_projection_origin="The latitude chosen as the origin of rectangular coordinates for a map projection"
-                        longitude_of_projection_origin="The longitude, with respect to Greenwich, of the prime meridian associated with the geodetic datum"
-                        longitude_of_central_meridian="The line of longitude at the center of a map projection generally used as the basis for constructing the projection"
-                        scale_factor_at_central_meridian="A multiplier for reducing a distance obtained from a map by computation or scaling to the actual distance along the central meridian"
+                        latitude_of_projection_origin="The latitude chosen as the origin of rectangular coordinates for a map projection."
+                        longitude_of_projection_origin="The longitude, with respect to Greenwich, of the prime meridian associated with the geodetic datum."
+                        longitude_of_central_meridian="The line of longitude at the center of a map projection generally used as the basis for constructing the projection."
+                        scale_factor_at_central_meridian="A multiplier for reducing a distance obtained from a map by computation or scaling to the actual distance along the central meridian."
                         semi_major_axis="Semi-major axis"
                         spatial_ref="Spatial reference"
                         utm_zone_number="UTM zone number"
@@ -1087,7 +1081,7 @@
                           units="meters">X coordinates in specified projection</annotation>
         </real>
         <real name="/science/LSAR/GSLC/metadata/calibrationInformation/frequencyA/elevationAntennaPattern/HH"
-              shape="calibrationComplexShape"
+              shape="antennaPatternComplexShape"
               width="32">
           <annotation app="conformance"
                       lang="en"
@@ -1098,7 +1092,7 @@
           <annotation app="io" kwd="complex" />
         </real>
         <real name="/science/LSAR/GSLC/metadata/calibrationInformation/frequencyA/elevationAntennaPattern/HV"
-              shape="calibrationComplexShape"
+              shape="antennaPatternComplexShape"
               width="32">
           <annotation app="conformance"
                       lang="en"
@@ -1109,7 +1103,7 @@
           <annotation app="io" kwd="complex" />
         </real>
         <real name="/science/LSAR/GSLC/metadata/calibrationInformation/frequencyA/elevationAntennaPattern/VH"
-              shape="calibrationComplexShape"
+              shape="antennaPatternComplexShape"
               width="32">
           <annotation app="conformance"
                       lang="en"
@@ -1120,7 +1114,7 @@
           <annotation app="io" kwd="complex" />
         </real>
         <real name="/science/LSAR/GSLC/metadata/calibrationInformation/frequencyA/elevationAntennaPattern/VV"
-              shape="calibrationComplexShape"
+              shape="antennaPatternComplexShape"
               width="32">
           <annotation app="conformance"
                       lang="en"
@@ -1131,7 +1125,7 @@
           <annotation app="io" kwd="complex" />
         </real>
         <real name="/science/LSAR/GSLC/metadata/calibrationInformation/frequencyA/elevationAntennaPattern/RH"
-              shape="calibrationComplexShape"
+              shape="antennaPatternComplexShape"
               width="32">
           <annotation app="conformance"
                       lang="en"
@@ -1142,7 +1136,7 @@
           <annotation app="io" kwd="complex" />
         </real>
         <real name="/science/LSAR/GSLC/metadata/calibrationInformation/frequencyA/elevationAntennaPattern/RV"
-              shape="calibrationComplexShape"
+              shape="antennaPatternComplexShape"
               width="32">
           <annotation app="conformance"
                       lang="en"
@@ -1159,14 +1153,14 @@
             <annotation app="conformance"
                         ellipsoid="Projection ellipsoid"
                         epsg_code="Projection EPSG code"
-                        false_easting="The value added to all abscissa values in the rectangular coordinates for a map projection"
-                        false_northing="The value added to all ordinate values in the rectangular coordinates for a map projection"
+                        false_easting="The value added to all abscissa values in the rectangular coordinates for a map projection."
+                        false_northing="The value added to all ordinate values in the rectangular coordinates for a map projection."
                         grid_mapping_name="Grid mapping variable name"
                         inverse_flattening="Inverse flattening of the ellipsoidal figure"
-                        latitude_of_projection_origin="The latitude chosen as the origin of rectangular coordinates for a map projection"
-                        longitude_of_projection_origin="The longitude, with respect to Greenwich, of the prime meridian associated with the geodetic datum"
-                        longitude_of_central_meridian="The line of longitude at the center of a map projection generally used as the basis for constructing the projection"
-                        scale_factor_at_central_meridian="A multiplier for reducing a distance obtained from a map by computation or scaling to the actual distance along the central meridian"
+                        latitude_of_projection_origin="The latitude chosen as the origin of rectangular coordinates for a map projection."
+                        longitude_of_projection_origin="The longitude, with respect to Greenwich, of the prime meridian associated with the geodetic datum."
+                        longitude_of_central_meridian="The line of longitude at the center of a map projection generally used as the basis for constructing the projection."
+                        scale_factor_at_central_meridian="A multiplier for reducing a distance obtained from a map by computation or scaling to the actual distance along the central meridian."
                         semi_major_axis="Semi-major axis"
                         spatial_ref="Spatial reference"
                         utm_zone_number="UTM zone number"
@@ -1197,7 +1191,7 @@
                           units="meters">X coordinates in specified projection</annotation>
         </real>
         <real name="/science/LSAR/GSLC/metadata/calibrationInformation/frequencyB/elevationAntennaPattern/HH"
-              shape="calibrationComplexShape"
+              shape="antennaPatternComplexShape"
               width="32">
           <annotation app="conformance"
                       lang="en"
@@ -1208,7 +1202,7 @@
           <annotation app="io" kwd="complex" />
         </real>
         <real name="/science/LSAR/GSLC/metadata/calibrationInformation/frequencyB/elevationAntennaPattern/HV"
-              shape="calibrationComplexShape"
+              shape="antennaPatternComplexShape"
               width="32">
           <annotation app="conformance"
                       lang="en"
@@ -1219,7 +1213,7 @@
           <annotation app="io" kwd="complex" />
         </real>
         <real name="/science/LSAR/GSLC/metadata/calibrationInformation/frequencyB/elevationAntennaPattern/VH"
-              shape="calibrationComplexShape"
+              shape="antennaPatternComplexShape"
               width="32">
           <annotation app="conformance"
                       lang="en"
@@ -1230,7 +1224,7 @@
           <annotation app="io" kwd="complex" />
         </real>
         <real name="/science/LSAR/GSLC/metadata/calibrationInformation/frequencyB/elevationAntennaPattern/VV"
-              shape="calibrationComplexShape"
+              shape="antennaPatternComplexShape"
               width="32">
           <annotation app="conformance"
                       lang="en"
@@ -1241,7 +1235,7 @@
           <annotation app="io" kwd="complex" />
         </real>
         <real name="/science/LSAR/GSLC/metadata/calibrationInformation/frequencyB/elevationAntennaPattern/RH"
-              shape="calibrationComplexShape"
+              shape="antennaPatternComplexShape"
               width="32">
           <annotation app="conformance"
                       lang="en"
@@ -1252,7 +1246,7 @@
           <annotation app="io" kwd="complex" />
         </real>
         <real name="/science/LSAR/GSLC/metadata/calibrationInformation/frequencyB/elevationAntennaPattern/RV"
-              shape="calibrationComplexShape"
+              shape="antennaPatternComplexShape"
               width="32">
           <annotation app="conformance"
                       lang="en"
@@ -1273,14 +1267,14 @@
             <annotation app="conformance"
                         ellipsoid="Projection ellipsoid"
                         epsg_code="Projection EPSG code"
-                        false_easting="The value added to all abscissa values in the rectangular coordinates for a map projection"
-                        false_northing="The value added to all ordinate values in the rectangular coordinates for a map projection"
+                        false_easting="The value added to all abscissa values in the rectangular coordinates for a map projection."
+                        false_northing="The value added to all ordinate values in the rectangular coordinates for a map projection."
                         grid_mapping_name="Grid mapping variable name"
                         inverse_flattening="Inverse flattening of the ellipsoidal figure"
-                        latitude_of_projection_origin="The latitude chosen as the origin of rectangular coordinates for a map projection"
-                        longitude_of_projection_origin="The longitude, with respect to Greenwich, of the prime meridian associated with the geodetic datum"
-                        longitude_of_central_meridian="The line of longitude at the center of a map projection generally used as the basis for constructing the projection"
-                        scale_factor_at_central_meridian="A multiplier for reducing a distance obtained from a map by computation or scaling to the actual distance along the central meridian"
+                        latitude_of_projection_origin="The latitude chosen as the origin of rectangular coordinates for a map projection."
+                        longitude_of_projection_origin="The longitude, with respect to Greenwich, of the prime meridian associated with the geodetic datum."
+                        longitude_of_central_meridian="The line of longitude at the center of a map projection generally used as the basis for constructing the projection."
+                        scale_factor_at_central_meridian="A multiplier for reducing a distance obtained from a map by computation or scaling to the actual distance along the central meridian."
                         semi_major_axis="Semi-major axis"
                         spatial_ref="Spatial reference"
                         utm_zone_number="UTM zone number"
@@ -1401,14 +1395,14 @@
             <annotation app="conformance"
                         ellipsoid="Projection ellipsoid"
                         epsg_code="Projection EPSG code"
-                        false_easting="The value added to all abscissa values in the rectangular coordinates for a map projection"
-                        false_northing="The value added to all ordinate values in the rectangular coordinates for a map projection"
+                        false_easting="The value added to all abscissa values in the rectangular coordinates for a map projection."
+                        false_northing="The value added to all ordinate values in the rectangular coordinates for a map projection."
                         grid_mapping_name="Grid mapping variable name"
                         inverse_flattening="Inverse flattening of the ellipsoidal figure"
-                        latitude_of_projection_origin="The latitude chosen as the origin of rectangular coordinates for a map projection"
-                        longitude_of_projection_origin="The longitude, with respect to Greenwich, of the prime meridian associated with the geodetic datum"
-                        longitude_of_central_meridian="The line of longitude at the center of a map projection generally used as the basis for constructing the projection"
-                        scale_factor_at_central_meridian="A multiplier for reducing a distance obtained from a map by computation or scaling to the actual distance along the central meridian"
+                        latitude_of_projection_origin="The latitude chosen as the origin of rectangular coordinates for a map projection."
+                        longitude_of_projection_origin="The longitude, with respect to Greenwich, of the prime meridian associated with the geodetic datum."
+                        longitude_of_central_meridian="The line of longitude at the center of a map projection generally used as the basis for constructing the projection."
+                        scale_factor_at_central_meridian="A multiplier for reducing a distance obtained from a map by computation or scaling to the actual distance along the central meridian."
                         semi_major_axis="Semi-major axis"
                         spatial_ref="Spatial reference"
                         utm_zone_number="UTM zone number"
@@ -1524,113 +1518,41 @@
         </real>
         <!-- End of noise patterns -->
 
+        <!-- Start of calibration parameters -->
+
         <!-- Crosstalk parameters -->
-        <integer name="/science/LSAR/GSLC/metadata/calibrationInformation/crosstalk/projection"
-                 shape="scalar"
-                 signed="false"
-                 width="32">
-            <annotation app="conformance"
-                        ellipsoid="Projection ellipsoid"
-                        epsg_code="Projection EPSG code"
-                        false_easting="The value added to all abscissa values in the rectangular coordinates for a map projection"
-                        false_northing="The value added to all ordinate values in the rectangular coordinates for a map projection"
-                        grid_mapping_name="Grid mapping variable name"
-                        inverse_flattening="Inverse flattening of the ellipsoidal figure"
-                        latitude_of_projection_origin="The latitude chosen as the origin of rectangular coordinates for a map projection"
-                        longitude_of_projection_origin="The longitude, with respect to Greenwich, of the prime meridian associated with the geodetic datum"
-                        longitude_of_central_meridian="The line of longitude at the center of a map projection generally used as the basis for constructing the projection"
-                        scale_factor_at_central_meridian="A multiplier for reducing a distance obtained from a map by computation or scaling to the actual distance along the central meridian"
-                        semi_major_axis="Semi-major axis"
-                        spatial_ref="Spatial reference"
-                        utm_zone_number="UTM zone number"
-                        lang="en">Product map grid projection: EPSG code, with additional projection information as HDF5 Attributes</annotation>
-        </integer>
-        <real name="/science/LSAR/GSLC/metadata/calibrationInformation/crosstalk/yCoordinates"
-              shape="calibrationLength"
-              width="64">
-              <annotation app="conformance"
-                          lang="en"
-                          REFERENCE_LIST="HDF5 internal attribute"
-                          CLASS="HDF5 internal attribute"
-                          NAME="HDF5 internal attribute"
-                          long_name="Y coordinates of projection"
-                          standard_name="projection_y_coordinate"
-                          units="meters">Y coordinates in specified projection</annotation>
-        </real>
-        <real name="/science/LSAR/GSLC/metadata/calibrationInformation/crosstalk/xCoordinates"
-              shape="calibrationWidth"
-              width="64">
-              <annotation app="conformance"
-                          lang="en"
-                          REFERENCE_LIST="HDF5 internal attribute"
-                          CLASS="HDF5 internal attribute"
-                          NAME="HDF5 internal attribute"
-                          long_name="X coordinates of projection"
-                          standard_name="projection_x_coordinate"
-                          units="meters">X coordinates in specified projection</annotation>
-        </real>
         <real name="/science/LSAR/GSLC/metadata/calibrationInformation/crosstalk/txHorizontalCrosspol"
-              shape="calibrationComplexShape"
+              shape="crosstalkComplexShape"
               width="32">
               <annotation app="conformance"
                           lang="en"
-                          DIMENSION_LIST="HDF5 internal attribute"
-                          mean_value="Arithmetic average of the numeric data points"
-                          min_value="Minimum value of the numeric data points"
-                          max_value="Maximum value of the numeric data points"
-                          sample_stddev="Standard deviation of the numeric data points"
-                          _FillValue="(nan+nan*j)"
-                          grid_mapping="projection"
                           units="1">Crosstalk in H-transmit channel expressed as ratio txV / txH</annotation>
               <annotation app="io" kwd="complex" />
         </real>
         <real name="/science/LSAR/GSLC/metadata/calibrationInformation/crosstalk/txVerticalCrosspol"
-              shape="calibrationComplexShape"
+              shape="crosstalkComplexShape"
               width="32">
               <annotation app="conformance"
                           lang="en"
-                          DIMENSION_LIST="HDF5 internal attribute"
-                          mean_value="Arithmetic average of the numeric data points"
-                          min_value="Minimum value of the numeric data points"
-                          max_value="Maximum value of the numeric data points"
-                          sample_stddev="Standard deviation of the numeric data points"
-                          _FillValue="(nan+nan*j)"
-                          grid_mapping="projection"
                           units="1">Crosstalk in V-transmit channel expressed as ratio txH / txV</annotation>
               <annotation app="io" kwd="complex" />
         </real>
         <real name="/science/LSAR/GSLC/metadata/calibrationInformation/crosstalk/rxHorizontalCrosspol"
-              shape="calibrationComplexShape"
+              shape="crosstalkComplexShape"
               width="32">
               <annotation app="conformance"
                           lang="en"
-                          DIMENSION_LIST="HDF5 internal attribute"
-                          mean_value="Arithmetic average of the numeric data points"
-                          min_value="Minimum value of the numeric data points"
-                          max_value="Maximum value of the numeric data points"
-                          sample_stddev="Standard deviation of the numeric data points"
-                          _FillValue="(nan+nan*j)"
-                          grid_mapping="projection"
                           units="1">Crosstalk in H-receive channel expressed as ratio rxV / rxH</annotation>
               <annotation app="io" kwd="complex" />
         </real>
         <real name="/science/LSAR/GSLC/metadata/calibrationInformation/crosstalk/rxVerticalCrosspol"
-              shape="calibrationComplexShape"
+              shape="crosstalkComplexShape"
               width="32">
               <annotation app="conformance"
                           lang="en"
-                          DIMENSION_LIST="HDF5 internal attribute"
-                          mean_value="Arithmetic average of the numeric data points"
-                          min_value="Minimum value of the numeric data points"
-                          max_value="Maximum value of the numeric data points"
-                          sample_stddev="Standard deviation of the numeric data points"
-                          _FillValue="(nan+nan*j)"
-                          grid_mapping="projection"
                           units="1">Crosstalk in V-receive channel expressed as ratio rxH / rxV</annotation>
               <annotation app="io" kwd="complex" />
         </real>
-
-        <!-- End of crosstalk parameters -->
 
         <real name="/science/LSAR/GSLC/metadata/calibrationInformation/frequencyA/commonDelay"
               shape="scalar"
@@ -2174,7 +2096,7 @@
                           lang="en"
                           _FillValue="nan"
                           grid_mapping="projection"
-                          units="meters">Reference terrain height as a function of map coordinates</annotation>
+                          units="meters">Reference Terrain Height as a function of geographical location</annotation>
         </real>
         <integer name="/science/LSAR/GSLC/metadata/processingInformation/parameters/projection"
                  shape="scalar"
@@ -2183,14 +2105,14 @@
             <annotation app="conformance"
                         ellipsoid="Projection ellipsoid"
                         epsg_code="Projection EPSG code"
-                        false_easting="The value added to all abscissa values in the rectangular coordinates for a map projection"
-                        false_northing="The value added to all ordinate values in the rectangular coordinates for a map projection"
+                        false_easting="The value added to all abscissa values in the rectangular coordinates for a map projection."
+                        false_northing="The value added to all ordinate values in the rectangular coordinates for a map projection."
                         grid_mapping_name="Grid mapping variable name"
                         inverse_flattening="Inverse flattening of the ellipsoidal figure"
-                        latitude_of_projection_origin="The latitude chosen as the origin of rectangular coordinates for a map projection"
-                        longitude_of_projection_origin="The longitude, with respect to Greenwich, of the prime meridian associated with the geodetic datum"
-                        longitude_of_central_meridian="The line of longitude at the center of a map projection generally used as the basis for constructing the projection"
-                        scale_factor_at_central_meridian="A multiplier for reducing a distance obtained from a map by computation or scaling to the actual distance along the central meridian"
+                        latitude_of_projection_origin="The latitude chosen as the origin of rectangular coordinates for a map projection."
+                        longitude_of_projection_origin="The longitude, with respect to Greenwich, of the prime meridian associated with the geodetic datum."
+                        longitude_of_central_meridian="The line of longitude at the center of a map projection generally used as the basis for constructing the projection."
+                        scale_factor_at_central_meridian="A multiplier for reducing a distance obtained from a map by computation or scaling to the actual distance along the central meridian."
                         semi_major_axis="Semi-major axis"
                         spatial_ref="Spatial reference"
                         utm_zone_number="UTM zone number"
@@ -2222,14 +2144,14 @@
             <annotation app="conformance"
                         ellipsoid="Projection ellipsoid"
                         epsg_code="Projection EPSG code"
-                        false_easting="The value added to all abscissa values in the rectangular coordinates for a map projection"
-                        false_northing="The value added to all ordinate values in the rectangular coordinates for a map projection"
+                        false_easting="The value added to all abscissa values in the rectangular coordinates for a map projection."
+                        false_northing="The value added to all ordinate values in the rectangular coordinates for a map projection."
                         grid_mapping_name="Grid mapping variable name"
                         inverse_flattening="Inverse flattening of the ellipsoidal figure"
-                        latitude_of_projection_origin="The latitude chosen as the origin of rectangular coordinates for a map projection"
-                        longitude_of_projection_origin="The longitude, with respect to Greenwich, of the prime meridian associated with the geodetic datum"
-                        longitude_of_central_meridian="The line of longitude at the center of a map projection generally used as the basis for constructing the projection"
-                        scale_factor_at_central_meridian="A multiplier for reducing a distance obtained from a map by computation or scaling to the actual distance along the central meridian"
+                        latitude_of_projection_origin="The latitude chosen as the origin of rectangular coordinates for a map projection."
+                        longitude_of_projection_origin="The longitude, with respect to Greenwich, of the prime meridian associated with the geodetic datum."
+                        longitude_of_central_meridian="The line of longitude at the center of a map projection generally used as the basis for constructing the projection."
+                        scale_factor_at_central_meridian="A multiplier for reducing a distance obtained from a map by computation or scaling to the actual distance along the central meridian."
                         semi_major_axis="Semi-major axis"
                         spatial_ref="Spatial reference"
                         utm_zone_number="UTM zone number"
@@ -2277,14 +2199,14 @@
             <annotation app="conformance"
                         ellipsoid="Projection ellipsoid"
                         epsg_code="Projection EPSG code"
-                        false_easting="The value added to all abscissa values in the rectangular coordinates for a map projection"
-                        false_northing="The value added to all ordinate values in the rectangular coordinates for a map projection"
+                        false_easting="The value added to all abscissa values in the rectangular coordinates for a map projection."
+                        false_northing="The value added to all ordinate values in the rectangular coordinates for a map projection."
                         grid_mapping_name="Grid mapping variable name"
                         inverse_flattening="Inverse flattening of the ellipsoidal figure"
-                        latitude_of_projection_origin="The latitude chosen as the origin of rectangular coordinates for a map projection"
-                        longitude_of_projection_origin="The longitude, with respect to Greenwich, of the prime meridian associated with the geodetic datum"
-                        longitude_of_central_meridian="The line of longitude at the center of a map projection generally used as the basis for constructing the projection"
-                        scale_factor_at_central_meridian="A multiplier for reducing a distance obtained from a map by computation or scaling to the actual distance along the central meridian"
+                        latitude_of_projection_origin="The latitude chosen as the origin of rectangular coordinates for a map projection."
+                        longitude_of_projection_origin="The longitude, with respect to Greenwich, of the prime meridian associated with the geodetic datum."
+                        longitude_of_central_meridian="The line of longitude at the center of a map projection generally used as the basis for constructing the projection."
+                        scale_factor_at_central_meridian="A multiplier for reducing a distance obtained from a map by computation or scaling to the actual distance along the central meridian."
                         semi_major_axis="Semi-major axis"
                         spatial_ref="Spatial reference"
                         utm_zone_number="UTM zone number"
@@ -2984,11 +2906,20 @@
                   lang="en">scalar values</annotation>
     </shape>
 
+    <!-- Number of data takes in identification -->
+    <shape name="numberOfDatatakes"
+           order="slowest...fastest">
+           <annotation app="conformance"
+                       lang="en">number of datatakes in product</annotation>
+           <dimension extent="0"
+                      name="numberOfDatatakes"/>
+    </shape>
+
     <!-- Number of observations in identification -->
     <shape name="numberOfObservations"
            order="slowest...fastest">
            <annotation app="conformance"
-                       lang="en">Number of observations in product</annotation>
+                       lang="en">number of observations in product</annotation>
            <dimension extent="0"
                       name="numberOfObservations"/>
     </shape>
@@ -3185,20 +3116,26 @@
     <shape name="calibrationScaleShape"
            order="slowest...fastest">
            <annotation app="conformance"
-                       lang="en">Shape of real-valued calibration LUTs</annotation>
+                       lang="en">Shape of calibration LUTs</annotation>
            <dimension extent="0"
                       name="calibrationTimeLength"/>
            <dimension extent="0"
                       name="calibrationSlantRangeWidth"/>
     </shape>
-    <shape name="calibrationComplexShape"
+    <shape name="antennaPatternComplexShape"
            order="slowest...fastest">
            <annotation app="conformance"
-                       lang="en">Shape of complex-valued calibration LUTs</annotation>
+                       lang="en">Shape of antenna pattern datasets</annotation>
            <dimension extent="0"
                       name="calibrationTimeLength"/>
            <dimension extent="0"
                       name="calibrationSlantRangeWidth"/>
+           <dimension name="complex" extent="2"/>
+    </shape>
+    <shape name="crosstalkComplexShape"
+           order="slowest...fastest">
+           <annotation app="conformance"
+                       lang="en">Shape of crosstalk datasets</annotation>
            <dimension name="complex" extent="2"/>
     </shape>
     <shape name="timingCorrectionLength"
@@ -3309,7 +3246,7 @@
       <annotation app="conformance"
                   lang="en">Number of input L1 SLC granules</annotation>
       <dimension extent="0"
-                 name="numberOfInputL1Files"/>
+                 name="numberOfInputL0BFiles"/>
     </shape>
     <shape name="numberOfInputOrbitFiles"
            order="slowest...fastest">

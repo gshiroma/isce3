@@ -120,9 +120,24 @@ class RSLC(SLCBase, family='nisar.productreader.rslc'):
 
             return is_complex32(h[slc_path])
 
-    def getRadiometricCalibrationLUT(self, lut_name='beta0', frequency=None):
+    def getRadiometricCalibrationLUT(self, lut_name, frequency=None):
         '''
         Extract a geometry look-up table (LUT)
+
+        Parameters
+        ----------
+        lut_name: isce3.focus.calibration_luts.AreaConvention
+            Area normalization convention of table to retrieve.
+        frequency : "A" or "B" or None, optional
+            The frequency letter, either "A" or "B". 
+            Default is the first available frequency in
+            lexicographical order.
+
+        Returns
+        -------
+        radiometric_calibration_lut: isce3.core.LUT2d
+            Radiometric calibration LUT.
+
         '''
         if frequency is None:
             frequency = self._getFirstFrequency()
@@ -152,13 +167,13 @@ class RSLC(SLCBase, family='nisar.productreader.rslc'):
                 slant_range_dataset_path = \
                     slant_range_dataset_path_other
 
-            doppler = fid[radiometric_calibration_lut_path][:]
+            rad_cal_data = fid[radiometric_calibration_lut_path][:]
             zeroDopplerTime = fid[zero_doppler_time_dataset_path][:]
             slantRange = fid[slant_range_dataset_path][:]
 
         radiometric_calibration_lut = isce3.core.LUT2d(xcoord=slantRange,
                                                        ycoord=zeroDopplerTime,
-                                                       data=doppler)
+                                                       data=rad_cal_data)
 
         return radiometric_calibration_lut
 

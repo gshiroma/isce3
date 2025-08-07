@@ -129,6 +129,10 @@ class InSARBaseWriter(h5py.File):
         # Product information
         self.product_info = InSARProductsInfo.Base()
 
+        # DEM file
+        self.dem_file = \
+            self.cfg["dynamic_ancillary_file_group"]["dem_file"]
+
         # Check if reference and secondary exists as files
         orbit_files = \
             self.cfg["dynamic_ancillary_file_group"]["orbit_files"]

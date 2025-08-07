@@ -12,7 +12,7 @@ def shift_orbit(orbit_obj, offset_x, offset_y):
     orbit_obj : isce3.core.Orbit
         The orbit object
     offset_x : scalar
-        Horizontal offset in meters towards the right direction along the track
+        Horizontal offset in meters and in the cross-track direction
     offset_y : scalar
         Vertical offset upwards in meters
 

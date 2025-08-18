@@ -13,6 +13,8 @@ isce3/core/resample_block_generators.py
 isce3/focus/valid_regions.py
 isce3/focus/notch.py
 isce3/geocode/geocode_slc.py
+isce3/geometry/bounding_polygon.py
+isce3/geometry/bounding_radar_grid.py
 isce3/geometry/polygons.py
 isce3/image/resample_slc.py
 isce3/io/gdal/gdal_raster.py
@@ -46,6 +48,8 @@ nisar/products/readers/raw.py
 nisar/products/readers/rslc.py
 nisar/products/readers/rslc_cal.py
 nisar/products/product_spec.py
+nisar/products/projection.py
+nisar/products/utils.py
 nisar/workflows/crossmul.py
 nisar/workflows/estimate_abscal_factor.py
 nisar/workflows/faraday_rot_angle_from_rslc.py
@@ -82,10 +86,11 @@ nisar/workflows/geocode_corrections.py
 
 if(WITH_CUDA)
     list(APPEND TESTFILES
-            nisar/workflows/dense_offsets.py
-            nisar/workflows/rubbersheet.py
-            nisar/workflows/cuda_insar.py
-        )
+        isce3/cuda/image/resample_slc.py
+        nisar/workflows/dense_offsets.py
+        nisar/workflows/rubbersheet.py
+        nisar/workflows/cuda_insar.py
+    )
 endif()
 
 foreach(TESTFILE ${TESTFILES})

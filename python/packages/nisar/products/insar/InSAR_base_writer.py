@@ -1140,7 +1140,7 @@ class InSARBaseWriter(h5py.File):
             ),
             DatasetParams(
                 "instrumentName",
-                f"{radar_band_name}SAR",
+                f"{radar_band_name}-SAR",
                 (
                     "Name of the instrument used to collect the remote"
                     " sensing data provided in this product"

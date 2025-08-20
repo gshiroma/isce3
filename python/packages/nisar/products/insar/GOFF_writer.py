@@ -134,6 +134,7 @@ class GOFFWriter(ROFFWriter, L2InSARWriter):
             )
             offset_group['mask'].attrs['valid_min'] = 0
             offset_group['mask'].attrs['percentage_water'] = 0.0
+            offset_group['mask'].attrs['disclaimer'] = to_bytes(self.water_mask_source)
 
             pixeloffsets_group_name = \
                 f"{grids_freq_group_name}/pixelOffsets"

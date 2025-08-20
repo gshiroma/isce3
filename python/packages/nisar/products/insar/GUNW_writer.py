@@ -282,6 +282,7 @@ class GUNWWriter(RUNWWriter, RIFGWriter, L2InSARWriter):
                 )
             ds_group['mask'].attrs['valid_min'] = 0
             ds_group['mask'].attrs['percentage_water'] = 0.0
+            ds_group['mask'].attrs['disclaimer'] = to_bytes(self.water_mask_source)
 
             for pol in pol_list:
                 unwrapped_pol_name = f"{unwrapped_group_name}/{pol}"

@@ -138,7 +138,11 @@ class InSARBaseWriter(h5py.File):
         ancillary_group = self.cfg["dynamic_ancillary_file_group"]
         self.dem_source = ancillary_group["dem_file_description"]
         if self.dem_source is None:
-            self.dem_source = "None"
+            self.dem_source = "(NOT SPECIFIED)"
+
+        self.water_mask_source = ancillary_group["water_mask_file_description"]
+        if self.water_mask_source is None:
+            self.water_mask_source = "(NOT SPECIFIED)"
 
         # Check if reference and secondary exists as files
         orbit_files = \
@@ -373,11 +377,20 @@ class InSARBaseWriter(h5py.File):
                                   ' radar modes, "False" otherwise')
         ds_params = [
             DatasetParams(
+                "rfiMitigation",
+                np.bytes_(rfi_mitigation),
+                (
+                    f'Algorithm used for radio frequency interference (RFI) mitigation in ' \
+                      'the {rslc_name} RSLC, either "ST-EVD" or "FDNF" (or "disabled" if no RFI ' \
+                      'mitigation was applied)'
+                ),
+            ),
+            DatasetParams(
                 "rfiMitigationApplied",
                 rfi_mitigation_flag,
                 (
-                    "Flag to indicate if RFI mitigation has been applied"
-                    f" to {rslc_name} RSLC"
+                    "Flag to indicate if radio frequency interference (RFI) mitigation was applied"
+                    f" during the generation of the {rslc_name} RSLC"
                 ),
             ),
             mixed_mode,
@@ -792,6 +805,11 @@ class InSARBaseWriter(h5py.File):
                 "Description of the input digital elevation model (DEM)",
             ),
             DatasetParams(
+                "waterMaskSource",
+                self.water_mask_source,
+                "Description of the input water mask",
+            ),
+            DatasetParams(
                 "l1ReferenceSlcGranules",
                 to_bytes([os.path.basename(self.ref_h5_slc_file)]),
                 "List of input reference L1 RSLC products used",
@@ -1056,7 +1074,8 @@ class InSARBaseWriter(h5py.File):
                             "absoluteOrbitNumber",
                             "isJointObservation",
                             "plannedObservationId",
-                            "plannedDatatakeId"]
+                            "plannedDatatakeId",
+                            "listOfObservationModes"]
         cap = lambda x: f"{x[0].upper()}{x[1:]}"
 
         for ds_name in datasets_to_copy:
@@ -1107,6 +1126,19 @@ class InSARBaseWriter(h5py.File):
                 add_dataset_and_attrs(dst_id_group, DatasetParams(
                     ds_name,
                     "False",
+                    description))
+
+            # Update the description for the listOfObservationModes
+            ds_name = f"{rslc_name}ListOfObservationModes"
+            description = 'List of observation modes of the L0B granules'+\
+                f' used to generate the {rslc_name} RSLC (one mode per L0B)'
+            if ds_name in dst_id_group:
+                ds = dst_id_group[ds_name]
+                ds.attrs['description'] = to_bytes(description)
+            else:
+                add_dataset_and_attrs(dst_id_group, DatasetParams(
+                    ds_name,
+                    to_bytes(['(NOT SPECIFIED)']),
                     description))
 
         # Granule ID follows the NISAR filename convention. The partial granule ID

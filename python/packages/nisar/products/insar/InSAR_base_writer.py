@@ -1074,7 +1074,8 @@ class InSARBaseWriter(h5py.File):
                             "absoluteOrbitNumber",
                             "isJointObservation",
                             "plannedObservationId",
-                            "plannedDatatakeId"]
+                            "plannedDatatakeId",
+                            "listOfObservationModes"]
         cap = lambda x: f"{x[0].upper()}{x[1:]}"
 
         for ds_name in datasets_to_copy:
@@ -1125,6 +1126,19 @@ class InSARBaseWriter(h5py.File):
                 add_dataset_and_attrs(dst_id_group, DatasetParams(
                     ds_name,
                     "False",
+                    description))
+
+            # Update the description for the listOfObservationModes
+            ds_name = f"{rslc_name}ListOfObservationModes"
+            description = 'List of observation modes of the L0B granules'+\
+                f' used to generate the {rslc_name} RSLC (one mode per L0B)'
+            if ds_name in dst_id_group:
+                ds = dst_id_group[ds_name]
+                ds.attrs['description'] = to_bytes(description)
+            else:
+                add_dataset_and_attrs(dst_id_group, DatasetParams(
+                    ds_name,
+                    to_bytes(['(NOT SPECIFIED)']),
                     description))
 
         # Granule ID follows the NISAR filename convention. The partial granule ID

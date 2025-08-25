@@ -106,6 +106,7 @@ void addbinding(py::class_<Geocode<T>>& pyGeocode)
                     py::arg("slant_range_correction") = isce3::core::LUT2d<double>(),
                     py::arg("input_rtc") = nullptr,
                     py::arg("output_rtc") = nullptr,
+                    py::arg("output_rtc_sigma") = nullptr,
                     py::arg("input_layover_shadow_mask_raster") = nullptr,
                     py::arg("sub_swaths") = nullptr,
                     py::arg("apply_valid_samples_sub_swath_masking") = std::nullopt,
@@ -125,9 +126,30 @@ void addbinding(py::class_<Geocode<T>>& pyGeocode)
                     radar_grid: isce3.product.RadarGridParameters
                         Radar grid
                     input_raster: isce3.io.Raster
-                        Input raster
+                        Input raster. Can be real-
+                        or complex-valued. If the input raster is complex-valued
+                        and the output is real-valued, it is assumed that the
+                        input raster represents single-look complex (SLC) data.
+                        In such cases, the complex data
+                        is converted to real-valued backscatter, which is proportional to
+                        power or intensity. This conversion is performed by taking the
+                        square of the SLC magnitudes, and it is applied before geocoding.
                     output_raster: isce3.io.Raster
-                        Output raster
+                        Output raster. Can be real-
+                        or complex-valued. This module provides options to perform
+                        absolute radiometric calibration, through `abs_cal_factor`
+                        and radiometric terrain correction (RTC). To apply these
+                        calibrations, it is assumed that complex-valued output rasters
+                        represent single-look complex (SLC) data.
+                        Both `abs_cal_factor` and RTC normalization values are
+                        defined in terms of power or intensity. Therefore, when applied
+                        to SLC data, the square roots of these values are used to properly
+                        calibrate the magnitude of the complex signal.
+                        If the output is a complex interferogram, the user should ensure that
+                        RTC correction and absolute radiometric calibration are disabled.
+                        This can be done by not providing the `flag_apply_rtc` or
+                        `abs_cal_factor parameters`, which default to `false` and `1`,
+                        respectively.
                     dem_raster: isce3.io.Raster
                         Input DEM raster
                     output_mode: isce3.geocode.GeocodeOutputMode
@@ -162,7 +184,12 @@ void addbinding(py::class_<Geocode<T>>& pyGeocode)
                     rtc_factor_area_mode : isce3.geometry.RtcAreaBetaMode, optional
                         RTC area beta mode
                     abs_cal_factor: float, optional
-                        Absolute calibration factor.
+                        Absolute calibration factor applied
+                        to real-valued output datasets (assumed to be proportional to
+                        power/intensity). If the output is complex valued, its considered
+                        that the output is a single-look complex (SLC) raster, which is
+                        proportional to amplitude and therefore the square root of the
+                        calibration factor will be used instead.
                     clip_min: float, optional
                         Clip (limit) minimum output values
                     clip_max: float, optional
@@ -219,6 +246,8 @@ void addbinding(py::class_<Geocode<T>>& pyGeocode)
                         that of the `input_raster` (e.g., beta0). These values
                         are only computed if `flag_apply_rtc` is `true`
                         and `input_rtc` is not provided.
+                    output_rtc_sigma: isce3.io.Raster, optional
+                        Output RTC area factor to sigma-0 (in slant-range)
                     input_layover_shadow_mask_raster: isce3.io.Raster, optional
                         Input layover/shadow mask raster (in radar geometry).
                         Samples identified as SHADOW or LAYOVER_AND_SHADOW are

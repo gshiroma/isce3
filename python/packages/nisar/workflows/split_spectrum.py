@@ -105,7 +105,7 @@ def run(cfg: dict):
     t_all = time.time()
 
     # Check split spectrum method
-    if method == 'split_main_band':
+    if method in ['split_main_band', 'main_diff_low_high_subband']:
         split_band_path = pathlib.Path(
             f"{scratch_path}/ionosphere/split_spectrum/")
         split_band_path.mkdir(parents=True, exist_ok=True)
@@ -133,6 +133,7 @@ def run(cfg: dict):
             low_frequency_slc = meta_data.center_freq - bandwidth_half
             high_frequency_slc = meta_data.center_freq + bandwidth_half
 
+
             # first and second elements are the frequency ranges
             # for low and high sub-bands, respectively.
             low_subband_frequencies = np.array([
@@ -147,6 +148,7 @@ def run(cfg: dict):
             low_band_center_freq = low_frequency_slc + (low_band_bandwidth / 2)
             high_band_center_freq = high_frequency_slc - \
                 (high_band_bandwidth / 2)
+
             # Specify split-spectrum parameters
             split_spectrum_parameters = splitspectrum.SplitSpectrum(
                 rg_sample_freq=meta_data.rg_sample_freq,

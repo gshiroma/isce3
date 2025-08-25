@@ -39,8 +39,29 @@ public:
     /** Geocode data from slant-range to map coordinates
      *
      * @param[in]  radar_grid          Radar grid
-     * @param[in]  input_raster        Input raster
-     * @param[out] output_raster       Output raster
+     * @param[in]  input_raster        Input raster. Can be real-
+     * or complex-valued. If the input raster is complex-valued
+     * and the output is real-valued, it is assumed that the
+     * input raster represents single-look complex (SLC) data.
+     * In such cases, the complex data
+     * is converted to real-valued backscatter, which is proportional to
+     * power or intensity. This conversion is performed by taking the
+     * square of the SLC magnitudes, and it is applied before geocoding.
+     * @param[out] output_raster       Output raster. Can be real-
+     * or complex-valued. This module provides options to perform
+     * absolute radiometric calibration, through `abs_cal_factor`
+     * and radiometric terrain correction (RTC). To apply these
+     * calibrations, it is assumed that complex-valued output rasters
+     * represent single-look complex (SLC) data.
+     * Both `abs_cal_factor` and RTC normalization values are
+     * defined in terms of power or intensity. Therefore, when applied
+     * to SLC data, the square roots of these values are used to properly
+     * calibrate the magnitude of the complex signal.
+     * If the output is a complex interferogram, the user should ensure that
+     * RTC correction and absolute radiometric calibration are disabled.
+     * This can be done by not providing the `flag_apply_rtc` or
+     * `abs_cal_factor parameters`, which default to `false` and `1`,
+     * respectively.
      * @param[in]  dem_raster          Input DEM raster
      * @param[in]  output_mode         Geocode method
      * @param[in]  flag_az_baseband_doppler Shift SLC azimuth spectrum to
@@ -62,7 +83,12 @@ public:
      * @param[in]  rtc_algorithm       RTC algorithm
      * @param[in]  rtc_area_beta_mode RTC area beta mode (AUTO, PIXEL_AREA,
      * PROJECTION_ANGLE)
-     * @param[in]  abs_cal_factor      Absolute calibration factor.
+     * @param[in]  abs_cal_factor      Absolute calibration factor applied
+     * to real-valued output datasets (assumed to be proportional to
+     * power/intensity). If the output is complex valued, its considered
+     * that the output is a single-look complex (SLC) raster, which is
+     * proportional to amplitude and therefore the square root of the
+     * calibration factor will be used instead.
      * @param[in]  clip_min            Clip (limit) minimum output values
      * @param[in]  clip_max            Clip (limit) maximum output values
      * @param[in]  min_nlooks          Minimum number of looks. Geogrid data
@@ -104,6 +130,8 @@ public:
      * the `output_raster` (e.g., gamma0) to that of the `input_raster` (e.g.,
      * beta0). These values are only computed if `flag_apply_rtc` is `true`
      * and `input_rtc` is not provided.
+     * @param[out] output_rtc_sigma    Output RTC area factor to sigma-0
+     * (in slant-range geometry).
      * @param[in]  input_layover_shadow_mask_raster Input layover/shadow mask raster
      * (in radar geometry). Samples identified as SHADOW or LAYOVER_AND_SHADOW are
      * considered invalid.
@@ -156,6 +184,7 @@ public:
             const isce3::core::LUT2d<double>& slant_range_correction = {},
             isce3::io::Raster* input_rtc = nullptr,
             isce3::io::Raster* output_rtc = nullptr,
+            isce3::io::Raster* output_rtc_sigma = nullptr,
             isce3::io::Raster* input_layover_shadow_mask_raster = nullptr,
             isce3::product::SubSwaths* sub_swaths = nullptr,
             std::optional<bool> apply_valid_samples_sub_swath_masking = std::nullopt,
@@ -172,8 +201,29 @@ public:
     /** Geocode using the interpolation algorithm.
      *
      * @param[in]  radar_grid          Radar grid
-     * @param[in]  input_raster        Input raster
-     * @param[out] output_raster       Output raster
+     * @param[in]  input_raster        Input raster. Can be real-
+     * or complex-valued. If the input raster is complex-valued
+     * and the output is real-valued, it is assumed that the
+     * input raster represents single-look complex (SLC) data.
+     * In such cases, the complex data
+     * is converted to real-valued backscatter, which is proportional to
+     * power or intensity. This conversion is performed by taking the
+     * square of the SLC magnitudes, and it is applied before geocoding.
+     * @param[out] output_raster       Output raster. Can be real-
+     * or complex-valued. This module provides options to perform
+     * absolute radiometric calibration, through `abs_cal_factor`
+     * and radiometric terrain correction (RTC). To apply these
+     * calibrations, it is assumed that complex-valued output rasters
+     * represent single-look complex (SLC) data.
+     * Both `abs_cal_factor` and RTC normalization values are
+     * defined in terms of power or intensity. Therefore, when applied
+     * to SLC data, the square roots of these values are used to properly
+     * calibrate the magnitude of the complex signal.
+     * If the output is a complex interferogram, the user should ensure that
+     * RTC correction and absolute radiometric calibration are disabled.
+     * This can be done by not providing the `flag_apply_rtc` or
+     * `abs_cal_factor parameters`, which default to `false` and `1`,
+     * respectively.
      * @param[in]  dem_raster          Input DEM raster
      * @param[in]  flag_az_baseband_doppler Shift SLC azimuth spectrum to
      * baseband (using Doppler centroid) before interpolation
@@ -186,7 +236,12 @@ public:
      * @param[in]  rtc_algorithm       RTC algorithm
      * @param[in]  rtc_area_beta_mode RTC area beta mode (AUTO, PIXEL_AREA,
      * PROJECTION_ANGLE)
-     * @param[in]  abs_cal_factor      Absolute calibration factor.
+     * @param[in]  abs_cal_factor      Absolute calibration factor applied
+     * to real-valued output datasets (assumed to be proportional to
+     * power/intensity). If the output is complex valued, its considered
+     * that the output is a single-look complex (SLC) raster, which is
+     * proportional to amplitude and therefore the square root of the
+     * calibration factor will be used instead.
      * @param[in]  clip_min            Clip (limit) minimum output values
      * @param[in]  clip_max            Clip (limit) maximum output values
      * @param[out] out_geo_rdr         Raster to which the radar-grid
@@ -220,6 +275,8 @@ public:
      * the `output_raster` (e.g., gamma0) to that of the `input_raster` (e.g.,
      * beta0). These values are only computed if `flag_apply_rtc` is `true`
      * and `input_rtc` is not provided.
+     * @param[out] output_rtc_sigma    Output RTC area factor to sigma-0
+     * (in slant-range geometry).
      * @param[in]  input_layover_shadow_mask_raster Input layover/shadow mask raster
      * (in radar geometry). Samples identified as SHADOW or LAYOVER_AND_SHADOW are
      * considered invalid.
@@ -263,6 +320,7 @@ public:
             const isce3::core::LUT2d<double>& slant_range_correction = {},
             isce3::io::Raster* input_rtc = nullptr,
             isce3::io::Raster* output_rtc = nullptr,
+            isce3::io::Raster* output_rtc_sigma = nullptr,
             isce3::io::Raster* input_layover_shadow_mask_raster = nullptr,
             isce3::product::SubSwaths* sub_swaths = nullptr,
             std::optional<bool> apply_valid_samples_sub_swath_masking = {},
@@ -279,8 +337,29 @@ public:
     /** Geocode using the area projection algorithm (adaptive multilooking)
      *
      * @param[in]  radar_grid          Radar grid
-     * @param[in]  input_raster        Input raster
-     * @param[out] output_raster       Output raster
+     * @param[in]  input_raster        Input raster. Can be real-
+     * or complex-valued. If the input raster is complex-valued
+     * and the output is real-valued, it is assumed that the
+     * input raster represents single-look complex (SLC) data.
+     * In such cases, the complex data
+     * is converted to real-valued backscatter, which is proportional to
+     * power or intensity. This conversion is performed by taking the
+     * square of the SLC magnitudes, and it is applied before geocoding.
+     * @param[out] output_raster       Output raster. Can be real-
+     * or complex-valued. This module provides options to perform
+     * absolute radiometric calibration, through `abs_cal_factor`
+     * and radiometric terrain correction (RTC). To apply these
+     * calibrations, it is assumed that complex-valued output rasters
+     * represent single-look complex (SLC) data.
+     * Both `abs_cal_factor` and RTC normalization values are
+     * defined in terms of power or intensity. Therefore, when applied
+     * to SLC data, the square roots of these values are used to properly
+     * calibrate the magnitude of the complex signal.
+     * If the output is a complex interferogram, the user should ensure that
+     * RTC correction and absolute radiometric calibration are disabled.
+     * This can be done by not providing the `flag_apply_rtc` or
+     * `abs_cal_factor parameters`, which default to `false` and `1`,
+     * respectively.
      * @param[in]  dem_raster          Input DEM raster
      * @param[in]  geogrid_upsampling  Geogrid upsampling
      * @param[in]  flag_upsample_radar_grid Double the radar grid sampling rate
@@ -295,7 +374,12 @@ public:
      * @param[in]  rtc_algorithm       RTC algorithm
      * @param[in]  rtc_area_beta_mode RTC area beta mode (AUTO, PIXEL_AREA,
      * PROJECTION_ANGLE)
-     * @param[in]  abs_cal_factor      Absolute calibration factor.
+     * @param[in]  abs_cal_factor      Absolute calibration factor applied
+     * to real-valued output datasets (assumed to be proportional to
+     * power/intensity). If the output is complex valued, its considered
+     * that the output is a single-look complex (SLC) raster, which is
+     * proportional to amplitude and therefore the square root of the
+     * calibration factor will be used instead.
      * @param[in]  clip_min            Clip (limit) minimum output values
      * @param[in]  clip_max            Clip (limit) maximum output values
      * @param[in]  min_nlooks          Minimum number of looks. Geogrid data
@@ -334,6 +418,8 @@ public:
      * the `output_raster` (e.g., gamma0) to that of the `input_raster` (e.g.,
      * beta0). These values are only computed if `flag_apply_rtc` is `true`
      * and `input_rtc` is not provided.
+     * @param[out] output_rtc_sigma    Output RTC area factor to sigma-0
+     * (in slant-range geometry).
      * @param[in]  input_layover_shadow_mask_raster Input layover/shadow mask raster
      * (in radar geometry). Samples identified as SHADOW or LAYOVER_AND_SHADOW are
      * considered invalid.
@@ -384,6 +470,7 @@ public:
             const isce3::core::LUT2d<double>& slant_range_correction = {},
             isce3::io::Raster* input_rtc = nullptr,
             isce3::io::Raster* output_rtc = nullptr,
+            isce3::io::Raster* output_rtc_sigma = nullptr,
             isce3::io::Raster* input_layover_shadow_mask_raster = nullptr,
             isce3::product::SubSwaths* sub_swaths = nullptr,
             std::optional<bool> apply_valid_samples_sub_swath_masking = std::nullopt,
@@ -551,7 +638,8 @@ private:
             isce3::io::Raster* out_geo_nlooks, isce3::io::Raster* out_geo_rtc,
             isce3::io::Raster* out_geo_rtc_gamma0_to_sigma0,
             isce3::core::ProjectionBase* proj, bool flag_apply_rtc,
-            bool flag_rtc_raster_is_in_memory, isce3::io::Raster* rtc_raster,
+            bool flag_rtc_raster_is_in_memory, bool flag_rtc_sigma0_raster_is_in_memory,
+            isce3::io::Raster* rtc_raster, isce3::io::Raster* rtc_sigma0_raster,
             const isce3::core::LUT2d<double>& az_time_correction,
             const isce3::core::LUT2d<double>& slant_range_correction,
             isce3::io::Raster& input_raster,
@@ -594,7 +682,14 @@ private:
      * @param[in] flatten flag to flatten the geocoded SLC
      * @param[in] phase_screen_raster Phase screen raster
      * @param[in] phase_screen_array  Phase screen array
-     * @param[in] abs_cal_factor      Absolute calibration factor.
+     * @param[in]  rtc_min_value_db    Minimum value for the RTC area factor.
+     * Radar data with RTC area factor below this limit will be set to NaN.
+     * @param[in] abs_cal_factor      Absolute calibration factor applied
+     * to real-valued output datasets (assumed to be proportional to
+     * power/intensity). If the output is complex valued, its considered
+     * that the output is a single-look complex (SLC) raster, which is
+     * proportional to amplitude and therefore the square root of the
+     * calibration factor will be used instead.
      * @param[in] clip_min            Clip (limit) minimum output values
      * @param[in] clip_max            Clip (limit) maximum output values
      * @param[in] flag_run_rtc        Flag to indicate if RTC is enabled
@@ -639,7 +734,8 @@ private:
             const bool flag_az_baseband_doppler, const bool flatten,
             isce3::io::Raster* phase_screen_raster,
             isce3::core::Matrix<float>& phase_screen_array,
-            double abs_cal_factor, float clip_min, float clip_max,
+            float rtc_min_value, double abs_cal_factor,
+            float clip_min, float clip_max,
             bool flag_run_rtc, const isce3::core::Matrix<float>& rtc_area,
             const isce3::core::Matrix<float>& rtc_area_sigma,
             isce3::io::Raster* out_geo_rtc,

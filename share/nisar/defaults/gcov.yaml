@@ -190,9 +190,13 @@ runconfig:
                 list_of_frequencies:
 
                 # Flag indicating whether the output GCOV product should include
-                # off-diagonal covariance elements. If False, only the diagonal
+                # off-diagonal covariance elements. If `False`, only the diagonal
                 # elements are included.
-                fullcovariance:   False
+                #
+                # If empty, `fullcovariance` defaults to `True` if any frequency
+                # to be processed includes a full-pol dataset, i.e., includes
+                # both co-pols HH and VV and at least one cross-pol HV or VH.
+                fullcovariance:
 
                 # Flag indicating whether polarimetric symmetrization should be
                 # applied to datasets that include both HV and VH polarimetric

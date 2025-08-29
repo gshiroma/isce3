@@ -445,16 +445,29 @@ def download_dem(polys, epsg, outfile, version):
         translate_dem(vrt_filename, outpath, xmin, xmax, ymin, ymax, epsg)
             
     # Get the DEM description from the README.txt file using GDAL
+    # The full description consists of the 'Short description' (which includes
+    # the version number) and 'Notes' (which includes the license info)
+    # concatenated together.
     in_readme_path = vrt_filename.replace(f'EPSG{epsg}.vrt', 'README.txt')  # pylint: disable=undefined-loop-variable
-    dem_descr = extract_dem_description(in_readme_path)
+    readme_text = get_readme_contents(in_readme_path)
+    short_descr = extract_readme_bullet_item(readme_text, "Short description")
+    notes = extract_readme_bullet_item(readme_text, "Notes")
+
+    # Some older versions of the README are missing a period at the end of the 'Short
+    # description'.
+    if not short_descr.endswith("."):
+        short_descr += "."
+
+    full_descr = short_descr + " " + notes
 
     # Build vrt with downloaded DEMs and add dem_descr in metadata
     vrt_dataset = gdal.BuildVRT(outfile, dem_list)
-    vrt_dataset.SetMetadataItem("dem_description", f'{dem_descr}')
+    vrt_dataset.SetMetadataItem("dem_description", full_descr)
 
     # Add license text to GeoTiff files
     for dem_file in dem_list:
-        add_dem_license_to_tiff(dem_file)
+        ds = gdal.Open(dem_file, gdal.GA_Update)
+        ds.SetMetadataItem("dem_description", full_descr)
 
 def dem_covers_bbox_polar_stereo(vrt_filename, x_min, x_max, y_min, y_max, epsg):
     """Check if the DEM in polar stereo covers the bbox and if the bbox falls in the valid region of the DEM
@@ -556,65 +569,81 @@ def dem_covers_bbox_polar_stereo(vrt_filename, x_min, x_max, y_min, y_max, epsg)
         print(f"The bbox is not in the valid region of the DEM in epsg {epsg}.")
     return dem_is_valid
 
-def extract_dem_description(in_readme_path):
-    """Extract DEM description from README.txt on nisar-dem
-       s3 bucket
+def get_readme_contents(in_readme_path: str) -> str:
+    """
+    Get the contents of a README file in the nisar-dem S3 bucket.
 
     Parameters
     ----------
-    in_readme_path: str
-        Path to the README.txt on the nisar-dem
-        s3 bucket
+    in_readme_path : str
+        Path to the README file in the nisar-dem S3 bucket (e.g.
+        '/vsis3/nisar-dem/v1.2/EPSG4326/README.txt').
 
     Returns
     -------
-    dem_descr: str
-        String containing the "dem description"
-        extracted from the README.txt
+    str
+        The contents of the README file.
     """
-    pattern = r'^\s*- Short description: (.+)$'
-
     # JPL internal s3 buckets are not accessible via
     # https addresses due to cybersecurity concerns. This
     # excludes using "requests". Using boto3 and its AWS s3
     # API would add another unnecessary dependency to ISCE3.
     # Therefore, we use GDAL to read a remote text file.
+    stat = gdal.VSIStatL(in_readme_path)
+    if stat is None:
+        raise ValueError(f"Failed to access README file {in_readme_path!r}")
+
     fp = gdal.VSIFOpenL(in_readme_path, "rb")
-    text = gdal.VSIFReadL(1, 100000, fp).decode()
-    gdal.VSIFCloseL(fp)
-
-    match = re.search(pattern, text, re.MULTILINE)
-    if match:
-        dem_descr = match.group(1)
-    else:
-        err_str = 'Line with "Short Description" not found in README.txt'
-        raise ValueError(err_str)
-
-    return dem_descr
+    try:
+        text = gdal.VSIFReadL(1, stat.size, fp).decode()
+    finally:
+        gdal.VSIFCloseL(fp)
+    return text
 
 
-def add_dem_license_to_tiff(dem_file):
-    '''
-    Add DEM license statement to downloaded DEM files
+def extract_readme_bullet_item(readme_text: str, name: str) -> str:
+    """
+    Extract an item from the NISAR DEM README.
+
+    The README file is expected to contain a bulleted list of colon-separated
+    key-value pairs, e.g.
+
+    ```
+    - Name: Copernicus DEM for NISAR v1.2 (EPSG 4326)
+    - Version: 1.2
+    - EPSG code: 4326
+    [...]
+    ```
+
+    This function extracts the value of one of the bullet items, given the
+    corresponding key.
 
     Parameters
     ----------
-    dem_file: str
-        Path to DEM Tiff
-    '''
-    license_text = "This digital elevation model (DEM) was prepared at the Jet Propulsion Laboratory, " \
-                   "California Institute of Technology, under contract with the National Aeronautics and " \
-                   "Space Administration, using the Copernicus DEM 30-m and Copernicus DEM 90-m models " \
-                   "provided by the European Space Agency. The Copernicus DEM 30-m and Copernicus DEM " \
-                   "90-m were produced using Copernicus WorldDEM-30 © DLR e.V. 2010-2014 and © Airbus " \
-                   "Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and " \
-                   "ESA; all rights reserved. The organizations in charge of the NISAR mission by law or by " \
-                   "delegation do not incur any liability for any use of this DEM. The organisations in charge " \
-                   "of the Copernicus programme by law or by delegation do not incur any liability for any use " \
-                   "of the Copernicus WorldDEM-30."
+    readme_text : str
+        The contents of the README file. The string is expected to consist of a
+        bulleted list of colon-separated key-value pairs, delimited by newlines
+        (and optional whitespace).
+    name : str
+        The key of the bullet item to extract (e.g. 'Short description').
 
-    ds = gdal.Open(dem_file, gdal.GA_Update)
-    ds.SetMetadataItem("LICENSE", license_text)
+    Returns
+    -------
+    str
+        The value of the bullet item, after the colon (`:`), with leading and
+        trailing whitespace removed.
+
+    Raises
+    ------
+    ValueError
+        If `name` was not a valid name of any bullet item in the README
+        contents.
+    """
+    pattern = rf"^\s*- {name}:\s*(.+?)\s*$"
+    if (match := re.search(pattern, readme_text, re.MULTILINE)) is not None:
+        return match.group(1)
+
+    raise ValueError(f"{name!r} not found in README file")
 
 
 def transform_polygon_coords(polys, epsgs):

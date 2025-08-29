@@ -76,6 +76,12 @@ runconfig:
             product_type: enum('GUNW', 'RIFG', 'RUNW', 'RIFG_RUNW_GUNW', 'ROFF_RIFG_RUNW_GOFF_GUNW', 'ROFF', 'GOFF', 'ROFF_GOFF')
             product_version: include('product_version_options', required=False)
             product_doi: include('product_doi_options', required=False)
+            # Data access for the static layers product associated with the
+            # output product (URL or DOI). If not provided, the corresponding
+            # metadata field will be set to "(NOT SPECIFIED)".
+            # If this string contains the substring "{granule_id}", that substring
+            # will be replaced with the granule ID.
+            static_layers_data_access: str(required=False)
             composite_release_id: regex(r'\w\d\d\d\d\d', name='CRID', required=False)
             processing_type: enum('PR', 'UR', 'OD', required=False)
             product_accuracy: enum('P','M','N','F', required=False)

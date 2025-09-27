@@ -25,7 +25,7 @@ runconfig:
             # REQUIRED - Digital elevation model
             dem_file: str()
 
-            # PLACEHOLDER - Digital elevation model file description, optional
+            # Digital elevation model file description, optional
             dem_file_description: str(required=False)
 
             # Water distance map used for water mask in unwrapping and
@@ -34,6 +34,10 @@ runconfig:
             # 101-200 (distance from inlandwater boundary)
 
             water_mask_file: str(required=False)
+
+            # Water mask file description, optional
+            water_mask_file_description: str(required=False)
+
             orbit_files: include('external_orbit_options', required=False)
 
             # Troposphere weather model
@@ -72,6 +76,12 @@ runconfig:
             product_type: enum('GUNW', 'RIFG', 'RUNW', 'RIFG_RUNW_GUNW', 'ROFF_RIFG_RUNW_GOFF_GUNW', 'ROFF', 'GOFF', 'ROFF_GOFF')
             product_version: include('product_version_options', required=False)
             product_doi: include('product_doi_options', required=False)
+            # Data access for the static layers product associated with the
+            # output product (URL or DOI). If not provided, the corresponding
+            # metadata field will be set to "(NOT SPECIFIED)".
+            # If this string contains the substring "{granule_id}", that substring
+            # will be replaced with the granule ID.
+            static_layers_data_access: str(required=False)
             composite_release_id: regex(r'\w\d\d\d\d\d', name='CRID', required=False)
             processing_type: enum('PR', 'UR', 'OD', required=False)
             product_accuracy: enum('P','M','N','F', required=False)
@@ -499,11 +509,12 @@ rubbersheet_options:
     # the offsets where outlier locations have been filled with zeros
     mask_refine_enabled: bool(required=False)
 
-    # Threshold for outlier refinement mask computation
-    mask_refine_threshold: num(min=0, required=False)
+    # Minimum number of valid (non-NaN) neighbors required for a pixel to remain
+    # unchanged during the rubbersheet refinement step
+    mask_refine_min_neighbors: num(min=0, required=False)
 
     # Size of median filter in range and azimuth for outlier mask refinement
-    mask_refine_filter_size: int(min=3, max=7, required=False)
+    mask_refine_filter_size: int(min=3, max=9, required=False)
 
     # Method to fill data holes left by outliers culling:
     # fill_smoothed: iteratively fill holes with mean value in a neighborhood.
@@ -515,7 +526,7 @@ rubbersheet_options:
 
     # Interpolation method. Interpolation is used to fill residual
     # outlier holes (if present)
-    interpolation_method: enum('nearest', 'linear', 'cubic', required=False)
+    interpolation_method: enum('no_interpolation', 'nearest', 'linear', 'cubic', required=False)
 
     # It is good practice to filter the offsets prior to interferogram
     # formation to reduce noise. We expose: no_filter: do not filter the offsets/
@@ -681,36 +692,52 @@ bandpass_options:
 ionosphere_phase_correction_options:
     # Boolean flag to enable/disable ionosphere phase correction
     enabled: bool(required=False)
-    # 'split_main_band' splits the main range bandwidth into a low and high subband
-    # being 1/3 (fixed for now) of the total main range spectrum.
-    # 'main_side_band' uses the additional NISAR 5 MHz side-band to estimate the
-    # ionosphere phase screen. Main and side-bands are intended to be at the same polarization
-    spectral_diversity: enum('split_main_band', 'main_side_band', 'main_diff_ms_band', required=False)
+    # - 'split_main_band' splits the main range bandwidth into a low and high subband
+    #    being 1/3 (fixed for now) of the total main range spectrum.
+    # - 'main_diff_low_high_subband' uses the main band and difference between low and high
+    #    subbands after splitting main band
+    # - 'main_side_band' uses the additional NISAR side-band to estimate the
+    #    ionosphere phase screen. Main and side-bands are intended to be at the same polarization
+    # - 'main_diff_ms_band' uses the additional NISAR side-band to estimate the ionosphere
+    #    phase screen by utilzing main band and difference between main and side band
+    spectral_diversity: enum('split_main_band', 'main_diff_low_high_subband', 'main_side_band', 'main_diff_ms_band', required=False)
     split_range_spectrum: include('split_range_spectrum_options', required=False)
     list_of_frequencies: include('ionosphere_freq_pol_options', required=False)
     dispersive_filter: include('dispersive_filter_options', required=False)
     # Number of lines per block for block processing)
     lines_per_block: int(min=1, required=False)
+    # Unwrapping correction bool. If False, only filtering
+    # is applied
+    unwrap_correction: include('unwrap_correction_options', required=False)
 
 dispersive_filter_options:
     # Boolean flag to enable/disable ionosphere phase correction
     enabled: bool(required=False)
     # Source for mask generation
-    # median filter : use theoretical standard deviation calculated from coherence and
-    #                 detect area below 3 * std.
-    # coherence : define invalid region using coherence below 'filter_coherence_threshold'
-    # connected_components: define invalid region where connected_components equal to 0.
-    filter_mask_type: enum('median_filter', 'coherence', 'connected_components', required=False)
+    # Median filter:
+    #   Compute the theoretical standard deviation from the coherence map.
+    #   Identify pixels whose values fall below 3 × σ and mark them invalid.
+    # Coherence threshold:
+    #   Flag any pixel with coherence < filter_coherence_threshold as invalid.
+    # Connected components:
+    #   Label contiguous regions; mark pixels in components with label == 0 as invalid.
+    # Multi‑source masking:
+    #   When multiple validation sources are enabled, take the intersection of
+    #   their invalid masks to form a combined mask.
+    #   Masked areas are then filled using spatial interpolation.
+    filter_mask_type: list('water', 'median_filter', 'coherence', 'connected_components', required=False)
     # Median filter size for mask generation
     median_filter_size: num(min=1, required=False)
+    # Median filter threshold for mask generation
+    median_filter_threshold: num(min=0, max=1, required=False)
     # coherence threshold for mask generation
     filter_coherence_threshold: num(min=0, max=1, required=False)
     # Filling method for invalid regions
     # nearest : apply nearest interpolation for whole invalid regions
     # smoothed : apply lienar interpolation and nearest extrapolations
-    filling_method: enum('nearest', 'smoothed', 'None', required=False)
-    # Flag for enabling/disabling of upwrapping error estimation/correction
-    unwrap_correction: bool(required=False)
+    # distance : distance‑based interpolator that assigns weights to samples
+    #            inversely proportional to their spatial distance.
+    filling_method: enum('nearest', 'smoothed', 'distance', 'None', required=False)
     # 1D gaussian kernel size [pixels] in range/ azimuth
     kernel_range: num(min=1, required=False)
     kernel_azimuth: num(min=1, required=False)
@@ -719,6 +746,21 @@ dispersive_filter_options:
     # Gaussian filter standard deviation along azimuth
     sigma_azimuth: num(min=1, required=False)
     filter_iterations: num(min=1, max=10, required=False)
+    unwrap_correction: bool(required=False)
+    min_cluster_pixels: num(min=0, required=False)
+
+    bridge_algorithm_enabled: bool(required=False)
+    # Maximum radius used when bridging disconnected regions.
+    bridge_radius: num(min=1, required=False)
+    # Size of the structuring element used for erosion during bridge labeling.
+    bridge_erosion_size: num(min=1, required=False)
+    # Minimum number of pixel of connected components to retain during bridge algorithm.
+    bridge_minimum_samples: num(min=0, required=False)
+    # Ramp type to correct before bridge algoritm
+    bridge_ramp_type: enum('None', 'linear', 'quadratic', 'linear_range', 'linear_azimuth', 'quadratic_range', 'quadratic_azimuth', required=False)
+    # During deramping, uniform sampling is applied
+    # when number of samples is larger than maximum pixel
+    bridge_ramp_maximum_pixel: num(min=0, required=False)
 
 split_range_spectrum_options:
     # Number of lines per block for block processing)
@@ -816,6 +858,7 @@ qa_options:
 
 rifg_options:
     workflows: include('workflows_options', required=False)
+    software_config: include('qa_software_config_options', required=False)
     validation: include('qa_validation_options', required=False)
     qa_reports: include('rifg_qa_reports_options', required=False)
 
@@ -828,6 +871,7 @@ rifg_qa_reports_options:
 
 runw_options:
     workflows: include('workflows_options', required=False)
+    software_config: include('qa_software_config_options', required=False)
     validation: include('qa_validation_options', required=False)
     qa_reports: include('runw_qa_reports_options', required=False)
 
@@ -843,6 +887,7 @@ runw_qa_reports_options:
 
 gunw_options:
     workflows: include('workflows_options', required=False)
+    software_config: include('qa_software_config_options', required=False)
     validation: include('qa_validation_options', required=False)
     qa_reports: include('gunw_qa_reports_options', required=False)
 
@@ -859,11 +904,13 @@ gunw_qa_reports_options:
 
 roff_options:
     workflows: include('workflows_options', required=False)
+    software_config: include('qa_software_config_options', required=False)
     validation: include('qa_validation_options', required=False)
     qa_reports: include('offsets_qa_reports_options', required=False)
 
 goff_options:
     workflows: include('workflows_options', required=False)
+    software_config: include('qa_software_config_options', required=False)
     validation: include('qa_validation_options', required=False)
     qa_reports: include('offsets_qa_reports_options', required=False)
 
@@ -878,8 +925,12 @@ workflows_options:
     validate: bool(required=False)
     qa_reports: bool(required=False)
 
+qa_software_config_options:
+    use_cache: bool(required=False)
+    delete_qa_scratch_files: bool(required=False)
+
 qa_validation_options:
-    metadata_cubes_fail_if_all_nan: bool(required=False)
+    metadata_luts_fail_if_all_nan: bool(required=False)
 
 qa_phase_img_options:
     rewrap: num(min=0.0, required=False)
@@ -902,13 +953,9 @@ qa_cc_options:
     max_num_cc: int(min=0.0, required=False)
 
 qa_browse_png_wrapped_options:
-    browse_image: enum('phase', 'hsi', required=False)
-    equalize_browse: bool(required=False)
     longest_side_max: int(min=1, required=False)
 
 qa_browse_png_unwrapped_options:
-    browse_image: enum('phase', 'hsi', required=False)
-    equalize_browse: bool(required=False)
     longest_side_max: int(min=1, required=False)
     rewrap: num(min=0.0, required=False)
 

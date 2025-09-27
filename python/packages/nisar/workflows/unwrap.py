@@ -304,7 +304,7 @@ def run(cfg: dict, input_hdf5: str, output_hdf5: str):
 
                 # Clean up unwrapped phase raster
                 del unw_raster
-                
+
                 # Allocate coherence in RUNW. If no further multilooking, the coherence
                 # is copied from RIFG
                 datasets = ['coherenceMagnitude']
@@ -334,8 +334,7 @@ def run(cfg: dict, input_hdf5: str, output_hdf5: str):
                     dst_raster = isce3.io.Raster(
                         f"IH5:::ID={dst_dataset.id.id}".encode("utf-8"),
                         update=True)
-                    if dataset not in ['correlationSurfacePeak']:
-                        compute_stats_real_data(dst_raster, dst_dataset)
+                    compute_stats_real_data(dst_raster, dst_dataset)
 
 
     t_all_elapsed = time.time() - t_all

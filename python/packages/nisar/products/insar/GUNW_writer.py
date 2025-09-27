@@ -1,6 +1,7 @@
 import h5py
 import numpy as np
 from isce3.io import optimize_chunk_size
+from nisar.products.utils import to_bytes
 from nisar.workflows.h5_prep import set_get_geo_info
 from nisar.workflows.helpers import get_cfg_freq_pols
 
@@ -48,9 +49,9 @@ class GUNWWriter(RUNWWriter, RIFGWriter, L2InSARWriter):
         """
         InSARBaseWriter.add_root_attrs(self)
 
-        self.attrs["title"] = np.bytes_("NISAR L2 GUNW Product")
+        self.attrs["title"] = to_bytes("NISAR L2 GUNW Product")
         self.attrs["reference_document"] = \
-            np.bytes_("D-102272 NISAR NASA SDS Product Specification"
+            to_bytes("D-102272 NISAR NASA SDS Product Specification"
                        " L2 Geocoded Unwrapped Interferogram")
 
         ctype = h5py.h5t.py_create(np.complex64)
@@ -69,24 +70,25 @@ class GUNWWriter(RUNWWriter, RIFGWriter, L2InSARWriter):
         radar_grid_cubes_heights = proc_cfg["radar_grid_cubes"]["heights"]
 
         radar_grid = self[self.group_paths.RadarGridPath]
-        descrs = ["Solid Earth tides phase along slant range direction",
-                  'Solid Earth tides phase in along-track direction']
+        descrs = ["Solid Earth tides phase along slant range direction"]
         product_names = ['slantRangeSolidEarthTidesPhase']
+
+        cube_shape = (len(radar_grid_cubes_heights),
+                      radar_grid_cubes_geogrid.length,
+                      radar_grid_cubes_geogrid.width)
 
         # Add the troposphere datasets to the radarGrid cube
         if tropo_cfg['enabled']:
             for delay_type in ['wet', 'hydrostatic', 'comb']:
                 if tropo_cfg[f'enable_{delay_type}_product']:
-                    descrs.append(f"{delay_type.capitalize()} component "
-                                  "of the troposphere phase screen")
                     if delay_type == 'comb':
+                        descrs.append("Combined (wet + hydrostatic) component "
+                                    "of the troposphere phase screen")
                         product_names.append(f'combinedTroposphericPhaseScreen')
                     else:
+                        descrs.append(f"{delay_type.capitalize()} component "
+                                    "of the troposphere phase screen")
                         product_names.append(f'{delay_type}TroposphericPhaseScreen')
-
-        cube_shape = [len(radar_grid_cubes_heights),
-                      radar_grid_cubes_geogrid.length,
-                      radar_grid_cubes_geogrid.width]
 
         # Retrieve the x, y, and z coordinates from the radargrid cube
         # Since the radargrid cube has been added, it is safe to
@@ -108,7 +110,7 @@ class GUNWWriter(RUNWWriter, RIFGWriter, L2InSARWriter):
             create_dataset_kwargs['shuffle'] = \
                 self.hdf5_optimizer_config.shuffle_filter
 
-        for product_name, descr in zip(product_names,descrs):
+        for product_name, descr in zip(product_names, descrs):
             if product_name not in radar_grid:
                 if self.hdf5_optimizer_config.chunk_size is not None:
                     ds_chunk_size = \
@@ -125,9 +127,10 @@ class GUNWWriter(RUNWWriter, RIFGWriter, L2InSARWriter):
                             **create_dataset_kwargs)
 
                 ds.attrs['_FillValue'] = np.nan
-                ds.attrs['description'] = np.bytes_(descr)
-                ds.attrs['units'] = Units.radian
-                ds.attrs['grid_mapping'] = np.bytes_('projection')
+                ds.attrs['description'] = to_bytes(descr)
+                ds.attrs['units'] = to_bytes(Units.radian)
+                ds.attrs['grid_mapping'] = to_bytes('projection')
+
                 ds.dims[0].attach_scale(zds)
                 ds.dims[1].attach_scale(yds)
                 ds.dims[2].attach_scale(xds)
@@ -161,11 +164,11 @@ class GUNWWriter(RUNWWriter, RIFGWriter, L2InSARWriter):
             number_of_slant_range_looks = \
                 self[f'{new_igram_group_name}/frequency{freq}/numberOfRangeLooks']
             number_of_azimuth_looks.attrs['description'] = \
-                np.bytes_('Number of looks applied in the'
+                to_bytes('Number of looks applied in the'
                           ' along-track direction to form the'
                           ' unwrapped interferogram')
             number_of_slant_range_looks.attrs['description'] = \
-                np.bytes_('Number of looks applied in the'
+                to_bytes('Number of looks applied in the'
                           ' slant range direction to form the'
                           ' unwrapped interferogram')
 
@@ -184,10 +187,10 @@ class GUNWWriter(RUNWWriter, RIFGWriter, L2InSARWriter):
         for rslc_name in ['reference', 'secondary']:
             rslc = self[self.group_paths.ParametersPath][rslc_name]
             rslc['referenceTerrainHeight'].attrs['description'] = \
-                np.bytes_("Reference Terrain Height as a function of"
+                to_bytes("Reference terrain height as a function of"
                            f" map coordinates for {rslc_name} RSLC")
             rslc['referenceTerrainHeight'].attrs['units'] = \
-                Units.meter
+               to_bytes(Units.meter)
 
     def add_grids_to_hdf5(self):
         """
@@ -199,7 +202,7 @@ class GUNWWriter(RUNWWriter, RIFGWriter, L2InSARWriter):
         geogrids = pcfg["geocode"]["geogrids"]
         wrapped_igram_geogrids = pcfg["geocode"]["wrapped_igram_geogrids"]
 
-        grids_val = np.bytes_("projection")
+        grids_val = "projection"
 
         # Only add the common fields such as list of polarizations, pixel offsets, and center frequency
         for freq, pol_list, _ in get_cfg_freq_pols(self.cfg):
@@ -271,7 +274,7 @@ class GUNWWriter(RUNWWriter, RIFGWriter, L2InSARWriter):
                      " where 1 is water and 0 is non-water;"
                      " the second digit represents the subswath number of that pixel in the reference RSLC;"
                      " the least-significant digit represents the subswath number of that pixel in the secondary RSLC."
-                     " A value of '0' in either subswath digit indicates an invalid sample in the corresponding RSLC"),
+                     " A value of 0 in either subswath digit indicates an invalid sample in the corresponding RSLC"),
                     grid_mapping=grids_val,
                     xds=xds,
                     yds=yds,
@@ -279,6 +282,7 @@ class GUNWWriter(RUNWWriter, RIFGWriter, L2InSARWriter):
                 )
             ds_group['mask'].attrs['valid_min'] = 0
             ds_group['mask'].attrs['percentage_water'] = 0.0
+            ds_group['mask'].attrs['disclaimer'] = to_bytes(self.water_mask_source)
 
             for pol in pol_list:
                 unwrapped_pol_name = f"{unwrapped_group_name}/{pol}"

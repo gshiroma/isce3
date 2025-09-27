@@ -1,6 +1,6 @@
 import journal
 import numpy as np
-from scipy.ndimage import median_filter
+from scipy.ndimage import median_filter, binary_opening
 from isce3.signal.interpolate_by_range import decimate_freq_a_array
 
 class IonosphereEstimation:
@@ -16,7 +16,7 @@ class IonosphereEstimation:
                  slant_main=None,
                  slant_side=None):
 
-        """Initialized IonosphererEstimation Base Class
+        """Initialized IonosphereEstimation Base Class
 
         Parameters
         ----------
@@ -73,19 +73,25 @@ class IonosphereEstimation:
             1: valid pixels,
             0: invalid pixels.
         """
-
-        std_iono, _ = self.estimate_iono_std(
-            main_coh=threshold,
-            side_coh=threshold,
-            low_band_coh=threshold,
-            high_band_coh=threshold,
-            number_looks=looks,
-            resample_flag=False)
-
         mask_array = np.abs(disp - median_filter(disp,
-            median_filter_size)) < 3 * std_iono
-
+                            median_filter_size)) < threshold
+        mask_array = self.remove_single_pixels(mask_array)
         return mask_array
+
+    def remove_single_pixels(
+            self,
+            binary_image):
+        # Define a 3x3 cross-shaped structuring element
+        structure = np.array([[0, 1, 0],
+                              [1, 1, 1],
+                              [0, 1, 0]])
+
+        # Perform binary opening with the defined structure.
+        # This will remove isolated pixels.
+        opened_image = binary_opening(binary_image,
+                                      structure=structure).astype(np.uint8)
+
+        return opened_image
 
     def compute_unwrapp_error(
             self,
@@ -94,10 +100,12 @@ class IonosphereEstimation:
             compute_unwrapp_error_func=None,
             main_runw=None,
             side_runw=None,
+            diff_ms_runw=None,
             slant_main=None,
             slant_side=None,
             low_sub_runw=None,
-            high_sub_runw=None):
+            high_sub_runw=None,
+            diff_low_high_runw=None):
         """Compute unwrapping error coefficients
 
         Parameters
@@ -111,12 +119,17 @@ class IonosphereEstimation:
         main_runw : numpy.ndarray
             2D runw array of main-band interferogram
         side_runw : numpy.ndarray
-            2D runw array of of side-band interferogram
+            2D runw array of side-band interferogram
+        diff_ms_runw : numpy.ndarray
+            2D runw array of difference between
+            main and side-band interferogram
         low_sub_runw : numpy.ndarray
             2D runw array of low sub-band interferogram
         high_sub_runw : numpy.ndarray
             2D runw array of high sub-band interferogram
-
+        diff_log_high_runw : numpy.ndarray
+            2D runw array of difference between high and low sub-band
+            interferogram
         Returns
         -------
         com_unw_coeff : numpy.ndarray
@@ -154,7 +167,9 @@ class IonosphereEstimation:
             nondisp_array=nondisp_array,
             low_sub_runw=low_sub_runw,
             high_sub_runw=high_sub_runw,
+            diff_low_high_runw=diff_low_high_runw,
             main_runw=main_runw,
-            side_runw=side_runw,)
+            side_runw=side_runw,
+            diff_ms_runw=diff_ms_runw)
 
         return com_unw_coeff, diff_unw_coeff

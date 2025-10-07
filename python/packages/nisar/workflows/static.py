@@ -68,6 +68,8 @@ def run_static_layers_workflow(config_file: os.PathLike | str) -> None:
 
     # Construct a DEM interpolator.
     dem_interp_method = processing_params["dem"]["interp_method"]
+    dem = isce3.geometry.DEMInterpolator(dem_raster)
+    dem.interp_method = dem_interp_method
 
     # Construct the output geocoded coordinate grid.
     geo_grid_params = processing_params["geo_grid"]
@@ -103,6 +105,7 @@ def run_static_layers_workflow(config_file: os.PathLike | str) -> None:
     radar_grid_spacing_params = radar_grid_params["spacing"]
     az_spacing = radar_grid_spacing_params["az_spacing"]
     rg_spacing = radar_grid_spacing_params["rg_spacing"]
+    pts_per_side = radar_grid_spacing_params["pts_per_side"]
 
     logger.info(f'az_spacing from runconfig: {az_spacing}')
     logger.info(f'rg_spacing from runconfig: {rg_spacing}')
@@ -115,6 +118,7 @@ def run_static_layers_workflow(config_file: os.PathLike | str) -> None:
             look_side=look_side,
             wavelength=wavelength,
             **radar_grid_params["spacing"],
+            pts_per_side=pts_per_side,
         )
     logger.info(f'az_spacing from inferred: {az_spacing_inferred}')
     logger.info(f'rg_spacing from inferred: {rg_spacing_inferred}')

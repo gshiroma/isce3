@@ -107,22 +107,6 @@ def run_static_layers_workflow(config_file: os.PathLike | str) -> None:
     rg_spacing = radar_grid_spacing_params["rg_spacing"]
     pts_per_side = radar_grid_spacing_params["pts_per_side"]
 
-    logger.info(f'az_spacing from runconfig: {az_spacing}')
-    logger.info(f'rg_spacing from runconfig: {rg_spacing}')
-    az_spacing_inferred, rg_spacing_inferred = \
-        isce3.geometry.infer_radar_grid_spacing_from_geo_grid(
-            geo_grid=geo_grid,
-            dem=dem,
-            orbit=orbit,
-            doppler=img_grid_doppler,
-            look_side=look_side,
-            wavelength=wavelength,
-            **radar_grid_params["spacing"],
-            pts_per_side=pts_per_side,
-        )
-    logger.info(f'az_spacing from inferred: {az_spacing_inferred}')
-    logger.info(f'rg_spacing from inferred: {rg_spacing_inferred}')
-
     if rg_spacing is None or az_spacing is None:
         az_spacing_inferred, rg_spacing_inferred = \
             isce3.geometry.infer_radar_grid_spacing_from_geo_grid(
@@ -132,7 +116,7 @@ def run_static_layers_workflow(config_file: os.PathLike | str) -> None:
                 doppler=img_grid_doppler,
                 look_side=look_side,
                 wavelength=wavelength,
-                **radar_grid_params["spacing"],
+                pts_per_side=pts_per_side
             )
         if rg_spacing is None:
             rg_spacing = rg_spacing_inferred

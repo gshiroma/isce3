@@ -115,6 +115,11 @@ def run_static_layers_workflow(config_file: os.PathLike | str) -> None:
     sensing_end = bounding_box_params["sensing_end"]
     starting_range = bounding_box_params["starting_range"]
     ending_range = bounding_box_params["ending_range"]
+    min_height = bounding_box_params["min_height"]
+    max_height = bounding_box_params["max_height"]
+    pts_per_edge = bounding_box_params["pts_per_edge"]
+    az_margin = bounding_box_params["az_margin"]
+    rg_margin = bounding_box_params["rg_margin"]
 
     if rg_spacing is None or az_spacing is None:
         az_spacing_inferred, rg_spacing_inferred = \
@@ -174,7 +179,11 @@ def run_static_layers_workflow(config_file: os.PathLike | str) -> None:
             look_side=look_side,
             wavelength=wavelength,
             doppler=img_grid_doppler,
-            **radar_grid_params["bounding_box"],
+            min_height=min_height,
+            max_height=max_height,
+            pts_per_edge=pts_per_edge,
+            az_margin=az_margin,
+            rg_margin=rg_margin
         )
     logger.info(f"Using radar grid: {radar_grid}")
 

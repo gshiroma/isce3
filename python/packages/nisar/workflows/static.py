@@ -32,6 +32,8 @@ from nisar.static.water_mask import binarize_and_reproject_water_mask
 
 import isce3
 from isce3.geometry import make_geo_grid_bounding_polygon
+from isce3.core import normalize_look_side
+import numpy as np
 
 
 def run_static_layers_workflow(config_file: os.PathLike | str) -> None:
@@ -105,7 +107,14 @@ def run_static_layers_workflow(config_file: os.PathLike | str) -> None:
     radar_grid_spacing_params = radar_grid_params["spacing"]
     az_spacing = radar_grid_spacing_params["az_spacing"]
     rg_spacing = radar_grid_spacing_params["rg_spacing"]
+
     pts_per_side = radar_grid_spacing_params["pts_per_side"]
+
+    bounding_box_params = radar_grid_params["bounding_box"]
+    sensing_start = bounding_box_params["sensing_start"]
+    sensing_end = bounding_box_params["sensing_end"]
+    starting_range = bounding_box_params["starting_range"]
+    ending_range = bounding_box_params["ending_range"]
 
     if rg_spacing is None or az_spacing is None:
         az_spacing_inferred, rg_spacing_inferred = \
@@ -123,19 +132,50 @@ def run_static_layers_workflow(config_file: os.PathLike | str) -> None:
         if az_spacing is None:
             az_spacing = az_spacing_inferred
 
-    # Compute a radar grid whose footprint on the ground encloses the geocoded
-    # grid on which each output layer is defined.
-    logger.info("Compute a radar grid spanning the region of interest")
-    radar_grid = isce3.geometry.get_bounding_radar_grid(
-        geo_grid=geo_grid,
-        az_spacing=az_spacing,
-        rg_spacing=rg_spacing,
-        orbit=orbit,
-        look_side=look_side,
-        wavelength=wavelength,
-        doppler=img_grid_doppler,
-        **radar_grid_params["bounding_box"],
-    )
+    if (sensing_start is not None and starting_range is not None and
+            sensing_end is not None and ending_range is not None):
+
+        # Use the provided bounding box parameters.
+        # Construct the radar grid.
+        # Divide `num` by `den`, rounded up to the next smallest integer.
+        def ceil_divide(num: float, den: float) -> int:
+            return int(np.ceil(num / den))
+        num_az = ceil_divide(sensing_end - sensing_start, az_spacing) + 1
+        num_rg = ceil_divide(ending_range - starting_range, rg_spacing) + 1
+
+        radar_grid = isce3.product.RadarGridParameters(
+            sensing_start=sensing_start,
+            wavelength=wavelength,
+            prf=1.0 / az_spacing,
+            starting_range=starting_range,
+            range_pixel_spacing=rg_spacing,
+            lookside=normalize_look_side(look_side),
+            length=num_az,
+            width=num_rg,
+            ref_epoch=orbit.reference_epoch,
+        )
+    elif (sensing_start is not None or starting_range is not None or
+            sensing_end is not None or ending_range is not None):
+        raise ValueError(
+            "If specifying radar grid bounding box parameters, must provide"
+            " all of 'sensing_start', 'starting_range', 'sensing_end', and"
+            " 'ending_range'"
+        )
+    else:
+
+        # Compute a radar grid whose footprint on the ground encloses the geocoded
+        # grid on which each output layer is defined.
+        logger.info("Compute a radar grid spanning the region of interest")
+        radar_grid = isce3.geometry.get_bounding_radar_grid(
+            geo_grid=geo_grid,
+            az_spacing=az_spacing,
+            rg_spacing=rg_spacing,
+            orbit=orbit,
+            look_side=look_side,
+            wavelength=wavelength,
+            doppler=img_grid_doppler,
+            **radar_grid_params["bounding_box"],
+        )
     logger.info(f"Using radar grid: {radar_grid}")
 
     # Get the native Doppler LUT.

@@ -7,6 +7,7 @@ import os
 from collections.abc import Sequence
 from datetime import datetime, timezone
 from pathlib import Path
+from xmlrpc.client import DateTime
 
 import h5py
 import nisar
@@ -111,10 +112,10 @@ def run_static_layers_workflow(config_file: os.PathLike | str) -> None:
     pts_per_side = radar_grid_spacing_params["pts_per_side"]
 
     bounding_box_params = radar_grid_params["bounding_box"]
-    sensing_start = bounding_box_params["sensing_start"]
-    sensing_end = bounding_box_params["sensing_end"]
-    starting_range = bounding_box_params["starting_range"]
-    ending_range = bounding_box_params["ending_range"]
+    start_time = bounding_box_params["start_time"]
+    end_time = bounding_box_params["end_time"]
+    start_range = bounding_box_params["start_range"]
+    end_range = bounding_box_params["end_range"]
     min_height = bounding_box_params["min_height"]
     max_height = bounding_box_params["max_height"]
     pts_per_edge = bounding_box_params["pts_per_edge"]
@@ -137,34 +138,45 @@ def run_static_layers_workflow(config_file: os.PathLike | str) -> None:
         if az_spacing is None:
             az_spacing = az_spacing_inferred
 
-    if (sensing_start is not None and starting_range is not None and
-            sensing_end is not None and ending_range is not None):
+    if (start_time is not None and start_range is not None and
+            end_time is not None and end_range is not None):
 
-        # Use the provided bounding box parameters.
-        # Construct the radar grid.
-        # Divide `num` by `den`, rounded up to the next smallest integer.
-        def ceil_divide(num: float, den: float) -> int:
-            return int(np.ceil(num / den))
-        num_az = ceil_divide(sensing_end - sensing_start, az_spacing) + 1
-        num_rg = ceil_divide(ending_range - starting_range, rg_spacing) + 1
+        epoch = orbit.reference_epoch
+
+        t0 = (isce3.core.DateTime(start_time) - epoch).total_seconds()
+        tf = (isce3.core.DateTime(end_time) - epoch).total_seconds()
+
+        num_az = round((tf - t0) / az_spacing)
+        num_rg = round((end_range - start_range) / rg_spacing)
+
+        logger.info("Using user-specified radar grid bounding box parameters")
+        logger.info(f'    start time: {start_time}')
+        logger.info(f'    end time: {end_time}')
+        logger.info(f'    start range: {start_range}')
+        logger.info(f'    end range: {end_range}')
+        logger.info(f'    az spacing: {az_spacing}')
+        logger.info(f'    rg spacing: {rg_spacing}')
+        logger.info(f'    number of lines: {num_az}')
+        logger.info(f'    number of range samples: {num_rg}')
 
         radar_grid = isce3.product.RadarGridParameters(
-            sensing_start=sensing_start,
+            sensing_start=t0,
             wavelength=wavelength,
             prf=1.0 / az_spacing,
-            starting_range=starting_range,
+            starting_range=start_range,
             range_pixel_spacing=rg_spacing,
             lookside=normalize_look_side(look_side),
             length=num_az,
             width=num_rg,
-            ref_epoch=orbit.reference_epoch,
+            ref_epoch=epoch,
         )
-    elif (sensing_start is not None or starting_range is not None or
-            sensing_end is not None or ending_range is not None):
+
+    elif (start_time is not None or start_range is not None or
+            end_time is not None or end_range is not None):
         raise ValueError(
             "If specifying radar grid bounding box parameters, must provide"
-            " all of 'sensing_start', 'starting_range', 'sensing_end', and"
-            " 'ending_range'"
+            " all of 'start_time', 'start_range', 'end_time', and"
+            " 'end_range'"
         )
     else:
 

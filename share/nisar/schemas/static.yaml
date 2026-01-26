@@ -99,10 +99,10 @@ radar_grid_spacing_options:
   pts_per_side: int(min=2, required=False)
 
 radar_grid_bounding_box_options:
-  sensing_start: num(required=False)
-  sensing_end: num(required=False)
-  starting_range: num(required=False)
-  ending_range: num(required=False)
+  start_time: timestamp()
+  end_time: timestamp()
+  start_range: num(required=False)
+  end_range: num(required=False)
   min_height: num(required=False)
   max_height: num(required=False)
   pts_per_edge: int(min=2, required=False)

@@ -14,9 +14,9 @@ from .util import truncate_datetime_to_integer_seconds
 
 
 def get_cropped_orbit_and_attitude(
-    input_file_path: str | os.PathLike,
-    orbit_xml_file: str | os.PathLike,
-    pointing_xml_file: str | os.PathLike,
+    input_file_path: str | os.PathLike | None,
+    orbit_xml_file: str | os.PathLike | None,
+    pointing_xml_file: str | os.PathLike | None,
     start_time: str | datetime | None,
     end_time: str | datetime | None,
     *,
@@ -79,6 +79,8 @@ def get_cropped_orbit_and_attitude(
         logger.info(f"Load orbit data from file {orbit_xml_file}")
 
         if input_file_path is not None:
+            # Ensure the orbit is referenced to the RSLC radar grid
+            # reference epoch.
             rslc_product = SLC(hdf5file=str(input_file_path))
             rslc_radar_grid = rslc_product.getRadarGrid()
             orbit_full = load_orbit(rslc_product, orbit_xml_file,

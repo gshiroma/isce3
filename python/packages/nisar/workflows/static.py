@@ -98,7 +98,7 @@ def run_static_layers_workflow(config_file: os.PathLike | str) -> None:
     # data to the time interval of interest to avoid possible geo2rdr
     # convergence errors due to ambiguity between orbit periods.
     orbit, attitude = get_cropped_orbit_and_attitude(
-        input_file_path,
+        input_file_path=input_file_path,
         orbit_xml_file=dynamic_ancillary_files["orbit_xml_file"],
         pointing_xml_file=dynamic_ancillary_files["pointing_xml_file"],
         **processing_params["ephemeris"],

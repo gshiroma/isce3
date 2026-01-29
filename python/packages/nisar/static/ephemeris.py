@@ -14,11 +14,11 @@ from .util import truncate_datetime_to_integer_seconds
 
 
 def get_cropped_orbit_and_attitude(
-    input_file_path: str | os.PathLike | None,
-    orbit_xml_file: str | os.PathLike | None,
-    pointing_xml_file: str | os.PathLike | None,
-    start_time: str | datetime | None,
-    end_time: str | datetime | None,
+    input_file_path: str | os.PathLike | None = None,
+    orbit_xml_file: str | os.PathLike | None = None,
+    pointing_xml_file: str | os.PathLike | None = None,
+    start_time: str | datetime | None = None,
+    end_time: str | datetime | None = None,
     *,
     padding: float = 0.0,
 ) -> tuple[isce3.core.Orbit, isce3.core.Attitude]:
@@ -33,12 +33,12 @@ def get_cropped_orbit_and_attitude(
 
     Parameters
     ----------
-    input_file_path : str | os.PathLike
+    input_file_path : str or os.PathLike or None
         Path to the input NISAR L1 RSLC formatted HDF5 file.
-    orbit_xml_file : path-like
+    orbit_xml_file : path-like or None
         Path to the input orbit ephemeris XML file. Must be an existing XML file
         conforming to the NISAR Orbit Ephemeris Product Specification\ [1]_.
-    pointing_xml_file : path-like
+    pointing_xml_file : path-like or None
         Path to the input radar pointing XML file. Must be an existing XML file
         conforming to the NISAR Radar Pointing Product Specification\ [2]_.
     start_time : str or datetime.datetime or None

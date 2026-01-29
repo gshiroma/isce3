@@ -438,6 +438,10 @@ runconfig:
         extraiter: 10
 
     output:
+      layers:
+        # [OPTIONAL] Whether to save the water mask layer in the output product.
+        # Defaults to true.
+        save_water_mask: true
       dataset:
         # [OPTIONAL] Chunk dimensions of 2-D raster datasets in the output product.
         # Setting `chunk_size` to [-1, -1] will disable chunked storage.

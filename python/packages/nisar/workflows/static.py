@@ -32,8 +32,9 @@ from nisar.static.util import get_raster_dataset_metadata_item, \
 from nisar.static.water_mask import binarize_and_reproject_water_mask
 
 import isce3
-from isce3.geometry import make_geo_grid_bounding_polygon
-from isce3.core import normalize_look_side
+from isce3.geometry import make_geo_grid_bounding_polygon, load_dem_from_proj
+from isce3.core import normalize_look_side, normalize_data_interp_method
+from nisar.products.readers import SLC
 import numpy as np
 
 
@@ -72,13 +73,26 @@ def run_static_layers_workflow(config_file: os.PathLike | str) -> None:
 
     # Construct a DEM interpolator.
     dem_interp_method = processing_params["dem"]["interp_method"]
-    dem = isce3.geometry.DEMInterpolator(dem_raster)
-    dem.interp_method = dem_interp_method
 
     # Construct the output geocoded coordinate grid.
     geo_grid_params = processing_params["geo_grid"]
     geo_grid = get_output_geo_grid(dem_raster=dem_raster, **geo_grid_params)
     logger.info(f"Output geo grid: {geo_grid}")
+
+    flag_save_water_mask = output_params["layers"]["save_water_mask"]
+
+    proj = isce3.core.make_projection(geo_grid.epsg)
+
+    # dem = isce3.geometry.DEMInterpolator(dem_raster)
+    # dem.interp_method = dem_interp_method
+    dem_interp = load_dem_from_proj(
+        dem_raster,
+        geo_grid.start_x,
+        geo_grid.end_x,
+        geo_grid.end_y,
+        geo_grid.start_y,
+        normalize_data_interp_method(dem_interp_method),
+        proj)
 
     # Parse the orbit and attitude data from the input XML files. Crop the
     # data to the time interval of interest to avoid possible geo2rdr
@@ -102,7 +116,6 @@ def run_static_layers_workflow(config_file: os.PathLike | str) -> None:
     # parameters than the legacy `geo2rdr` routine that's used by most of the
     # workflow. Exposing both sets of parameters would introduce a lot of
     # additional bookkeeping for seemingly little benefit.
-    logger.info("Estimate maximum required radar grid spacing")
     radar_grid_params = processing_params["radar_grid"]
     look_side = radar_grid_params["look_side"]
     wavelength = radar_grid_params["wavelength"]
@@ -124,43 +137,79 @@ def run_static_layers_workflow(config_file: os.PathLike | str) -> None:
     az_margin = bounding_box_params["az_margin"]
     rg_margin = bounding_box_params["rg_margin"]
 
-    # load radar grid parameters from RSLC (if provided)
+    # Load radar grid parameters from RSLC (if provided)
     if input_file_path is not None:
         logger.info("Load radar grid parameters from input RSLC file:")
-        rslc_product = isce3.io.RSLCProduct(str(input_file_path))
+        rslc_product = SLC(hdf5file=str(input_file_path))
         rslc_radar_grid = rslc_product.getRadarGrid()
+        rslc_orbit = rslc_product.getOrbit()
+
+        if start_time is None:
+            start_time = (rslc_orbit.reference_epoch +
+                          isce3.core.TimeDelta(
+                              rslc_radar_grid.sensing_start))
+            logger.info(f"    start time: {start_time.isoformat()}")
+
+        if end_time is None:
+            end_time = (rslc_orbit.reference_epoch +
+                        isce3.core.TimeDelta(
+                            rslc_radar_grid.sensing_stop))
+            logger.info(f"    end time: {end_time.isoformat()}")
+
+        if start_range is None:
+            start_range = rslc_radar_grid.starting_range
+            logger.info(f"    start range: {start_range}")
+        if end_range is None:
+            end_range = rslc_radar_grid.end_range
+            logger.info(f"    end range: {end_range}")
 
         if rg_spacing is None:
             rg_spacing = rslc_radar_grid.range_pixel_spacing
-            logger.info(f"    Range spacing: {rg_spacing}")
+            logger.info(f"    range spacing: {rg_spacing}")
 
         if az_spacing is None:
             az_spacing = 1.0 / rslc_radar_grid.prf
             logger.info(f"    azimuth time interval: {az_spacing}")
-        if start_time is None:
-            start_time = (rslc_radar_grid.orbit.reference_epoch +
-                          isce3.core.TimeDelta(
-                              rslc_radar_grid.radar_grid.sensing_start))
-            logger.info(f"    start time: {start_time.isoformat()}")
 
-        if end_time is None:
-            end_time = (rslc_radar_grid.orbit.reference_epoch +
-                        isce3.core.TimeDelta(
-                            rslc_radar_grid.radar_grid.sensing_stop))
-            logger.info(f"    end time: {end_time.isoformat()}")
+    # Print user radar grid bounding box parameters, if provided.
+    if (start_time is not None or start_range is not None or
+            end_time is not None or end_range is not None):
 
-        if start_range is None:
-            start_range = rslc_radar_grid.radar_grid.starting_range
-            logger.info(f"    start range: {start_range}")
-        if end_range is None:
-            end_range = rslc_radar_grid.radar_grid.ending_range
-            logger.info(f"    end range: {end_range}")
+        logger.info("Using user-specified radar grid bounding box parameters")
+        if start_time is not None:
+            logger.info(f'    start time: {start_time}')
+            if az_margin != 0.0:
+                start_time -= isce3.core.TimeDelta(az_margin)
+                logger.info(f'    adjusted for az margin {az_margin}:'
+                            f' {start_time}')
+        if end_time is not None:
+            logger.info(f'    end time: {end_time}')
+            if az_margin != 0.0:
+                end_time += isce3.core.TimeDelta(az_margin)
+                logger.info(f'    adjusted for az margin {az_margin}:'
+                            f' {end_time}')
+        if start_range is not None:
+            logger.info(f'    start range: {start_range}')
+            if rg_margin != 0.0:
+                start_range -= rg_margin
+                logger.info(f'    adjusted for rg margin {rg_margin}:'
+                            f' {start_range}')
+        if end_range is not None:
+            logger.info(f'    end range: {end_range}')
+            if rg_margin != 0.0:
+                end_range += rg_margin
+                logger.info(f'    adjusted for rg margin {rg_margin}:'
+                            f' {end_range}')
+    if rg_spacing is not None:
+        logger.info(f'    range spacing: {rg_spacing}')
+    if az_spacing is not None:
+        logger.info(f'    azimuth time interval: {az_spacing}')
 
     if rg_spacing is None or az_spacing is None:
         az_spacing_inferred, rg_spacing_inferred = \
             isce3.geometry.infer_radar_grid_spacing_from_geo_grid(
                 geo_grid=geo_grid,
-                dem=dem,
+                dem=dem_interp,
                 orbit=orbit,
                 doppler=img_grid_doppler,
                 look_side=look_side,
@@ -169,8 +218,10 @@ def run_static_layers_workflow(config_file: os.PathLike | str) -> None:
             )
         if rg_spacing is None:
             rg_spacing = rg_spacing_inferred
+            logger.info(f'   inferred range spacing: {rg_spacing}')
         if az_spacing is None:
             az_spacing = az_spacing_inferred
+            logger.info(f'   inferred azimuth time interval: {az_spacing}')
 
     if (start_time is not None and start_range is not None and
             end_time is not None and end_range is not None):
@@ -183,13 +234,6 @@ def run_static_layers_workflow(config_file: os.PathLike | str) -> None:
         num_az = round((tf - t0) / az_spacing)
         num_rg = round((end_range - start_range) / rg_spacing)
 
-        logger.info("Using user-specified radar grid bounding box parameters")
-        logger.info(f'    start time: {start_time}')
-        logger.info(f'    end time: {end_time}')
-        logger.info(f'    start range: {start_range}')
-        logger.info(f'    end range: {end_range}')
-        logger.info(f'    az spacing: {az_spacing}')
-        logger.info(f'    rg spacing: {rg_spacing}')
         logger.info(f'    number of lines: {num_az}')
         logger.info(f'    number of range samples: {num_rg}')
 
@@ -239,7 +283,7 @@ def run_static_layers_workflow(config_file: os.PathLike | str) -> None:
         radar_grid=radar_grid,
         orbit=orbit,
         attitude=attitude,
-        dem=dem,
+        dem=dem_interp,
         **processing_params["doppler"],
     )
 
@@ -292,15 +336,18 @@ def run_static_layers_workflow(config_file: os.PathLike | str) -> None:
                 max_block_size=geocode_params["max_block_size"],
             )
 
-        logger.info("Compute re-projected binary water mask layer")
-        with log_elapsed_time(logger.info,
-                              "Computing re-projected binary water mask"):
-            binary_water_mask = binarize_and_reproject_water_mask(
-                water_distance_raster_file=water_mask_raster_file,
-                geo_grid=geo_grid,
-                scratch_dir=scratch_dir,
-                **processing_params["water_mask"],
-            )
+        if flag_save_water_mask:
+            logger.info("Compute re-projected binary water mask layer")
+            with log_elapsed_time(logger.info,
+                                "Computing re-projected binary water mask"):
+                binary_water_mask = binarize_and_reproject_water_mask(
+                    water_distance_raster_file=water_mask_raster_file,
+                    geo_grid=geo_grid,
+                    scratch_dir=scratch_dir,
+                    **processing_params["water_mask"],
+                )
+        else:
+            binary_water_mask = None
 
         # Compute radiometric terrain correction (RTC) area normalization
         # factor (ANF) layers. Results are stored as GeoTIFF files in the
@@ -410,7 +457,7 @@ def run_static_layers_workflow(config_file: os.PathLike | str) -> None:
             identification_group = \
                 instrument_group.create_group("identification")
             bounding_polygon = make_geo_grid_bounding_polygon(geo_grid,
-                                                              dem=dem)
+                                                              dem=dem_interp)
             populate_identification_group(
                 identification_group=identification_group,
                 product_spec=product_spec,
@@ -431,11 +478,14 @@ def run_static_layers_workflow(config_file: os.PathLike | str) -> None:
             dem_description = get_raster_dataset_metadata_item(
                 dem_raster_file, "dem_description", default="(NOT SPECIFIED)"
             )
-            water_mask_description = get_raster_dataset_metadata_item(
-                water_mask_raster_file,
-                "water_mask_description",
-                default="(NOT SPECIFIED)",
-            )
+            if flag_save_water_mask:
+                water_mask_description = get_raster_dataset_metadata_item(
+                    water_mask_raster_file,
+                    "water_mask_description",
+                    default="(NOT SPECIFIED)",
+                )
+            else:
+                water_mask_description = "(NOT APPLICABLE)"
 
             # Populate the 'grids' group.
             logger.info("Populate raster layers and grid coordinates in output"

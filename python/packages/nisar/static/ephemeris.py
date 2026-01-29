@@ -5,6 +5,7 @@ from datetime import datetime
 
 from nisar.products.readers.attitude import load_attitude_from_xml
 from nisar.products.readers.orbit import load_orbit_from_xml, load_orbit
+from nisar.products.readers import SLC
 
 import isce3
 
@@ -78,7 +79,7 @@ def get_cropped_orbit_and_attitude(
         logger.info(f"Load orbit data from file {orbit_xml_file}")
 
         if input_file_path is not None:
-            rslc_product = isce3.io.RSLCProduct(str(input_file_path))
+            rslc_product = SLC(hdf5file=str(input_file_path))
             rslc_radar_grid = rslc_product.getRadarGrid()
             orbit_full = load_orbit(rslc_product, orbit_xml_file,
                                     rslc_radar_grid.ref_epoch)
@@ -88,7 +89,7 @@ def get_cropped_orbit_and_attitude(
     elif input_file_path is not None:
         # Load ephemeris data from input RSLC HDF5 file.
         logger.info(f"Load orbit data from RSLC file {input_file_path}")
-        rslc_product = isce3.io.RSLCProduct(str(input_file_path))
+        rslc_product = SLC(hdf5file=str(input_file_path))
         orbit_full = rslc_product.getOrbit()
     else:
         raise ValueError(
@@ -106,7 +107,7 @@ def get_cropped_orbit_and_attitude(
     elif input_file_path is not None:
         # Load attitude data from input RSLC HDF5 file.
         logger.info(f"Load attitude data from RSLC file {input_file_path}")
-        rslc_product = isce3.io.RSLCProduct(str(input_file_path))
+        rslc_product = SLC(hdf5file=str(input_file_path))
         attitude_full = rslc_product.getAttitude()
     else:
         raise ValueError(

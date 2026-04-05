@@ -99,6 +99,7 @@ geometry/Shapes.h
 geometry/boundingbox.h
 geometry/Geo2rdr.h
 geometry/Geo2rdr.icc
+geometry/ProjectSlantRange.h
 geocode/GeocodeCov.h
 geocode/GeocodeCov.icc
 geocode/GeocodePolygon.h

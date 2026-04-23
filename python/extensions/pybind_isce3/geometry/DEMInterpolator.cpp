@@ -262,6 +262,7 @@ void addbinding_load_dem_from_proj(py::module& m)
         R"(
     Load DEM raster into a DEMInterpolator object around a given bounding box
     in the same or different coordinate system as the DEM raster
+
     Parameters
     ----------
     dem_raster: isce3.io.Raster
@@ -293,6 +294,7 @@ void addbinding_load_dem_from_proj(py::module& m)
         DEM Y/northing margin in pixels
     dem_raster_band: int
         DEM raster band (starting from 1)
+
     Returns
     -------
     dem_interp: isce3.geometry.DEMInterpolator

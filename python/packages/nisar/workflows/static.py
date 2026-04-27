@@ -79,8 +79,6 @@ def run_static_layers_workflow(config_file: os.PathLike | str) -> None:
     geo_grid = get_output_geo_grid(dem_raster=dem_raster, **geo_grid_params)
     logger.info(f"Output geo grid: {geo_grid}")
 
-    flag_save_water_mask = output_params["layers"]["save_water_mask"]
-
     proj = isce3.core.make_projection(geo_grid.epsg)
 
     # dem = isce3.geometry.DEMInterpolator(dem_raster)
@@ -355,18 +353,15 @@ def run_static_layers_workflow(config_file: os.PathLike | str) -> None:
                 max_block_size=geocode_params["max_block_size"],
             )
 
-        if flag_save_water_mask:
-            logger.info("Compute re-projected binary water mask layer")
-            with log_elapsed_time(logger.info,
-                                "Computing re-projected binary water mask"):
-                binary_water_mask = binarize_and_reproject_water_mask(
-                    water_distance_raster_file=water_mask_raster_file,
-                    geo_grid=geo_grid,
-                    scratch_dir=scratch_dir,
-                    **processing_params["water_mask"],
-                )
-        else:
-            binary_water_mask = None
+        logger.info("Compute re-projected binary water mask layer")
+        with log_elapsed_time(logger.info,
+                            "Computing re-projected binary water mask"):
+            binary_water_mask = binarize_and_reproject_water_mask(
+                water_distance_raster_file=water_mask_raster_file,
+                geo_grid=geo_grid,
+                scratch_dir=scratch_dir,
+                **processing_params["water_mask"],
+            )
 
         # Compute radiometric terrain correction (RTC) area normalization
         # factor (ANF) layers. Results are stored as GeoTIFF files in the
@@ -498,14 +493,11 @@ def run_static_layers_workflow(config_file: os.PathLike | str) -> None:
             dem_description = get_raster_dataset_metadata_item(
                 dem_raster_file, "dem_description", default="(NOT SPECIFIED)"
             )
-            if flag_save_water_mask:
-                water_mask_description = get_raster_dataset_metadata_item(
-                    water_mask_raster_file,
-                    "water_mask_description",
-                    default="(NOT SPECIFIED)",
-                )
-            else:
-                water_mask_description = "(NOT APPLICABLE)"
+            water_mask_description = get_raster_dataset_metadata_item(
+                water_mask_raster_file,
+                "water_mask_description",
+                default="(NOT SPECIFIED)",
+            )
 
             # Populate the 'grids' group.
             logger.info("Populate raster layers and grid coordinates in output"

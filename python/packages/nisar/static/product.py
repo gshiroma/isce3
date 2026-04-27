@@ -439,11 +439,8 @@ def populate_grids_group(
     dem_dataset = create_raster_layer_dataset("digitalElevationModel", reprojected_dem)
     dem_dataset.attrs["disclaimer"] = to_bytes(dem_disclaimer)
 
-    if water_mask is not None:
-        water_mask_dataset = create_raster_layer_dataset("waterMask",
-                                                         water_mask)
-        water_mask_dataset.attrs["disclaimer"] = to_bytes(
-            water_mask_disclaimer)
+    water_mask_dataset = create_raster_layer_dataset("waterMask", water_mask)
+    water_mask_dataset.attrs["disclaimer"] = to_bytes(water_mask_disclaimer)
 
     create_raster_layer_dataset("layoverShadowMask", layover_shadow_mask)
     create_raster_layer_dataset("localIncidenceAngle", local_incidence_angle)

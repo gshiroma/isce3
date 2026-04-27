@@ -355,7 +355,7 @@ def run_static_layers_workflow(config_file: os.PathLike | str) -> None:
 
         logger.info("Compute re-projected binary water mask layer")
         with log_elapsed_time(logger.info,
-                            "Computing re-projected binary water mask"):
+                              "Computing re-projected binary water mask"):
             binary_water_mask = binarize_and_reproject_water_mask(
                 water_distance_raster_file=water_mask_raster_file,
                 geo_grid=geo_grid,

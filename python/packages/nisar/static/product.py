@@ -322,7 +322,7 @@ def populate_grids_group(
     local_incidence_angle: isce3.io.Raster,
     line_of_sight_x: isce3.io.Raster,
     line_of_sight_y: isce3.io.Raster,
-    water_mask: isce3.io.Raster | None,
+    water_mask: isce3.io.Raster,
     rtc_gamma_to_sigma_factor: isce3.io.Raster,
     rtc_gamma_to_beta_factor: isce3.io.Raster,
     geo_grid: isce3.product.GeoGridParameters,

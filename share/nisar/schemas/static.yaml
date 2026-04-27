@@ -1,10 +1,11 @@
 runconfig:
   groups:
     dynamic_ancillary_file_group:
+      input_file_path: str()
       dem_raster_file: str()
-      water_mask_raster_file: str()
-      orbit_xml_file: str()
-      pointing_xml_file: str()
+      water_mask_raster_file: str(required=False)
+      orbit_xml_file: str(required=False)
+      pointing_xml_file: str(required=False)
     product_path_group: include('product_path_group_options', required=False)
     primary_executable: include('primary_executable_options', required=False)
     geometry: include('geometry_options', required=False)
@@ -94,9 +95,23 @@ radar_grid_options:
   bounding_box: include('radar_grid_bounding_box_options', required=False)
 
 radar_grid_spacing_options:
+  az_spacing: num(min=0.0, required=False)
+  rg_spacing: num(min=0.0, required=False)
   pts_per_side: int(min=2, required=False)
 
 radar_grid_bounding_box_options:
+  start_time: any(
+      timestamp(),
+      regex(r'^\d{4}-\d{2}-\d{2}([T ]\d{2}:\d{2}:\d{2})?$'),
+      required=False
+    )
+  end_time: any(
+      timestamp(),
+      regex(r'^\d{4}-\d{2}-\d{2}([T ]\d{2}:\d{2}:\d{2})?$'),
+      required=False
+    )
+  start_range: num(required=False)
+  end_range: num(required=False)
   min_height: num(required=False)
   max_height: num(required=False)
   pts_per_edge: int(min=2, required=False)

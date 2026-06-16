@@ -214,7 +214,8 @@ def _project_water_to_geogrid(input_water_path, geogrid):
 
 
 def add_water_to_mask(cfg, freq, geogrid, dst_h5,
-                      input_product_type, fill_vaue = 255):
+                      input_product_type,
+                      fill_vaue = 255):
     """
     Add water mask to mask layer in GUNW and GOFF product.
 
@@ -262,8 +263,9 @@ def add_water_to_mask(cfg, freq, geogrid, dst_h5,
             # Masked water mask to exclude the fill value
             masked_water_mask = water_mask[mask]
             # Add the water mask to the mask layer
-            mask_layer[mask] += (100 * water_mask)[mask].astype(np.uint8)
-            dst_h5[mask_h5_path][...] = mask_layer
+            subswath_mask = mask_layer & 0xFF # get the subswath mask
+            subswath_mask[mask] += (100 * water_mask)[mask].astype(np.uint8)
+            dst_h5[mask_h5_path][...] = mask_layer | subswath_mask
 
             # Update the percentage of the water
             # where the region with fill value is excluded
@@ -578,7 +580,7 @@ def cpu_run(cfg, input_hdf5, output_hdf5, input_product_type=InputProduct.RUNW):
     is_iono_method_sideband = iono_method in ['main_side_band',
                                               'main_diff_ms_band']
     freq_pols_iono = iono_args["list_of_frequencies"]
-
+    freq_pol = cfg['processing']['input_subset']['list_of_frequencies']
     slc = SLC(hdf5file=ref_hdf5)
     info_channel = journal.info("geocode.run")
     info_channel.log("starting geocode")
@@ -675,7 +677,9 @@ def cpu_run(cfg, input_hdf5, output_hdf5, input_product_type=InputProduct.RUNW):
                         if az_looks > 1 or rg_looks > 1:
                             radar_grid_iono = radar_grid_iono.multilook(
                                 az_looks, rg_looks)
-                        input_hdf5_iono = f'{scratch_path}/ionosphere/{iono_method}/RUNW.h5'
+                        if 'B' not in freq_pol:
+                            input_hdf5_iono = f'{scratch_path}/ionosphere/{iono_method}/RUNW.h5'
+
                     if is_iono_method_sideband and freq == 'B':
                         geocode_iono_bool = False
 
@@ -1001,6 +1005,8 @@ def gpu_run(cfg, input_hdf5, output_hdf5, input_product_type=InputProduct.RUNW):
     iono_enabled = iono_args['enabled']
     iono_method = iono_args['spectral_diversity']
     freq_pols_iono = iono_args["list_of_frequencies"]
+    freq_pol = cfg['processing']['input_subset']['list_of_frequencies']
+
     is_iono_method_sideband = iono_method in ['main_side_band',
                                               'main_diff_ms_band']
 
@@ -1120,8 +1126,9 @@ def gpu_run(cfg, input_hdf5, output_hdf5, input_product_type=InputProduct.RUNW):
                         # frequencyA. Instead of geocoding ionosphere in the RUNW standard
                         # product (frequencyA), geocode the frequencyB in ionosphere/RUNW.h5
                         # to avoid additional interpolation.
-                        input_hdf5_iono = \
-                            f'{scratch_path}/ionosphere/{iono_method}/RUNW.h5'
+                        if 'B' not in freq_pol:
+                            input_hdf5_iono = f'{scratch_path}/ionosphere/{iono_method}/RUNW.h5'
+
                         if freq == 'A':
                             radar_grid_iono = slc.getRadarGrid('B')
                             if az_looks > 1 or rg_looks > 1:

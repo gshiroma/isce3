@@ -2,10 +2,13 @@
 Prepare InSAR HDF5 for
 GUNW, GOFF, RIFG, ROFF, and RUNW
 """
+import time
+
 import journal
 from nisar.products.insar import (GOFFWriter, GUNWWriter, RIFGWriter,
                                   ROFFWriter, RUNWWriter)
 from nisar.workflows.h5_prep import get_products_and_paths
+
 
 def prepare_insar_hdf5(cfg, output_hdf5, dst):
     """
@@ -56,11 +59,39 @@ def run(cfg: dict) -> dict:
     info_channel = journal.info("prepare_insar_hdf5.run")
     info_channel.log("preparing InSAR HDF5 products")
 
+    t_all = time.time()
     product_dict, h5_paths = get_products_and_paths(cfg)
     for sub_prod_type in product_dict:
         out_path = h5_paths[sub_prod_type]
         prepare_insar_hdf5(cfg, out_path, sub_prod_type)
 
-    info_channel.log("successfully ran prepare_insar_hdf5")
+    t_elapsed = time.time() - t_all
+    info_channel.log(f"successfully ran prepare_insar_hdf5 in {t_elapsed:.3f} seconds")
 
     return h5_paths
+
+if __name__ == "__main__":
+    '''
+    run prepare insar hdf5 from command line
+    '''
+    from nisar.workflows.yaml_argparse import YamlArgparse
+    from nisar.workflows.runconfig import RunConfig
+
+    class PrepareInSARHDF5RunConfig(RunConfig):
+        '''
+        Prepare InSAR HDF5 RunConfig
+        '''
+        def __init__(self, args):
+            # InSAR submodules share a common "InSAR" schema
+            super().__init__(args, 'insar')
+            if self.args.run_config_path is not None:
+                self.load_geocode_yaml_to_dict()
+                self.geocode_common_arg_load()
+
+    # load command line args
+    parser = YamlArgparse()
+    args = parser.parse()
+    # get a runconfig dict from command line args
+    runconfig = PrepareInSARHDF5RunConfig(args)
+    # run the prepare InSAR HDF5 runconfig
+    run(runconfig.cfg)

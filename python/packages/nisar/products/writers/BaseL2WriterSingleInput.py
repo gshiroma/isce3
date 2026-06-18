@@ -112,24 +112,28 @@ def _get_attribute_dict(band,
 
     elif stats_real_imag_obj_list is not None:
 
+        dtype = to_data_format_function()
+
+        real_dtype = np.dtype(dtype).type().real.dtype.type
+
         stats_obj = stats_real_imag_obj_list[band]
         attr_dict['min_real_value'] = \
-            to_data_format_function(stats_obj.real.min)
+            real_dtype(stats_obj.real.min)
         attr_dict['mean_real_value'] = \
-            to_data_format_function(stats_obj.real.mean)
+            real_dtype(stats_obj.real.mean)
         attr_dict['max_real_value'] = \
-            to_data_format_function(stats_obj.real.max)
+            real_dtype(stats_obj.real.max)
         attr_dict['sample_stddev_real'] = \
-            to_data_format_function(stats_obj.real.sample_stddev)
+            real_dtype(stats_obj.real.sample_stddev)
 
         attr_dict['min_imag_value'] = \
-            to_data_format_function(stats_obj.imag.min)
+            real_dtype(stats_obj.imag.min)
         attr_dict['mean_imag_value'] = \
-            to_data_format_function(stats_obj.imag.mean)
+            real_dtype(stats_obj.imag.mean)
         attr_dict['max_imag_value'] = \
-            to_data_format_function(stats_obj.imag.max)
+            real_dtype(stats_obj.imag.max)
         attr_dict['sample_stddev_imag'] = \
-            to_data_format_function(stats_obj.imag.sample_stddev)
+            real_dtype(stats_obj.imag.sample_stddev)
 
     if valid_min is not None:
         attr_dict['valid_min'] = to_data_format_function(valid_min)

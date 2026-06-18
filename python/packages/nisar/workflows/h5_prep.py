@@ -807,6 +807,7 @@ def add_radar_grid_cubes_to_hdf5(hdf5_obj, cube_group_name, geogrid,
                                      z_vect=heights, flag_cube=True)
 
     create_dataset_kwargs = {}
+    create_dataset_kwargs['grid_mapping'] = "projection"
     create_dataset_kwargs['chunk_size'] = chunk_size
     create_dataset_kwargs['compression_enabled'] = compression_enabled
     create_dataset_kwargs['compression_type'] = compression_type
@@ -911,6 +912,7 @@ def _get_raster_from_hdf5_ds(group, ds_name, dtype, shape,
                              long_name=None, descr=None,
                              units=None, fill_value=None,
                              valid_min=None, valid_max=None,
+                             grid_mapping=None,
                              chunk_size=(1,512,512),
                              compression_enabled=True,
                              compression_type='gzip',
@@ -950,7 +952,8 @@ def _get_raster_from_hdf5_ds(group, ds_name, dtype, shape,
     if xds is not None:
         dset.dims[2].attach_scale(xds)
 
-    dset.attrs['grid_mapping'] = np.bytes_("projection")
+    if grid_mapping is not None:
+        dset.attrs['grid_mapping'] = np.bytes_(grid_mapping)
 
     if standard_name is not None:
         dset.attrs['standard_name'] = np.bytes_(standard_name)

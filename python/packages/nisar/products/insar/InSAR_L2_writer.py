@@ -122,6 +122,7 @@ class L2InSARWriter(L1InSARWriter):
         az_coord_units = f'seconds since {ref_epoch_str[:19]}'
 
         create_dataset_kwargs = {}
+        create_dataset_kwargs['grid_mapping'] = "projection"
         create_dataset_kwargs['chunk_size'] = chunk_size
         create_dataset_kwargs['compression_enabled'] = compression_enabled
         create_dataset_kwargs['compression_type'] = compression_type

@@ -644,6 +644,7 @@ class BaseWriterSingleInput():
 
         self.copy_from_input(
              'identification/diagnosticModeFlag',
+             format_function=np.uint8,
              skip_if_not_present=True)
 
         self.set_value(

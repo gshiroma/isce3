@@ -112,8 +112,8 @@ def _get_attribute_dict(band,
 
     elif stats_real_imag_obj_list is not None:
 
-        # get read-valued component to write real-valued
-        # statistics of complex data
+        # Use the real component when writing
+        # statistics for complex-valued data.
         dtype = to_data_format_function()
         real_dtype = np.dtype(dtype).type().real.dtype.type
 

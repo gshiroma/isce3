@@ -2101,6 +2101,9 @@ class BaseL2WriterSingleInput(BaseWriterSingleInput):
                             (noise_product.power_linear[i, :] /
                              radiometric_calibraton_line ** 2)
                 else:
+                    # Ensure that the `noiseEquivalentBackscatter` LUT
+                    # is computed and stored as float32
+                    # to match NISAR product specifications
                     new_var_array = noise_product.power_linear
 
                 new_var_array = new_var_array.astype(np.float32)

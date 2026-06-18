@@ -2103,6 +2103,8 @@ class BaseL2WriterSingleInput(BaseWriterSingleInput):
                 else:
                     new_var_array = noise_product.power_linear
 
+                new_var_array = new_var_array.astype(np.float32)
+
             temp_file = tempfile.NamedTemporaryFile(dir=scratch_path,
                                                     suffix='.bin')
             length, width = new_var_array.shape

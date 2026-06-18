@@ -967,9 +967,9 @@ def _get_raster_from_hdf5_ds(group, ds_name, dtype, shape,
     if fill_value is not None:
         dset.attrs.create('_FillValue', data=fill_value)
     elif np.issubdtype(dtype, np.floating):
-        dset.attrs.create('_FillValue', data=np.nan)
+        dset.attrs.create('_FillValue', data=dtype(np.nan))
     elif np.issubdtype(dtype, np.complexfloating):
-        dset.attrs.create('_FillValue', data=np.nan + 1j * np.nan)
+        dset.attrs.create('_FillValue', data=dtype(np.nan + 1j * np.nan))
 
     if valid_min is not None:
         dset.attrs.create('valid_min', data=valid_min)

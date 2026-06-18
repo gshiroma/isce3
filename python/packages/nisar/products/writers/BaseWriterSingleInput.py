@@ -642,10 +642,14 @@ class BaseWriterSingleInput():
         self.copy_from_input(
             'identification/isUrgentObservation')
 
-        self.copy_from_input(
-             'identification/diagnosticModeFlag',
-             format_function=np.uint8,
-             skip_if_not_present=True)
+        try:
+            self.copy_from_input(
+                'identification/diagnosticModeFlag',
+                format_function=np.uint8,
+                skip_if_not_present=True)
+        except ValueError as error_message:
+            print('WARNING invalid input "diagnosticModeFlag".'
+                  f'Error message: "{error_message}"')
 
         self.set_value(
             'identification/processingDateTime',

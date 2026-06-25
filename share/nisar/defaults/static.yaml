@@ -250,9 +250,9 @@ runconfig:
           # Defaults to 5.
           pts_per_side: 5
           # [OPTIONAL] Azimuth decimation factor to compute the layover shadow mask.
-          az_decimation_to_compute_layover_shadow_mask: 1
+          layover_shadow_mask_az_decimation: 1
           # [OPTIONAL] Range decimation factor to compute the layover shadow mask.
-          rg_decimation_to_compute_layover_shadow_mask: 1
+          layover_shadow_mask_rg_decimation: 1
         bounding_box:
           # [OPTIONAL] Azimuth start UTC date and time of the start of the radar
           # observation, as a string in ISO 8601 format with up to nanosecond precision.

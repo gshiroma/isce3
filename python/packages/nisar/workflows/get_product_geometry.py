@@ -191,6 +191,21 @@ def get_parser():
                         dest='flag_ground_track_velocity',
                         help='Save ground track velocity')
 
+    parser.add_argument('--out-platform-velocity',
+                        action='store_true',
+                        dest='flag_platform_velocity',
+                        help='Save the platform velocity')
+
+    parser.add_argument('--out-heading-angle',
+                        action='store_true',
+                        dest='flag_heading_angle',
+                        help='Save heading angle')
+
+    parser.add_argument('--out-squint-angle',
+                        action='store_true',
+                        dest='flag_squint_angle',
+                        help='Save squint angle')
+
     parser.add_argument('--out-local-inc-angle',
                         '--out-local-incidence-angle',
                         action='store_true',
@@ -313,6 +328,9 @@ def get_radar_grid(nisar_product_obj, args):
                 not args.flag_along_track and
                 not args.flag_elevation_angle and
                 not args.flag_ground_track_velocity and
+                not args.flag_platform_velocity and
+                not args.flag_heading_angle and
+                not args.flag_squint_angle and
                 not args.flag_local_incidence_angle and
                 not args.flag_projection_angle and
                 not args.flag_simulated_radar_brightness)
@@ -350,6 +368,18 @@ def get_radar_grid(nisar_product_obj, args):
     ground_track_velocity_raster = _get_raster(
         args.output_dir, 'groundTrackVelocity', gdal.GDT_Float64, shape,
         output_file_list, output_obj_list, args.flag_ground_track_velocity or
+        flag_all)
+    platform_velocity_raster = _get_raster(
+        args.output_dir, 'platformVelocity', gdal.GDT_Float32, shape,
+        output_file_list, output_obj_list, args.flag_platform_velocity or
+        flag_all)
+    heading_angle_raster = _get_raster(
+        args.output_dir, 'headingAngle', gdal.GDT_Float32, shape,
+        output_file_list, output_obj_list, args.flag_heading_angle or
+        flag_all)
+    squint_angle_raster = _get_raster(
+        args.output_dir, 'squintAngle', gdal.GDT_Float32, shape,
+        output_file_list, output_obj_list, args.flag_squint_angle or
         flag_all)
     local_incidence_angle_raster = _get_raster(
         args.output_dir, 'localIncidenceAngle', gdal.GDT_Float32, shape,
@@ -394,6 +424,9 @@ def get_radar_grid(nisar_product_obj, args):
                                  along_track_unit_vector_y_raster,
                                  elevation_angle_raster,
                                  ground_track_velocity_raster,
+                                 platform_velocity_raster,
+                                 heading_angle_raster,
+                                 squint_angle_raster,
                                  local_incidence_angle_raster,
                                  projection_angle_raster,
                                  simulated_radar_brightness_raster)
@@ -466,7 +499,10 @@ def get_geolocation_grid(nisar_product_obj, args,
                 not args.flag_los and
                 not args.flag_along_track and
                 not args.flag_elevation_angle and
-                not args.flag_ground_track_velocity)
+                not args.flag_ground_track_velocity and
+                not args.flag_platform_velocity and
+                not args.flag_heading_angle and
+                not args.flag_squint_angle)
 
     interpolated_dem_raster = _get_raster(
         args.output_dir, 'interpolatedDem', gdal.GDT_Float32, shape,
@@ -502,6 +538,18 @@ def get_geolocation_grid(nisar_product_obj, args,
         args.output_dir, 'groundTrackVelocity', gdal.GDT_Float64, shape,
         output_file_list, output_obj_list, args.flag_ground_track_velocity or
         flag_all)
+    platform_velocity_raster = _get_raster(
+        args.output_dir, 'platformVelocity', gdal.GDT_Float32, shape,
+        output_file_list, output_obj_list, args.flag_platform_velocity or
+        flag_all)
+    heading_angle_raster = _get_raster(
+        args.output_dir, 'headingAngle', gdal.GDT_Float32, shape,
+        output_file_list, output_obj_list, args.flag_heading_angle or
+        flag_all)
+    squint_angle_raster = _get_raster(
+        args.output_dir, 'squintAngle', gdal.GDT_Float32, shape,
+        output_file_list, output_obj_list, args.flag_squint_angle or
+        flag_all)
 
     dem_interp_method = get_dem_interp_method(args.dem_interp_method)
 
@@ -523,7 +571,10 @@ def get_geolocation_grid(nisar_product_obj, args,
                                         along_track_unit_vector_x_raster,
                                         along_track_unit_vector_y_raster,
                                         elevation_angle_raster,
-                                        ground_track_velocity_raster)
+                                        ground_track_velocity_raster,
+                                        platform_velocity_raster,
+                                        heading_angle_raster,
+                                        squint_angle_raster)
 
     # Flush data
     for obj in output_obj_list:

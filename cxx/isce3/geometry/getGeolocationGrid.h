@@ -68,7 +68,10 @@ void getGeolocationGrid(
         isce3::io::Raster* along_track_unit_vector_x_raster = nullptr,
         isce3::io::Raster* along_track_unit_vector_y_raster = nullptr,
         isce3::io::Raster* elevation_angle_raster = nullptr,
-        isce3::io::Raster* ground_track_velocity_raster = nullptr
+        isce3::io::Raster* ground_track_velocity_raster = nullptr,
+        isce3::io::Raster* platform_velocity_raster = nullptr,
+        isce3::io::Raster* heading_angle_raster = nullptr,
+        isce3::io::Raster* squint_angle_raster = nullptr
         );
 
 }}

@@ -357,7 +357,7 @@ runconfig:
                 # NOT YET IMPLEMENTED - Save interpolated DEM used to compute GCOV
                 save_dem: False
 
-                # NOT YET IMPLEMENTED - Save the layover shadow mask
+                # Save the layover shadow mask
                 save_layover_shadow_mask: False
 
                 # NOT YET IMPLEMENTED - Save the incidence angle
@@ -533,11 +533,17 @@ runconfig:
                     x_posting:
                     y_posting:
 
+            # Options to run geo2rdr (used by GeocodeCov and RTC)
             geo2rdr:
                 # Convergence threshold for geo2rdr algorithm
                 threshold: 1.0e-7
                 # Maximum number of iterations
                 maxiter: 50
+
+            # Options to run rdr2geo (used by topo when computing the layover shadow mask)
+            rdr2geo:
+                threshold: 1.0e-7
+                numiter: 25
 
             # DEM interpolation method
             # Options: "sinc", "bilinear", "bicubic", "nearest", and "biquintic"

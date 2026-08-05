@@ -5,6 +5,7 @@ import h5py
 import tempfile
 from osgeo import gdal
 import numpy as np
+import time
 
 import nisar.workflows.helpers as helpers
 from nisar.products.writers import BaseL2WriterSingleInput
@@ -20,6 +21,130 @@ def _save_list_cov_terms(cov_elements_list, dataset_group):
     dset = dataset_group.create_dataset(name, data=cov_elements_array)
     desc = "List of processed covariance terms"
     dset.attrs["description"] = np.bytes_(desc)
+
+
+def compute_layover_shadow_mask(radar_grid: isce3.product.RadarGridParameters,
+                                orbit: isce3.core.Orbit,
+                                geogrid_in: isce3.product.GeoGridParameters,
+                                dem_raster: isce3.io.Raster,
+                                filename_out: str,
+                                output_raster_format: str,
+                                threshold_rdr2geo: float = 1.0e-7,
+                                numiter_rdr2geo: int = 25,
+                                extraiter_rdr2geo: int = 10,
+                                lines_per_block_rdr2geo: int = 1000,
+                                threshold_geo2rdr: float = 1.0e-7,
+                                numiter_geo2rdr: int = 25,
+                                memory_mode: isce3.core.GeocodeMemoryMode =
+                                None,
+                                geocode_options=None):
+    '''
+    Compute the layover/shadow mask and geocode it
+
+    Parameters
+    -----------
+    radar_grid: isce3.product.RadarGridParameters
+        Radar grid
+    orbit: isce3.core.Orbit
+        Orbit defining radar motion on input path
+    geogrid_in: isce3.product.GeoGridParameters
+        Geogrid to geocode the layover/shadow mask in radar grid
+    dem_raster: isce3.io.Raster
+        DEM raster
+    filename_out: str
+        Path to the geocoded layover/shadow mask
+    output_raster_format: str
+        File format of the layover/shadow mask
+    threshold_rdr2geo: float
+        Iteration threshold for rdr2geo
+    numiter_rdr2geo: int
+        Number of max. iteration for rdr2geo object
+    extraiter_rdr2geo: int
+        Extra number of iteration for rdr2geo object
+    lines_per_block_rdr2geo: int
+        Lines per block for rdr2geo
+    threshold_geo2rdr: float
+        Iteration threshold for geo2rdr
+    numiter_geo2rdr: int
+        Number of max. iteration for geo2rdr object
+    memory_mode: isce3.core.GeocodeMemoryMode
+        Geocoding memory mode
+    geocode_options: dict
+        Keyword arguments to be passed to the geocode() function
+        when map projection the layover/shadow mask
+
+    Returns
+    -------
+    slantrange_layover_shadow_mask_raster: isce3.io.Raster
+        Layover/shadow-mask ISCE3 raster object in radar coordinates
+    '''
+
+    # determine the output filename
+    # str_datetime = burst_in.sensing_start.strftime('%Y%m%d_%H%M%S.%f')
+
+    # Run topo to get layover/shadow mask
+    ellipsoid = isce3.core.Ellipsoid()
+
+    Rdr2Geo = isce3.geometry.Rdr2Geo
+
+    grid_doppler = isce3.core.LUT2d()
+
+    rdr2geo_obj = Rdr2Geo(radar_grid,
+                          orbit,
+                          ellipsoid,
+                          grid_doppler,
+                          threshold=threshold_rdr2geo,
+                          numiter=numiter_rdr2geo,
+                          extraiter=extraiter_rdr2geo,
+                          lines_per_block=lines_per_block_rdr2geo)
+
+    path_layover_shadow_mask = (f'layover_shadow_mask_{time.time()}')
+    slantrange_layover_shadow_mask_raster = isce3.io.Raster(
+        path_layover_shadow_mask, radar_grid.width, radar_grid.length,
+        1, gdal.GDT_Byte, 'MEM')
+
+    rdr2geo_obj.topo(
+        dem_raster,
+        layover_shadow_raster=slantrange_layover_shadow_mask_raster)
+
+    # geocode the layover/shadow mask
+    geo = isce3.geocode.GeocodeFloat32()
+    geo.orbit = orbit
+    geo.ellipsoid = ellipsoid
+    geo.doppler = isce3.core.LUT2d()
+    geo.threshold_geo2rdr = threshold_geo2rdr
+    geo.numiter_geo2rdr = numiter_geo2rdr
+    geo.data_interpolator = 'NEAREST'
+    geo.geogrid(float(geogrid_in.start_x),
+                float(geogrid_in.start_y),
+                float(geogrid_in.spacing_x),
+                float(geogrid_in.spacing_y),
+                int(geogrid_in.width),
+                int(geogrid_in.length),
+                int(geogrid_in.epsg))
+
+    geocoded_layover_shadow_mask_raster = isce3.io.Raster(
+        filename_out, geogrid_in.width, geogrid_in.length, 1,
+        gdal.GDT_Byte, output_raster_format)
+
+    if geocode_options is None:
+        geocode_options = {}
+
+    if memory_mode is not None:
+        geocode_options['memory_mode'] = memory_mode
+
+    geo.geocode(radar_grid=radar_grid,
+                input_raster=slantrange_layover_shadow_mask_raster,
+                output_raster=geocoded_layover_shadow_mask_raster,
+                dem_raster=dem_raster,
+                output_mode=isce3.geocode.GeocodeOutputMode.INTERP,
+                **geocode_options)
+
+    # flush data to the disk
+    geocoded_layover_shadow_mask_raster.close_dataset()
+    del geocoded_layover_shadow_mask_raster
+
+    return slantrange_layover_shadow_mask_raster
 
 
 def run_geocode_cov(cfg, hdf5_obj, root_ds,
@@ -50,8 +175,21 @@ def run_geocode_cov(cfg, hdf5_obj, root_ds,
     rtc_min_value_db = rtc_dict['rtc_min_value_db']
     rtc_upsampling = rtc_dict['dem_upsampling']
 
-    rtc_area_beta_mode = \
-        isce3.geometry.normalize_rtc_area_beta_mode(rtc_dict['area_beta_mode'])
+    rtc_area_beta_mode = rtc_dict['area_beta_mode']
+    if rtc_area_beta_mode == 'pixel_area':
+        rtc_area_beta_mode_enum = \
+            isce3.geometry.RtcAreaBetaMode.PIXEL_AREA
+    elif rtc_area_beta_mode == 'projection_angle':
+        rtc_area_beta_mode_enum = \
+            isce3.geometry.RtcAreaBetaMode.PROJECTION_ANGLE
+    elif (rtc_area_beta_mode == 'auto' or
+            rtc_area_beta_mode is None):
+        rtc_area_beta_mode_enum = \
+            isce3.geometry.RtcAreaBetaMode.AUTO
+    else:
+        err_msg = ('ERROR invalid area beta mode:'
+                   f' {rtc_area_beta_mode}')
+        raise ValueError(err_msg)
 
     # unpack geocode run parameters
     geocode_dict = cfg['processing']['geocode']
@@ -67,11 +205,16 @@ def run_geocode_cov(cfg, hdf5_obj, root_ds,
         read_and_validate_rtc_anf_flags(geocode_dict, flag_apply_rtc,
                                         output_terrain_radiometry)
     save_mask = geocode_dict['save_mask']
+    save_layover_shadow_mask = geocode_dict['save_layover_shadow_mask']
 
     # unpack geo2rdr parameters
     geo2rdr_dict = cfg['processing']['geo2rdr']
-    threshold = geo2rdr_dict['threshold']
-    maxiter = geo2rdr_dict['maxiter']
+    threshold_geo2rdr = geo2rdr_dict['threshold']
+    maxiter_geo2rdr = geo2rdr_dict['maxiter']
+
+    rdr2geo_dict = cfg['processing']['rdr2geo']
+    threshold_rdr2geo = rdr2geo_dict['threshold']
+    numiter_rdr2geo = rdr2geo_dict['numiter']
 
     if (flag_apply_rtc and output_terrain_radiometry ==
             isce3.geometry.RtcOutputTerrainRadiometry.SIGMA_NAUGHT):
@@ -114,8 +257,8 @@ def run_geocode_cov(cfg, hdf5_obj, root_ds,
     geo.orbit = orbit
     geo.ellipsoid = ellipsoid
     geo.doppler = grid_doppler
-    geo.threshold_geo2rdr = threshold
-    geo.numiter_geo2rdr = maxiter
+    geo.threshold_geo2rdr = threshold_geo2rdr
+    geo.numiter_geo2rdr = maxiter_geo2rdr
 
     # set data interpolator based on the geocode algorithm
     if output_mode == isce3.geocode.GeocodeOutputMode.INTERP:
@@ -211,6 +354,31 @@ def run_geocode_cov(cfg, hdf5_obj, root_ds,
         temp_mask_file = None
         out_mask_obj = None
 
+    # create a NamedTemporaryFile and an ISCE3 Raster object to
+    # temporarily hold the layover/shadow mask layer
+    if save_layover_shadow_mask:
+        layover_shadow_mask_file = tempfile.NamedTemporaryFile(
+            dir=raster_scratch_dir,
+            suffix=secondary_layers_file_extension).name
+
+        compute_layover_shadow_mask(
+            radar_grid,
+            orbit,
+            geogrid,
+            dem_raster,
+            layover_shadow_mask_file,
+            secondary_layer_files_raster_files_format,
+            threshold_rdr2geo=threshold_rdr2geo,
+            numiter_rdr2geo=numiter_rdr2geo,
+            # extraiter_rdr2geo=extraiter_rdr2geo,
+            # lines_per_block_rdr2geo=lines_per_block_rdr2geo,
+            threshold_geo2rdr=threshold_geo2rdr,
+            numiter_geo2rdr=maxiter_geo2rdr,
+            memory_mode=memory_mode)
+
+    else:
+        layover_shadow_mask_file = None
+
     # geocode rasters
     geo.geocode(radar_grid=radar_grid,
                 input_raster=input_raster_obj,
@@ -227,7 +395,7 @@ def run_geocode_cov(cfg, hdf5_obj, root_ds,
                 out_off_diag_terms=out_off_diag_terms_obj,
                 out_geo_nlooks=out_geo_nlooks_obj,
                 out_geo_rtc=out_geo_rtc_obj,
-                rtc_area_beta_mode=rtc_area_beta_mode,
+                rtc_area_beta_mode=rtc_area_beta_mode_enum,
                 out_geo_rtc_gamma0_to_sigma0=
                     out_geo_rtc_gamma0_to_sigma0_obj,
                 out_mask=out_mask_obj,
@@ -303,6 +471,16 @@ def run_geocode_cov(cfg, hdf5_obj, root_ds,
                      'mask',
                      fill_value=255,
                      compute_stats=False)
+
+    # save layover/shadow mask
+    if save_layover_shadow_mask:
+        save_dataset(layover_shadow_mask_file,
+                     hdf5_obj, root_ds,
+                     yds, xds,
+                     'layoverShadowMask',
+                     long_name=('Layover Shadow Mask'),
+                     units='',
+                     valid_min=0)
 
     # save rtc
     if save_rtc_anf:

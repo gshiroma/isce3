@@ -443,19 +443,19 @@ geocode_options:
     # Save the mask layer
     save_mask: bool(required=False)
 
-    # NOT YET IMPLEMENTED - Save interpolated DEM used to compute GCOV
+    # Save interpolated DEM used to compute GCOV
     save_dem: bool(required=False)
 
     # NOT YET IMPLEMENTED - Save the layover shadow mask
     save_layover_shadow_mask: bool(required=False)
 
-    # NOT YET IMPLEMENTED - Save the incidence angle
+    # Save the incidence angle
     save_incidence_angle: bool(required=False)
 
-    # NOT YET IMPLEMENTED - Save the local-incidence angle
+    # Save the local-incidence angle
     save_local_inc_angle: bool(required=False)
 
-    # NOT YET IMPLEMENTED - Save the projection angle
+    # Save the projection angle
     save_projection_angle: bool(required=False)
 
     # NOT YET IMPLEMENTED - Save the range slope angle

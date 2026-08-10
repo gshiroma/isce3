@@ -1,6 +1,7 @@
 import h5py
 import numpy as np
 from isce3.io import optimize_chunk_size
+from nisar.products.utils import to_bytes
 from nisar.workflows.h5_prep import set_get_geo_info
 from nisar.workflows.helpers import get_cfg_freq_pols
 
@@ -48,9 +49,9 @@ class GUNWWriter(RUNWWriter, RIFGWriter, L2InSARWriter):
         """
         InSARBaseWriter.add_root_attrs(self)
 
-        self.attrs["title"] = np.bytes_("NISAR L2 GUNW Product")
+        self.attrs["title"] = to_bytes("NISAR L2 GUNW Product")
         self.attrs["reference_document"] = \
-            np.bytes_("D-102272 NISAR NASA SDS Product Specification"
+            to_bytes("D-102272 NISAR NASA SDS Product Specification"
                        " L2 Geocoded Unwrapped Interferogram")
 
         ctype = h5py.h5t.py_create(np.complex64)
@@ -126,9 +127,9 @@ class GUNWWriter(RUNWWriter, RIFGWriter, L2InSARWriter):
                             **create_dataset_kwargs)
 
                 ds.attrs['_FillValue'] = np.nan
-                ds.attrs['description'] = np.bytes_(descr)
-                ds.attrs['units'] = Units.radian
-                ds.attrs['grid_mapping'] = np.bytes_('projection')
+                ds.attrs['description'] = to_bytes(descr)
+                ds.attrs['units'] = to_bytes(Units.radian)
+                ds.attrs['grid_mapping'] = to_bytes('projection')
 
                 ds.dims[0].attach_scale(zds)
                 ds.dims[1].attach_scale(yds)
@@ -147,6 +148,20 @@ class GUNWWriter(RUNWWriter, RIFGWriter, L2InSARWriter):
         """
         RUNWWriter.add_parameters_to_procinfo_group(self)
 
+        # Get the number of looks for both unwrapped and wrapped interferogram
+        proc_cfg = self.cfg["processing"]
+        wrap_igram_range_looks = proc_cfg["crossmul"]["range_looks"]
+        wrap_igram_azimuth_looks = proc_cfg["crossmul"]["azimuth_looks"]
+        unwrap_rg_looks = proc_cfg["phase_unwrap"]["range_looks"]
+        unwrap_az_looks = proc_cfg["phase_unwrap"]["azimuth_looks"]
+
+        if (unwrap_az_looks != 1) or (unwrap_rg_looks != 1):
+            unwrap_igram_range_looks = unwrap_rg_looks
+            unwrap_igram_azimuth_looks = unwrap_az_looks
+        else:
+            unwrap_igram_range_looks = wrap_igram_range_looks
+            unwrap_igram_azimuth_looks = wrap_igram_azimuth_looks
+
         # the unwrappedInterfergram group under the processingInformation/parameters
         # group is copied from the RUNW product, but the name in RUNW product is
         # 'interferogram', while in GUNW its name is 'unwrappedInterferogram'. Here
@@ -160,14 +175,16 @@ class GUNWWriter(RUNWWriter, RIFGWriter, L2InSARWriter):
         for freq, *_ in get_cfg_freq_pols(self.cfg):
             number_of_azimuth_looks = \
                 self[f'{new_igram_group_name}/frequency{freq}/numberOfAzimuthLooks']
+            number_of_azimuth_looks[...] = unwrap_igram_azimuth_looks
             number_of_slant_range_looks = \
                 self[f'{new_igram_group_name}/frequency{freq}/numberOfRangeLooks']
+            number_of_slant_range_looks[...] = unwrap_igram_range_looks
             number_of_azimuth_looks.attrs['description'] = \
-                np.bytes_('Number of looks applied in the'
+                to_bytes('Number of looks applied in the'
                           ' along-track direction to form the'
                           ' unwrapped interferogram')
             number_of_slant_range_looks.attrs['description'] = \
-                np.bytes_('Number of looks applied in the'
+                to_bytes('Number of looks applied in the'
                           ' slant range direction to form the'
                           ' unwrapped interferogram')
 
@@ -176,9 +193,18 @@ class GUNWWriter(RUNWWriter, RIFGWriter, L2InSARWriter):
         # 'interferogram', while in GUNW its name is 'wrappedInterferogram'. Here
         # is to rename the interfegram group name to wrappedInterferogram group name
         RIFGWriter.add_interferogram_to_procinfo_params_group(self)
+
         new_igram_group_name = \
             f"{self.group_paths.ParametersPath}/wrappedInterferogram"
         self.move(old_igram_group_name, new_igram_group_name)
+
+        for freq, *_ in get_cfg_freq_pols(self.cfg):
+            number_of_azimuth_looks = \
+                self[f'{new_igram_group_name}/frequency{freq}/numberOfAzimuthLooks']
+            number_of_azimuth_looks[...] = wrap_igram_azimuth_looks
+            number_of_slant_range_looks = \
+                self[f'{new_igram_group_name}/frequency{freq}/numberOfRangeLooks']
+            number_of_slant_range_looks[...] = wrap_igram_range_looks
 
         L2InSARWriter.add_geocoding_to_procinfo_params_group(self)
 
@@ -186,10 +212,10 @@ class GUNWWriter(RUNWWriter, RIFGWriter, L2InSARWriter):
         for rslc_name in ['reference', 'secondary']:
             rslc = self[self.group_paths.ParametersPath][rslc_name]
             rslc['referenceTerrainHeight'].attrs['description'] = \
-                np.bytes_("Reference terrain height as a function of"
+                to_bytes("Reference terrain height as a function of"
                            f" map coordinates for {rslc_name} RSLC")
             rslc['referenceTerrainHeight'].attrs['units'] = \
-                Units.meter
+               to_bytes(Units.meter)
 
     def add_grids_to_hdf5(self):
         """
@@ -201,8 +227,33 @@ class GUNWWriter(RUNWWriter, RIFGWriter, L2InSARWriter):
         geogrids = pcfg["geocode"]["geogrids"]
         wrapped_igram_geogrids = pcfg["geocode"]["wrapped_igram_geogrids"]
 
-        grids_val = np.bytes_("projection")
+        grids_val = "projection"
 
+        mask_description_common = (
+            "Combination of a water mask, a mask of subswaths of valid samples, and data anomalies"
+            " in the reference RSLC and the geometrically coregistered secondary RSLC."
+            " Each pixel value is encoded as a 32-bit unsigned integer."
+            " Bits 0-7 represent subswath encoding, where the most significant digit represents"
+            " the water flag of that pixel in the reference RSLC, where 1 is water"
+            " and 0 is non-water; the second most significant digit corresponds to"
+            " the subswath number of the reference RSLC, and the least significant digit"
+            " corresponds to the subswath number of the secondary RSLC;"
+            " a value of 0 in either digit indicates an invalid sample in the corresponding RSLC."
+            " Bits 8-15 represent bitwise anomaly flags for the secondary RSLC, and"
+            " bits 16-23 represent bitwise anomaly flags for the reference RSLC,"
+            " with each bit corresponding to a specific anomaly condition."
+            " A value of 0 in the anomaly bits indicates that no anomaly is detected in the corresponding RSLC."
+        )
+
+        mask_description_iono = (
+            " Bit 24 indicates a bit mask for ionospheric phase mask used during filtering of ionospheric phase."
+            " This ionospheric phase mask indicates pixels which were masked out and filled with interpolated data."
+            " Bits 25-31 are reserved for future use"
+        )
+
+        mask_description_no_iono = (
+            " Bits 24-31 are reserved for future use"
+        )
         # Only add the common fields such as list of polarizations, pixel offsets, and center frequency
         for freq, pol_list, _ in get_cfg_freq_pols(self.cfg):
             # Create the swath group
@@ -259,28 +310,29 @@ class GUNWWriter(RUNWWriter, RIFGWriter, L2InSARWriter):
                     ds_group_name,
                     ds_geogrid,
                 )
+                mask_description_suffix = (
+                    mask_description_no_iono
+                    if ds_group_name in [wrapped_group_name, pixeloffsets_group_name]
+                    else mask_description_iono
+                )
+
+                mask_description = mask_description_common + mask_description_suffix
 
                 self._create_2d_dataset(
                     ds_group,
                     "mask",
                     (ds_geogrid.length,
                      ds_geogrid.width),
-                    np.uint8,
-                    ("Combination of water mask and a mask of subswaths of valid samples"
-                     " in the reference RSLC and geometrically-coregistered secondary RSLC."
-                     " Each pixel value is a three-digit number:"
-                     " the most significant digit represents the water flag of that pixel in the reference RSLC,"
-                     " where 1 is water and 0 is non-water;"
-                     " the second digit represents the subswath number of that pixel in the reference RSLC;"
-                     " the least-significant digit represents the subswath number of that pixel in the secondary RSLC."
-                     " A value of 0 in either subswath digit indicates an invalid sample in the corresponding RSLC"),
+                    np.uint32,
+                    mask_description,
                     grid_mapping=grids_val,
                     xds=xds,
                     yds=yds,
                     fill_value=255,
                 )
-            ds_group['mask'].attrs['valid_min'] = 0
-            ds_group['mask'].attrs['percentage_water'] = 0.0
+                ds_group['mask'].attrs['valid_min'] = 0
+                ds_group['mask'].attrs['percentage_water'] = 0.0
+                ds_group['mask'].attrs['disclaimer'] = to_bytes(self.water_mask_source)
 
             for pol in pol_list:
                 unwrapped_pol_name = f"{unwrapped_group_name}/{pol}"
@@ -292,8 +344,8 @@ class GUNWWriter(RUNWWriter, RIFGWriter, L2InSARWriter):
                     unwrapped_geogrids,
                 )
 
-                #unwrapped dataset parameters as tuples in the following
-                #order: dataset name, data type, description, and units
+                # unwrapped dataset parameters as tuples in the following
+                # order: dataset name, data type, description, and units
                 unwrapped_ds_params = [
                     ("coherenceMagnitude", np.float32,
                      f"Coherence magnitude between {pol} layers",

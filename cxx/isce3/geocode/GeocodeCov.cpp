@@ -756,6 +756,8 @@ void Geocode<T>::geocodeInterp(
         using T_out_real = typename isce3::real<T_out>::type;
         T_out nan_t_out = 0;
         nan_t_out *= std::numeric_limits<T_out_real>::quiet_NaN();
+        
+        T_out fill_value_t_out = static_cast<T_out>(fill_value);
 
         // define the geo-block matrix based on the raster bands data type
         isce3::core::Matrix<T_out> geoDataBlock(
@@ -765,7 +767,7 @@ void Geocode<T>::geocodeInterp(
         if (azimuthFirstLine > azimuthLastLine ||
                 rangeFirstPixel > rangeLastPixel) {
 
-            geoDataBlock.fill(nan_t_out);
+            geoDataBlock.fill(fill_value_t_out);
             for (int band = 0; band < nbands; ++band) {
                 outputRaster.setBlock(geoDataBlock.data(), 0, lineStart,
                         geogrid.width(), geoBlockLength, band + 1);
@@ -867,7 +869,7 @@ void Geocode<T>::geocodeInterp(
             geoDataBlock with NaNs before each use. This prevents residual values
             from previous iterations from being mistakenly retained.
             */
-            geoDataBlock.fill(nan_t_out);
+            geoDataBlock.fill(fill_value_t_out);
  
             _interpolate(rdrDataBlock, geoDataBlock, radarX, radarY,
                     rdrBlockWidth, rdrBlockLength, azimuthFirstLine,

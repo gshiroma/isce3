@@ -3550,7 +3550,7 @@ void Geocode<T>::_runBlock(
                 // otherwise, if the geogrid pixel is `Nan` and `fill_value` is
                 // not `NaN`, update the geogrid pixel with `fill_value`
                 else if (std::isnan(std::abs(geo_value))) {
-                    T_out v = static_cast<T_out>(shadow_no_data_value);
+                    T_out v = static_cast<T_out>(fill_value);
                     geoDataBlock[band]->operator()(i, j) = v;
                     }
                 // clip min (complex)
@@ -3605,7 +3605,7 @@ void Geocode<T>::_runBlock(
                     // otherwise, if the geogrid pixel is `Nan` and `fill_value` is
                     // not `NaN`, update the geogrid pixel with `fill_value`
                     else if (std::isnan(std::abs(geo_value_off_diag))) {
-                        T2 v = static_cast<T2>(shadow_no_data_value);
+                        T2 v = static_cast<T2>(fill_value);
                         geoDataBlockOffDiag[band]->operator()(i, j) = v;
                         }
 

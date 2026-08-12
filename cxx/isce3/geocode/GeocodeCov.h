@@ -699,9 +699,6 @@ private:
      * @param[in] flatten flag to flatten the geocoded SLC
      * @param[in] phase_screen_raster Phase screen raster
      * @param[in] phase_screen_array  Phase screen array
-     * @param[in]  fill_value         Fill value. Defaults to NaN. If the
-     * output is complex (e.g., off-diagonal terms), this value is used for
-     * the real part with the imaginary part set to 0
      * @param[in] rtc_min_value       Minimum value for the RTC area factor.
      * @param[in] abs_cal_factor      Absolute calibration factor applied
      * to real-valued output datasets (assumed to be proportional to
@@ -753,8 +750,8 @@ private:
             const bool flag_az_baseband_doppler, const bool flatten,
             isce3::io::Raster* phase_screen_raster,
             isce3::core::Matrix<float>& phase_screen_array,
-            float fill_value, float rtc_min_value,
-            double abs_cal_factor, float clip_min, float clip_max,
+            float rtc_min_value, double abs_cal_factor,
+            float clip_min, float clip_max,
             bool flag_run_rtc, const isce3::core::Matrix<float>& rtc_area,
             const isce3::core::Matrix<float>& rtc_area_sigma,
             isce3::io::Raster* out_geo_rtc,

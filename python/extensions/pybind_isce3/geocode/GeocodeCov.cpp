@@ -72,7 +72,7 @@ void addbinding(py::class_<Geocode<T>>& pyGeocode)
                     py::arg("flag_az_baseband_doppler") = false,
                     py::arg("flatten") = false,
                     py::arg("geogrid_upsampling") = 1,
-                    py::arg("fill_value") = std::numeric_limits<float>::quiet_NaN(),
+                    py::arg("fill_value") = std::numeric_limits<double>::quiet_NaN(),
                     py::arg("flag_upsample_radar_grid") = false,
                     py::arg("flag_apply_rtc") = false,
                     py::arg("input_terrain_radiometry") =

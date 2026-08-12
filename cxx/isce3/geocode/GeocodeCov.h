@@ -156,7 +156,7 @@ public:
             geocodeOutputMode output_mode = geocodeOutputMode::INTERP,
             bool flag_az_baseband_doppler = false, bool flatten = false,
             double geogrid_upsampling = 1,
-            float fill_value = std::numeric_limits<float>::quiet_NaN(),
+            double fill_value = std::numeric_limits<double>::quiet_NaN(),
             bool flag_upsample_radar_grid = false, bool flag_apply_rtc = false,
             isce3::geometry::rtcInputTerrainRadiometry
                     input_terrain_radiometry = isce3::geometry::
@@ -303,7 +303,7 @@ public:
     void geocodeInterp(const isce3::product::RadarGridParameters& radar_grid,
             isce3::io::Raster& input_raster, isce3::io::Raster& output_raster,
             isce3::io::Raster& dem_raster,
-            float fill_value = std::numeric_limits<float>::quiet_NaN(),
+            double fill_value = std::numeric_limits<double>::quiet_NaN(),
             bool flag_apply_rtc = false,
             bool flag_az_baseband_doppler = false, bool flatten = false,
             isce3::geometry::rtcInputTerrainRadiometry
@@ -455,7 +455,7 @@ public:
             isce3::io::Raster& input_raster, isce3::io::Raster& output_raster,
             isce3::io::Raster& dem_raster,
             double geogrid_upsampling = 1,
-            float fill_value = std::numeric_limits<float>::quiet_NaN(),
+            double fill_value = std::numeric_limits<double>::quiet_NaN(),
             bool flag_upsample_radar_grid = false,
             bool flag_apply_rtc = false,
             isce3::geometry::rtcInputTerrainRadiometry input_terrain_radiometry =
@@ -645,8 +645,7 @@ private:
             int block_size_y, int block_size_with_upsampling_y, int block_y,
             int block_size_x, int block_size_with_upsampling_x, int block_x,
             long long& numdone, const long long& progress_block,
-            double geogrid_upsampling,
-            float fill_value,
+            double geogrid_upsampling, double fill_value,
             int nbands, int nbands_off_diag_terms,
             isce3::core::dataInterpMethod dem_interp_method,
             isce3::io::Raster& dem_raster,

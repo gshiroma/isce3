@@ -116,7 +116,7 @@ TEST(GeocodeTest, TestGeocodeCov) {
     bool flag_az_baseband_doppler = false;
     bool flatten = false;
     double geogrid_upsampling = 1;
-    double fill_value = std::numeric_limits<float>::quiet_NaN();
+    double fill_value = std::numeric_limits<double>::quiet_NaN();
     bool flag_upsample_radar_grid = false;
     isce3::geometry::rtcInputTerrainRadiometry input_terrain_radiometry =
             isce3::geometry::rtcInputTerrainRadiometry::BETA_NAUGHT;

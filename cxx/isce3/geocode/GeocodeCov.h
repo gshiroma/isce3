@@ -68,10 +68,9 @@ public:
      * baseband (using Doppler centroid) before interpolation
      * @param[in]  flatten             Flatten the geocoded SLC
      * @param[in]  geogrid_upsampling  Geogrid upsampling
-     * @param[in]  shadow_no_data_value  Value to represent areas without
-     * valid radar samples. If output is complex (e.g., off-diagonal terms),
-     * this value will be used for the real-part whereas the imaginary part
-     * will be set to 0
+     * @param[in]  fill_value          Fill value. Defaults to NaN. If the
+     * output is complex (e.g., off-diagonal terms), this value is used for
+     * the real part with the imaginary part set to 0
      * @param[in]  flag_upsample_radar_grid Double the radar grid sampling rate
      * @param[in]  flag_apply_rtc      Apply radiometric terrain correction
      * (RTC)
@@ -157,7 +156,7 @@ public:
             geocodeOutputMode output_mode = geocodeOutputMode::INTERP,
             bool flag_az_baseband_doppler = false, bool flatten = false,
             double geogrid_upsampling = 1,
-            float shadow_no_data_value = std::numeric_limits<float>::quiet_NaN(),
+            float fill_value = std::numeric_limits<float>::quiet_NaN(),
             bool flag_upsample_radar_grid = false, bool flag_apply_rtc = false,
             isce3::geometry::rtcInputTerrainRadiometry
                     input_terrain_radiometry = isce3::geometry::
@@ -230,10 +229,9 @@ public:
      * `abs_cal_factor parameters`, which default to `false` and `1`,
      * respectively.
      * @param[in]  dem_raster          Input DEM raster
-     * @param[in]  shadow_no_data_value  Value to represent areas without
-     * valid radar samples. If output is complex (e.g., off-diagonal terms),
-     * this value will be used for the real-part whereas the imaginary part
-     * will be set to 0
+     * @param[in]  fill_value          Fill value. Defaults to NaN. If the
+     * output is complex (e.g., off-diagonal terms), this value is used for
+     * the real part with the imaginary part set to 0
      * @param[in]  flag_apply_rtc      Apply radiometric terrain correction
      * (RTC)
      * @param[in]  flag_az_baseband_doppler Shift SLC azimuth spectrum to
@@ -305,7 +303,7 @@ public:
     void geocodeInterp(const isce3::product::RadarGridParameters& radar_grid,
             isce3::io::Raster& input_raster, isce3::io::Raster& output_raster,
             isce3::io::Raster& dem_raster,
-            float shadow_no_data_value = std::numeric_limits<float>::quiet_NaN(),
+            float fill_value = std::numeric_limits<float>::quiet_NaN(),
             bool flag_apply_rtc = false,
             bool flag_az_baseband_doppler = false, bool flatten = false,
             isce3::geometry::rtcInputTerrainRadiometry
@@ -375,10 +373,9 @@ public:
      * respectively.
      * @param[in]  dem_raster          Input DEM raster
      * @param[in]  geogrid_upsampling  Geogrid upsampling
-     * @param[in]  shadow_no_data_value  Value to represent areas without
-     * valid radar samples. If output is complex (e.g., off-diagonal terms),
-     * this value will be used for the real-part whereas the imaginary part
-     * will be set to 0
+     * @param[in]  fill_value          Fill value. Defaults to NaN. If the
+     * output is complex (e.g., off-diagonal terms), this value is used for
+     * the real part with the imaginary part set to 0
      * @param[in]  flag_upsample_radar_grid Double the radar grid sampling rate
      * @param[in]  flag_apply_rtc      Apply radiometric terrain correction
      * (RTC)
@@ -458,7 +455,7 @@ public:
             isce3::io::Raster& input_raster, isce3::io::Raster& output_raster,
             isce3::io::Raster& dem_raster,
             double geogrid_upsampling = 1,
-            float shadow_no_data_value = std::numeric_limits<float>::quiet_NaN(),
+            float fill_value = std::numeric_limits<float>::quiet_NaN(),
             bool flag_upsample_radar_grid = false,
             bool flag_apply_rtc = false,
             isce3::geometry::rtcInputTerrainRadiometry input_terrain_radiometry =
@@ -649,7 +646,7 @@ private:
             int block_size_x, int block_size_with_upsampling_x, int block_x,
             long long& numdone, const long long& progress_block,
             double geogrid_upsampling,
-            float shadow_no_data_value,
+            float fill_value,
             int nbands, int nbands_off_diag_terms,
             isce3::core::dataInterpMethod dem_interp_method,
             isce3::io::Raster& dem_raster,
@@ -702,10 +699,9 @@ private:
      * @param[in] flatten flag to flatten the geocoded SLC
      * @param[in] phase_screen_raster Phase screen raster
      * @param[in] phase_screen_array  Phase screen array
-     * @param[in]  shadow_no_data_value  Value to represent areas without
-     * valid radar samples. If output is complex (e.g., off-diagonal terms),
-     * this value will be used for the real-part whereas the imaginary part
-     * will be set to 0
+     * @param[in]  fill_value         Fill value. Defaults to NaN. If the
+     * output is complex (e.g., off-diagonal terms), this value is used for
+     * the real part with the imaginary part set to 0
      * @param[in] rtc_min_value       Minimum value for the RTC area factor.
      * @param[in] abs_cal_factor      Absolute calibration factor applied
      * to real-valued output datasets (assumed to be proportional to
@@ -757,7 +753,7 @@ private:
             const bool flag_az_baseband_doppler, const bool flatten,
             isce3::io::Raster* phase_screen_raster,
             isce3::core::Matrix<float>& phase_screen_array,
-            float shadow_no_data_value, float rtc_min_value,
+            float fill_value, float rtc_min_value,
             double abs_cal_factor, float clip_min, float clip_max,
             bool flag_run_rtc, const isce3::core::Matrix<float>& rtc_area,
             const isce3::core::Matrix<float>& rtc_area_sigma,

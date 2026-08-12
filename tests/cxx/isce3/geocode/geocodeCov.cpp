@@ -116,7 +116,7 @@ TEST(GeocodeTest, TestGeocodeCov) {
     bool flag_az_baseband_doppler = false;
     bool flatten = false;
     double geogrid_upsampling = 1;
-    double shadow_no_data_value = std::numeric_limits<float>::quiet_NaN();
+    double fill_value = std::numeric_limits<float>::quiet_NaN();
     bool flag_upsample_radar_grid = false;
     isce3::geometry::rtcInputTerrainRadiometry input_terrain_radiometry =
             isce3::geometry::rtcInputTerrainRadiometry::BETA_NAUGHT;
@@ -244,7 +244,7 @@ TEST(GeocodeTest, TestGeocodeCov) {
                 geoObj.geocode(radar_grid_shifted, radarRaster, geocodedRaster,
                                demRaster, output_mode, flag_az_baseband_doppler,
                                flatten, geogrid_upsampling,
-                               shadow_no_data_value, flag_upsample_radar_grid,
+                               fill_value, flag_upsample_radar_grid,
                                flag_apply_rtc, input_terrain_radiometry,
                                output_terrain_radiometry, exponent, rtc_min_value_db,
                                rtc_geogrid_upsampling, rtc_algorithm,
@@ -301,7 +301,7 @@ TEST(GeocodeTest, TestGeocodeCov) {
 
     geoComplexObj.geocode(radar_grid, slc_raster_xy, geocoded_diag_raster,
             demRaster, output_mode, flag_az_baseband_doppler, flatten,
-            geogrid_upsampling, shadow_no_data_value,
+            geogrid_upsampling, fill_value,
             flag_upsample_radar_grid, flag_apply_rtc,
             input_terrain_radiometry, output_terrain_radiometry, exponent,
             rtc_min_value_db, rtc_geogrid_upsampling, rtc_algorithm,

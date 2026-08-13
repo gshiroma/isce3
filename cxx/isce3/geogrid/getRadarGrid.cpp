@@ -91,11 +91,14 @@ void getRadarGrid(isce3::core::LookSide lookside,
 
     auto proj = isce3::core::makeProjection(geogrid.epsg());
 
+    info << "000" << pyre::journal::endl;
+    
     // Get DEM interpolator
     const double minX = geogrid.startX();
     const double maxX = geogrid.startX() + geogrid.spacingX() * geogrid.width();
     double minY = geogrid.startY();
     double maxY = geogrid.startY() + geogrid.spacingY() * geogrid.length();
+    info << "111" << pyre::journal::endl;
 
     const double refheight = 0;
     isce3::geometry::DEMInterpolator dem_interp(refheight, dem_interp_method);
@@ -107,6 +110,7 @@ void getRadarGrid(isce3::core::LookSide lookside,
                 "ERROR loading DEM for given area";
         throw isce3::except::RuntimeError(ISCE_SRCINFO(), error_message); 
     }
+    info << "222" << pyre::journal::endl;
 
     /* Get function GetDemCoords to convert DEM coordinates to the geogrid EPSG 
     coordinates */
@@ -121,6 +125,7 @@ void getRadarGrid(isce3::core::LookSide lookside,
     } else {
         GetDemCoords = isce3::geometry::getDemCoordsDiffEpsg;
     }
+    info << "333" << pyre::journal::endl;
 
     const isce3::core::Ellipsoid& ellipsoid = proj->ellipsoid();
 
@@ -137,6 +142,7 @@ void getRadarGrid(isce3::core::LookSide lookside,
             getNanArray<float>(los_unit_vector_x_raster, geogrid);
     auto los_unit_vector_y_array =
             getNanArray<float>(los_unit_vector_y_raster, geogrid);
+    info << "444" << pyre::journal::endl;
     auto along_track_unit_vector_x_array =
             getNanArray<float>(along_track_unit_vector_x_raster, geogrid);
     auto along_track_unit_vector_y_array =

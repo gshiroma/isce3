@@ -10,6 +10,7 @@
 #include <isce3/geometry/metadataCubes.h>
 #include <isce3/product/GeoGridParameters.h>
 #include <isce3/core/DenseMatrix.h>
+#include <iostream>
 
 namespace isce3 {
 namespace geogrid {
@@ -217,15 +218,20 @@ void getRadarGrid(isce3::core::LookSide lookside,
             // If the radar grid has been provided, check whether the
             // point is inside the radar grid.
             if (radar_grid != nullptr) {
+                std::cout << "1" << std::endl;
                 // If not inside, continue to the next pixel
                 if (!radar_grid->contains(azimuth_time, slant_range)) {
+                    std::cout << "2" << std::endl;
                     continue;
                 }
+                std::cout << "3" << std::endl;
                 // Otherwise, check if DEM raster needs to be populated
                 if (interpolated_dem_raster != nullptr) {
                     interpolated_dem_array(i, j) = input_dem[2];
                 }
+                std::cout << "4" << std::endl;
             }
+            std::cout << "5" << std::endl;
 
             // save grid Doppler slant-range position
             if (slant_range_raster != nullptr) {

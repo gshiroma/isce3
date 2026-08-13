@@ -219,7 +219,7 @@ void getRadarGrid(isce3::core::LookSide lookside,
             if (radar_grid != nullptr) {
                 // If not inside, continue to the next pixel
                 if (!radar_grid->contains(azimuth_time, slant_range)) {
-                    continue
+                    continue;
                 }
                 // Otherwise, check if DEM raster needs to be populated
                 if (interpolated_dem_raster != nullptr) {

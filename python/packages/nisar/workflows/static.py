@@ -330,6 +330,7 @@ def run_static_layers_workflow(config_file: os.PathLike | str) -> None:
                 water_distance_raster_file=water_mask_raster_file,
                 geo_grid=geo_grid,
                 scratch_dir=scratch_dir,
+                reference_fill_value=layover_shadow_mask,
                 **processing_params["water_mask"],
             )
 

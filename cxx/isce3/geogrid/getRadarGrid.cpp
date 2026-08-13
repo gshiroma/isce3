@@ -91,14 +91,11 @@ void getRadarGrid(isce3::core::LookSide lookside,
 
     auto proj = isce3::core::makeProjection(geogrid.epsg());
 
-    info << "000" << pyre::journal::endl;
-    
     // Get DEM interpolator
     const double minX = geogrid.startX();
     const double maxX = geogrid.startX() + geogrid.spacingX() * geogrid.width();
     double minY = geogrid.startY();
     double maxY = geogrid.startY() + geogrid.spacingY() * geogrid.length();
-    info << "111" << pyre::journal::endl;
 
     const double refheight = 0;
     isce3::geometry::DEMInterpolator dem_interp(refheight, dem_interp_method);
@@ -110,7 +107,6 @@ void getRadarGrid(isce3::core::LookSide lookside,
                 "ERROR loading DEM for given area";
         throw isce3::except::RuntimeError(ISCE_SRCINFO(), error_message); 
     }
-    info << "222" << pyre::journal::endl;
 
     /* Get function GetDemCoords to convert DEM coordinates to the geogrid EPSG 
     coordinates */
@@ -125,7 +121,6 @@ void getRadarGrid(isce3::core::LookSide lookside,
     } else {
         GetDemCoords = isce3::geometry::getDemCoordsDiffEpsg;
     }
-    info << "333" << pyre::journal::endl;
 
     const isce3::core::Ellipsoid& ellipsoid = proj->ellipsoid();
 
@@ -142,7 +137,6 @@ void getRadarGrid(isce3::core::LookSide lookside,
             getNanArray<float>(los_unit_vector_x_raster, geogrid);
     auto los_unit_vector_y_array =
             getNanArray<float>(los_unit_vector_y_raster, geogrid);
-    info << "444" << pyre::journal::endl;
     auto along_track_unit_vector_x_array =
             getNanArray<float>(along_track_unit_vector_x_raster, geogrid);
     auto along_track_unit_vector_y_array =
@@ -157,7 +151,6 @@ void getRadarGrid(isce3::core::LookSide lookside,
             getNanArray<float>(projection_angle_raster, geogrid);
     auto simulated_radar_brightness_array =
             getNanArray<float>(simulated_radar_brightness_raster, geogrid);
-    info << "starting computation" << pyre::journal::endl;
 
 #pragma omp parallel for
     for (int i = 0; i < geogrid.length(); ++i) {
@@ -178,11 +171,9 @@ void getRadarGrid(isce3::core::LookSide lookside,
             // Populate the DEM raster if the radar grid has not been provided.
             // If the radar grid has been provided, first verify whether
             // the point is inside the radar grid.
-            info << "a" << pyre::journal::endl;
             if (interpolated_dem_raster != nullptr && radar_grid == nullptr) {
                 interpolated_dem_array(i, j) = input_dem[2];
             }
-            info << "b" << pyre::journal::endl;
 
             // Skip if there is nothing else to save.
             // For the DEM raster, the only condition that prevents skipping is when
@@ -202,7 +193,6 @@ void getRadarGrid(isce3::core::LookSide lookside,
                     simulated_radar_brightness_raster == nullptr) {
                 continue;
             }
-            info << "c" << pyre::journal::endl;
 
             // Get target coordinates in the output projection system
             const isce3::core::Vec3 target_proj {pos_x, pos_y, input_dem[2]};
@@ -224,25 +214,18 @@ void getRadarGrid(isce3::core::LookSide lookside,
                 continue;
             }
 
-            info << "d" << pyre::journal::endl;
-
             // If the radar grid has been provided, check whether the
             // point is inside the radar grid.
             if (radar_grid != nullptr) {
-                info << "1" << pyre::journal::endl;
                 // If not inside, continue to the next pixel
                 if (!radar_grid->contains(azimuth_time, slant_range)) {
-                    info << "2" << pyre::journal::endl;
                     continue;
                 }
-                info << "3" << pyre::journal::endl;
                 // Otherwise, check if DEM raster needs to be populated
                 if (interpolated_dem_raster != nullptr) {
                     interpolated_dem_array(i, j) = input_dem[2];
                 }
-                info << "4" << pyre::journal::endl;
             }
-            info << "5" << pyre::journal::endl;
 
             // save grid Doppler slant-range position
             if (slant_range_raster != nullptr) {

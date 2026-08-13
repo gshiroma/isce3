@@ -172,9 +172,11 @@ void getRadarGrid(isce3::core::LookSide lookside,
             // Populate the DEM raster if the radar grid has not been provided.
             // If the radar grid has been provided, first verify whether
             // the point is inside the radar grid.
+            std::cout << "a" << std::endl;
             if (interpolated_dem_raster != nullptr && radar_grid == nullptr) {
                 interpolated_dem_array(i, j) = input_dem[2];
             }
+            std::cout << "b" << std::endl;
 
             // Skip if there is nothing else to save.
             // For the DEM raster, the only condition that prevents skipping is when
@@ -194,6 +196,7 @@ void getRadarGrid(isce3::core::LookSide lookside,
                     simulated_radar_brightness_raster == nullptr) {
                 continue;
             }
+            std::cout << "c" << std::endl;
 
             // Get target coordinates in the output projection system
             const isce3::core::Vec3 target_proj {pos_x, pos_y, input_dem[2]};
@@ -214,6 +217,8 @@ void getRadarGrid(isce3::core::LookSide lookside,
                 slant_range = std::numeric_limits<double>::quiet_NaN();
                 continue;
             }
+
+            std::cout << "d" << std::endl;
 
             // If the radar grid has been provided, check whether the
             // point is inside the radar grid.

@@ -151,6 +151,7 @@ void getRadarGrid(isce3::core::LookSide lookside,
             getNanArray<float>(projection_angle_raster, geogrid);
     auto simulated_radar_brightness_array =
             getNanArray<float>(simulated_radar_brightness_raster, geogrid);
+    info << "starting computation" << pyre::journal::endl;
 
 #pragma omp parallel for
     for (int i = 0; i < geogrid.length(); ++i) {
@@ -171,11 +172,11 @@ void getRadarGrid(isce3::core::LookSide lookside,
             // Populate the DEM raster if the radar grid has not been provided.
             // If the radar grid has been provided, first verify whether
             // the point is inside the radar grid.
-            info << "a" << pyre::journal::newline;
+            info << "a" << pyre::journal::endl;
             if (interpolated_dem_raster != nullptr && radar_grid == nullptr) {
                 interpolated_dem_array(i, j) = input_dem[2];
             }
-            info << "b" << pyre::journal::newline;
+            info << "b" << pyre::journal::endl;
 
             // Skip if there is nothing else to save.
             // For the DEM raster, the only condition that prevents skipping is when
@@ -195,7 +196,7 @@ void getRadarGrid(isce3::core::LookSide lookside,
                     simulated_radar_brightness_raster == nullptr) {
                 continue;
             }
-            info << "c" << pyre::journal::newline;
+            info << "c" << pyre::journal::endl;
 
             // Get target coordinates in the output projection system
             const isce3::core::Vec3 target_proj {pos_x, pos_y, input_dem[2]};
@@ -217,25 +218,25 @@ void getRadarGrid(isce3::core::LookSide lookside,
                 continue;
             }
 
-            info << "d" << pyre::journal::newline;
+            info << "d" << pyre::journal::endl;
 
             // If the radar grid has been provided, check whether the
             // point is inside the radar grid.
             if (radar_grid != nullptr) {
-                info << "1" << pyre::journal::newline;
+                info << "1" << pyre::journal::endl;
                 // If not inside, continue to the next pixel
                 if (!radar_grid->contains(azimuth_time, slant_range)) {
-                    info << "2" << pyre::journal::newline;
+                    info << "2" << pyre::journal::endl;
                     continue;
                 }
-                info << "3" << pyre::journal::newline;
+                info << "3" << pyre::journal::endl;
                 // Otherwise, check if DEM raster needs to be populated
                 if (interpolated_dem_raster != nullptr) {
                     interpolated_dem_array(i, j) = input_dem[2];
                 }
-                info << "4" << pyre::journal::newline;
+                info << "4" << pyre::journal::endl;
             }
-            info << "5" << pyre::journal::newline;
+            info << "5" << pyre::journal::endl;
 
             // save grid Doppler slant-range position
             if (slant_range_raster != nullptr) {

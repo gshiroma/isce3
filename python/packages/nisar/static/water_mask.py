@@ -24,9 +24,8 @@ def binarize_nisar_water_mask(water_distance: ArrayLike,
         255 represents a no-data (invalid) pixel. Values in 1-200 represent non-water
         pixels.
     reference_fill_value : array_like
-        Image to use as a reference for `fill_value` to ensure that the layers have
-        the same extents. Pixels where `reference_fill_value` is `255` are considered
-        fill values.
+        Image to use as a reference for identifying fill pixels and ensuring that the
+        output layer has the same extent.
 
     Returns
     -------
@@ -42,7 +41,7 @@ def binarize_nisar_water_mask(water_distance: ArrayLike,
 
     # Compute a binary mask where the value 1 represents (ocean or inland) water pixels
     # and the value 0 represents non-water pixels.
-    water = water_distance == 0
+    water = (water_distance == 0).astype(np.uint8)
 
     # Set pixels to the fill value if either the water distance or the
     # reference image contains a fill value.
@@ -50,7 +49,7 @@ def binarize_nisar_water_mask(water_distance: ArrayLike,
     water[((water_distance == fill_value) |
            (reference_fill_value == fill_value))] = fill_value
 
-    return water.astype(np.uint8)
+    return water
 
 
 def reproject_raster(

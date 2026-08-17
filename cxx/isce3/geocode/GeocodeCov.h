@@ -68,9 +68,6 @@ public:
      * baseband (using Doppler centroid) before interpolation
      * @param[in]  flatten             Flatten the geocoded SLC
      * @param[in]  geogrid_upsampling  Geogrid upsampling
-     * @param[in]  fill_value          Fill value. Defaults to NaN. If the
-     * output is complex (e.g., off-diagonal terms), this value is used for
-     * the real part with the imaginary part set to 0
      * @param[in]  flag_upsample_radar_grid Double the radar grid sampling rate
      * @param[in]  flag_apply_rtc      Apply radiometric terrain correction
      * (RTC)
@@ -156,7 +153,6 @@ public:
             geocodeOutputMode output_mode = geocodeOutputMode::INTERP,
             bool flag_az_baseband_doppler = false, bool flatten = false,
             double geogrid_upsampling = 1,
-            double fill_value = std::numeric_limits<double>::quiet_NaN(),
             bool flag_upsample_radar_grid = false, bool flag_apply_rtc = false,
             isce3::geometry::rtcInputTerrainRadiometry
                     input_terrain_radiometry = isce3::geometry::
@@ -229,11 +225,6 @@ public:
      * `abs_cal_factor parameters`, which default to `false` and `1`,
      * respectively.
      * @param[in]  dem_raster          Input DEM raster
-     * @param[in]  fill_value          Fill value. Defaults to NaN. If the
-     * output is complex (e.g., off-diagonal terms), this value is used for
-     * the real part with the imaginary part set to 0
-     * @param[in]  flag_apply_rtc      Apply radiometric terrain correction
-     * (RTC)
      * @param[in]  flag_az_baseband_doppler Shift SLC azimuth spectrum to
      * baseband (using Doppler centroid) before interpolation
      * @param[in]  input_terrain_radiometry  Input terrain radiometry
@@ -302,9 +293,7 @@ public:
     template<class T_out>
     void geocodeInterp(const isce3::product::RadarGridParameters& radar_grid,
             isce3::io::Raster& input_raster, isce3::io::Raster& output_raster,
-            isce3::io::Raster& dem_raster,
-            double fill_value = std::numeric_limits<double>::quiet_NaN(),
-            bool flag_apply_rtc = false,
+            isce3::io::Raster& dem_raster, bool flag_apply_rtc = false,
             bool flag_az_baseband_doppler = false, bool flatten = false,
             isce3::geometry::rtcInputTerrainRadiometry
                     input_terrain_radiometry = isce3::geometry::
@@ -373,9 +362,6 @@ public:
      * respectively.
      * @param[in]  dem_raster          Input DEM raster
      * @param[in]  geogrid_upsampling  Geogrid upsampling
-     * @param[in]  fill_value          Fill value. Defaults to NaN. If the
-     * output is complex (e.g., off-diagonal terms), this value is used for
-     * the real part with the imaginary part set to 0
      * @param[in]  flag_upsample_radar_grid Double the radar grid sampling rate
      * @param[in]  flag_apply_rtc      Apply radiometric terrain correction
      * (RTC)
@@ -455,7 +441,6 @@ public:
             isce3::io::Raster& input_raster, isce3::io::Raster& output_raster,
             isce3::io::Raster& dem_raster,
             double geogrid_upsampling = 1,
-            double fill_value = std::numeric_limits<double>::quiet_NaN(),
             bool flag_upsample_radar_grid = false,
             bool flag_apply_rtc = false,
             isce3::geometry::rtcInputTerrainRadiometry input_terrain_radiometry =
@@ -645,8 +630,7 @@ private:
             int block_size_y, int block_size_with_upsampling_y, int block_y,
             int block_size_x, int block_size_with_upsampling_x, int block_x,
             long long& numdone, const long long& progress_block,
-            double geogrid_upsampling, double fill_value,
-            int nbands, int nbands_off_diag_terms,
+            double geogrid_upsampling, int nbands, int nbands_off_diag_terms,
             isce3::core::dataInterpMethod dem_interp_method,
             isce3::io::Raster& dem_raster,
             isce3::io::Raster* out_off_diag_terms,
@@ -698,7 +682,8 @@ private:
      * @param[in] flatten flag to flatten the geocoded SLC
      * @param[in] phase_screen_raster Phase screen raster
      * @param[in] phase_screen_array  Phase screen array
-     * @param[in] rtc_min_value       Minimum value for the RTC area factor.
+     * @param[in]  rtc_min_value_db    Minimum value for the RTC area factor.
+     * Radar data with RTC area factor below this limit will be set to NaN.
      * @param[in] abs_cal_factor      Absolute calibration factor applied
      * to real-valued output datasets (assumed to be proportional to
      * power/intensity). If the output is complex valued, its considered

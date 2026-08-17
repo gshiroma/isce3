@@ -50,7 +50,6 @@ namespace isce3 { namespace geogrid {
  * @param[out] projection_angle_raster     Projection angle raster
  * @param[out] simulated_radar_brightness_raster Simulated radar brightness
  * raster
- * @param[in]  radar_grid                   Radar grid
  */
 void getRadarGrid(
         isce3::core::LookSide lookside,
@@ -75,7 +74,6 @@ void getRadarGrid(
         isce3::io::Raster* ground_track_velocity_raster = nullptr,
         isce3::io::Raster* local_incidence_angle_raster = nullptr,
         isce3::io::Raster* projection_angle_raster = nullptr,
-        isce3::io::Raster* simulated_radar_brightness_raster = nullptr,
-        isce3::product::RadarGridParameters* radar_grid = nullptr);
+        isce3::io::Raster* simulated_radar_brightness_raster = nullptr);
 
 }}

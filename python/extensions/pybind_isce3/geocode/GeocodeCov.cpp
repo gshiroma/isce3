@@ -72,7 +72,6 @@ void addbinding(py::class_<Geocode<T>>& pyGeocode)
                     py::arg("flag_az_baseband_doppler") = false,
                     py::arg("flatten") = false,
                     py::arg("geogrid_upsampling") = 1,
-                    py::arg("fill_value") = std::numeric_limits<double>::quiet_NaN(),
                     py::arg("flag_upsample_radar_grid") = false,
                     py::arg("flag_apply_rtc") = false,
                     py::arg("input_terrain_radiometry") =
@@ -162,10 +161,6 @@ void addbinding(py::class_<Geocode<T>>& pyGeocode)
                         Flatten the geocoded SLC
                     geogrid_upsampling: int, optional
                         Geogrid upsampling
-                    fill_value: float, optional
-                        Fill value. Defaults to NaN. If the output is complex
-                        (e.g., off-diagonal terms), this value is used for
-                        the real part with the imaginary part set to 0
                     flag_upsample_radar_grid: bool, optional
                         Double the radar grid sampling rate
                     flag_apply_rtc: bool, optional
@@ -181,9 +176,9 @@ void addbinding(py::class_<Geocode<T>>& pyGeocode)
                     rtc_min_value_db: float, optional
                         Minimum value for the RTC area factor. Radar data with
                         RTC area factor below this limit will be set to NaN.
-                    rtc_upsampling: int, optional
+                    rtc_geogrid_upsampling: int, optional
                         Geogrid upsampling to compute the radiometric terrain
-                        correction (RTC).
+                        correction RTC.
                     rtc_algorithm: isce3.geometry.RtcAlgorithm, optional
                         RTC algorithm
                     rtc_factor_area_mode : isce3.geometry.RtcAreaBetaMode, optional

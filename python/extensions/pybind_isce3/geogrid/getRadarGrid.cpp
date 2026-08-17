@@ -32,7 +32,6 @@ void addbinding_get_radar_grid(pybind11::module& m)
           py::arg("local_incidence_angle_raster") = nullptr,
           py::arg("projection_angle_raster") = nullptr,
           py::arg("simulated_radar_brightness_raster") = nullptr,
-          py::arg("radar_grid") = nullptr,
           R"(Get radar grid from L2 products
 
              Each output layer is saved onto the first band of its
@@ -91,8 +90,6 @@ void addbinding_get_radar_grid(pybind11::module& m)
                  Projection angle raster
              simulated_radar_brightness_raster : isce3.io.Raster, optional
                  Simulated radar brightness raster
-             radar_grid : isce3.product.RadarGridParameters
-                 Grid of the SAR data in slant-range
 )");
 
 }

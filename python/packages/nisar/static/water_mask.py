@@ -20,8 +20,8 @@ def binarize_nisar_water_mask(water_distance: ArrayLike,
     ----------
     water_distance : array_like
         The input water distance map, in the format specified by the NISAR Water Mask
-        Product Specification\ [1]_. A value of 0 indicates a water pixel. A value of
-        255 represents a no-data (invalid) pixel. Values in 1-200 represent non-water
+        Product Specification\ [1]_. A value of 0 indicates a not-water pixel. A value
+        of 255 represents a no-data (invalid) pixel. Values in 1-200 represent water
         pixels.
     reference_fill_value : array_like
         Image to use as a reference for identifying fill pixels and ensuring that the
@@ -41,7 +41,7 @@ def binarize_nisar_water_mask(water_distance: ArrayLike,
 
     # Compute a binary mask where the value 1 represents (ocean or inland) water pixels
     # and the value 0 represents non-water pixels.
-    water = (water_distance == 0).astype(np.uint8)
+    water = ((water_distance >= 1) & (water_distance <= 200)).astype(np.uint8)
 
     # Set pixels to the fill value if either the water distance or the
     # reference image contains a fill value.
@@ -108,8 +108,8 @@ def binarize_and_reproject_water_mask(
     water_distance_raster_file : path-like
         The file path or name of the input water distance map file. It must be a
         GDAL-compatible raster file in the format specified by the NISAR Water Mask
-        Product Specification\ [1]_. A value of 0 indicates a water pixel. A value of
-        255 represents a no-data (invalid) pixel. Values in 1-200 represent non-water
+        Product Specification\ [1]_. A value of 0 indicates a not-water pixel. A value
+        of 255 represents a no-data (invalid) pixel. Values in 1-200 represent water
         pixels.
     geo_grid : isce3.product.GeoGridParameters
         The output geocoded coordinate grid to re-project the water mask onto.

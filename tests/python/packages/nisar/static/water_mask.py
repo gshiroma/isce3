@@ -9,7 +9,7 @@ import isce3
 
 
 def test_binarize_nisar_water_mask():
-    # Create three arrays of water pixels (filled with zeros), non-water pixels (filled
+    # Create three arrays of non-water pixels (filled with zeros), water pixels (filled
     # with values in range [1, 200]), and invalid pixels (filled with 255).
     nonwater = np.zeros((20, 10), dtype=np.uint8)
     water = np.arange(1, 201, dtype=np.uint8).reshape(20, 10)

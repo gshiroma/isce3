@@ -1521,13 +1521,16 @@ static int _geo2rdrWrapper(const Vec3& inputLLH, const Ellipsoid& ellipsoid,
 * @param[in]  this_block_size_x  Size of the current block in the X direction
 * @param[in]  this_block_size_y  Size of the current block in the Y direction
 * @param[out] output_raster      Output raster
+* @param[in]  fill_value         Fill value. If the output is complex,
+# this value is used for the real part with the imaginary part set to 0
 *
 */
 template<class T>
 inline void _fillGcovBlocksWithNans(
     int block_x, int block_size_x, int block_y,
     int block_size_y, int this_block_size_x, int this_block_size_y,
-    isce3::io::Raster* output_raster)
+    isce3::io::Raster* output_raster,
+    double fill_value = std::numeric_limits<double>::quiet_NaN())
 {
 
     // The output raster may be optional (e.g., off-diagonal raster). If
@@ -1539,14 +1542,11 @@ inline void _fillGcovBlocksWithNans(
     // declare matrix that will hold the NaNs
     isce3::core::Matrix<T> data_block(this_block_size_y, this_block_size_x);
 
-    // declare variable to hold NaN values according to the templateT,
-    // i.e. real (NaN) or complex (NaN, NaN)
-    using T_real = typename isce3::real<T>::type;
-    T nan_t = 0;
-    nan_t *= std::numeric_limits<T_real>::quiet_NaN();
+    // Cast fill value to output template class T
+    T fill_value_t = static_cast<T>(fill_value);
 
     // fill matrix with NaN
-    data_block.fill(nan_t);
+    data_block.fill(fill_value_t);
 
     const int nbands = output_raster->numBands();
     for (int band = 0; band < nbands; ++band) {
@@ -2664,11 +2664,11 @@ void Geocode<T>::_runBlock(
 
         _fillGcovBlocksWithNans<T_out>(block_x, block_size_x, block_y,
             block_size_y, this_block_size_x, this_block_size_y,
-            &output_raster);
+            &output_raster, fill_value);
 
         _fillGcovBlocksWithNans<T>(block_x, block_size_x, block_y,
             block_size_y, this_block_size_x, this_block_size_y,
-            out_off_diag_terms);
+            out_off_diag_terms, fill_value);
 
         _saveOptionalFiles(block_x, block_size_x, block_y, block_size_y,
                 this_block_size_x, this_block_size_y,
@@ -2856,11 +2856,11 @@ void Geocode<T>::_runBlock(
 
             _fillGcovBlocksWithNans<T_out>(block_x, block_size_x, block_y,
                 block_size_y, this_block_size_x, this_block_size_y,
-                &output_raster);
+                &output_raster, fill_value);
 
             _fillGcovBlocksWithNans<T>(block_x, block_size_x, block_y,
                 block_size_y, this_block_size_x, this_block_size_y,
-                out_off_diag_terms);
+                out_off_diag_terms, fill_value);
 
             _saveOptionalFiles(block_x, block_size_x, block_y, block_size_y,
                     this_block_size_x, this_block_size_y,

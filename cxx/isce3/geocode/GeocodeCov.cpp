@@ -1529,8 +1529,7 @@ template<class T>
 inline void _fillGcovBlocksWithNans(
     int block_x, int block_size_x, int block_y,
     int block_size_y, int this_block_size_x, int this_block_size_y,
-    isce3::io::Raster* output_raster,
-    double fill_value)
+    isce3::io::Raster* output_raster, double fill_value)
 {
 
     // The output raster may be optional (e.g., off-diagonal raster). If

@@ -68,9 +68,13 @@ public:
      * baseband (using Doppler centroid) before interpolation
      * @param[in]  flatten             Flatten the geocoded SLC
      * @param[in]  geogrid_upsampling  Geogrid upsampling
-     * @param[in]  fill_value          Fill value. Defaults to NaN. If the
-     * output is complex (e.g., off-diagonal terms), this value is used for
-     * the real part with the imaginary part set to 0
+     * @param[in]  fill_value          Fill value. Defaults to NaN.
+     * The fill value will be cast to the GDAL data type of `output_raster` and
+     * `out_off_diag_terms` (when provided). If the output data type is
+     * integer and the fill value is NaN, the fill value will be stored as 0 in
+     * the output. If the output data type is complex (e.g., for off-diagonal
+     * terms), the fill value is used as the real part, with the imaginary part
+     * set to 0.
      * @param[in]  flag_upsample_radar_grid Double the radar grid sampling rate
      * @param[in]  flag_apply_rtc      Apply radiometric terrain correction
      * (RTC)
@@ -229,9 +233,13 @@ public:
      * `abs_cal_factor parameters`, which default to `false` and `1`,
      * respectively.
      * @param[in]  dem_raster          Input DEM raster
-     * @param[in]  fill_value          Fill value. Defaults to NaN. If the
-     * output is complex (e.g., off-diagonal terms), this value is used for
-     * the real part with the imaginary part set to 0
+     * @param[in]  fill_value          Fill value. Defaults to NaN.
+     * The fill value will be cast to the GDAL data type of `output_raster` and
+     * `out_off_diag_terms` (when provided). If the output data type is
+     * integer and the fill value is NaN, the fill value will be stored as 0 in
+     * the output. If the output data type is complex (e.g., for off-diagonal
+     * terms), the fill value is used as the real part, with the imaginary part
+     * set to 0.
      * @param[in]  flag_apply_rtc      Apply radiometric terrain correction
      * (RTC)
      * @param[in]  flag_az_baseband_doppler Shift SLC azimuth spectrum to
@@ -373,10 +381,14 @@ public:
      * respectively.
      * @param[in]  dem_raster          Input DEM raster
      * @param[in]  geogrid_upsampling  Geogrid upsampling
-     * @param[in]  fill_value          Fill value. Defaults to NaN. If the
-     * output is complex (e.g., off-diagonal terms), this value is used for
-     * the real part with the imaginary part set to 0
-     * @param[in]  flag_upsample_radar_grid Double the radar grid sampling rate
+     * @param[in]  fill_value          Fill value. Defaults to NaN.
+     * The fill value will be cast to the GDAL data type of `output_raster` and
+     * `out_off_diag_terms` (when provided). If the output data type is
+     * integer and the fill value is NaN, the fill value will be stored as 0 in
+     * the output. If the output data type is complex (e.g., for off-diagonal
+     * terms), the fill value is used as the real part, with the imaginary part
+     * set to 0.
+     * * @param[in]  flag_upsample_radar_grid Double the radar grid sampling rate
      * @param[in]  flag_apply_rtc      Apply radiometric terrain correction
      * (RTC)
      * @param[in]  input_terrain_radiometry  Input terrain radiometry

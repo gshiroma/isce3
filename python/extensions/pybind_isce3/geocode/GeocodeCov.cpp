@@ -163,9 +163,13 @@ void addbinding(py::class_<Geocode<T>>& pyGeocode)
                     geogrid_upsampling: int, optional
                         Geogrid upsampling
                     fill_value: float, optional
-                        Fill value. Defaults to NaN. If the output is complex
-                        (e.g., off-diagonal terms), this value is used for
-                        the real part with the imaginary part set to 0
+                        Fill value. Defaults to NaN. The fill value will be cast
+                        to the GDAL data type of `output_raster` and `out_off_diag_terms`
+                        (when provided). If the output data type is integer and the
+                        fill value is NaN, the fill value will be stored as 0 in
+                        the output. If the output data type is complex (e.g., for
+                        off-diagonal terms), the fill value is used as the real part,
+                        with the imaginary part set to 0.
                     flag_upsample_radar_grid: bool, optional
                         Double the radar grid sampling rate
                     flag_apply_rtc: bool, optional

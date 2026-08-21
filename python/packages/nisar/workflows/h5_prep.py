@@ -952,7 +952,11 @@ def _get_raster_from_hdf5_ds(group, ds_name, dtype, shape,
     valid_min, valid_max : scalar, optional
         Minimum and maximum valid values for the dataset.
     grid_mapping : str, optional
-        Name or contents of the grid-mapping metadata attribute.
+        Name of the grid mapping coordinate variable (e.g., 'projection') that
+        defines the projection/CRS for this dataset per CF Convention 5.6.
+        Must reference an existing dataset in the same group. Typically required
+        for L2 geocoded products, and omitted for L1 radar geometry products.
+        Default: None.
     chunk_size : tuple, optional
         Target HDF5 chunk size. The actual chunk size may be adjusted to fit
         within ``shape``. Set to ``None`` to disable chunking.

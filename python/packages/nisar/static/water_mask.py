@@ -46,8 +46,9 @@ def binarize_nisar_water_mask(water_distance: ArrayLike,
     # Set pixels to the fill value if either the water distance or the
     # reference image contains a fill value.
     fill_value = 255
-    water[((water_distance == fill_value) |
-           (reference_fill_value == fill_value))] = fill_value
+    water[
+        ((water_distance == fill_value) | (reference_fill_value == fill_value))
+    ] = fill_value
 
     return water
 

@@ -1027,7 +1027,7 @@ def _get_raster_from_hdf5_ds(group, ds_name, dtype, shape,
         dset.attrs['units'] = np.bytes_(units)
 
     if fill_value is not None:
-        dset.attrs.create('_FillValue', data=np.dtype.type(fill_value))
+        dset.attrs.create('_FillValue', data=np_dtype.type(fill_value))
     elif np.issubdtype(np_dtype, np.floating):
         dset.attrs.create('_FillValue', data=np_dtype.type(np.nan))
     elif np.issubdtype(np_dtype, np.complexfloating):

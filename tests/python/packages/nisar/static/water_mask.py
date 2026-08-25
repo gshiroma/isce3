@@ -29,7 +29,8 @@ def test_binarize_nisar_water_mask():
 
     # Convert the water distance map into a binary water mask
     water_mask = binarize_nisar_water_mask(
-        water_distance, reference_fill_value=reference_fill_value)
+        water_distance, reference_fill_value=reference_fill_value
+    )
 
     # Check the datatype of the output mask.
     assert water_mask.dtype == np.uint8

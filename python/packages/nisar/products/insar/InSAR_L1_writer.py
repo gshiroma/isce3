@@ -762,7 +762,9 @@ class L1InSARWriter(InSARBaseWriter):
             az_idx = np.round([rslc_radar_grid.azimuth_index(az)
                                for az in igram_zero_doppler_time])
 
+            '''
             igram_group['mask'][...] = \
+<<<<<<< Updated upstream
                 generate_insar_mask(self.ref_rslc,
                                     self.sec_rslc,
                                     self.ref_h5py_file_obj,
@@ -772,6 +774,16 @@ class L1InSARWriter(InSARBaseWriter):
                                     freq,
                                     az_idx,
                                     rg_idx)
+=======
+                generate_insar_subswath_mask(self.ref_rslc,
+                                             self.sec_rslc,
+                                             range_offset_path,
+                                             azimuth_offset_path,
+                                             freq,
+                                             az_idx,
+                                             rg_idx)
+            '''
+>>>>>>> Stashed changes
 
             # add the interferogram and pixelOffsets groups to the polarization group
             for pol in pol_list:

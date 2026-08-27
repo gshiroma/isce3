@@ -188,6 +188,7 @@ def run(cfg, resample_type, flatten=False, flag_constant_value=False,
 
     t_all_elapsed = time.time() - t_all
     info_channel.log(f"successfully ran resample in {t_all_elapsed:.3f} seconds")
+    return resample_files_dict
 
 
 if __name__ == "__main__":

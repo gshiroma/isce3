@@ -256,8 +256,27 @@ def set_ampcor_params(cfg, ampcor_obj):
     ampcor_obj.algorithm = 0 if cfg['cross_correlation_domain'] == \
                                 'frequency' else 1
     ampcor_obj.rawDataOversamplingFactor = cfg['slc_oversampling_factor']
-    ampcor_obj.derampMethod = 0 if cfg['deramping_method'] == \
-                                   'magnitude' else 1
+
+    if cfg['deramping_method'] is not None:
+        deramp = cfg['deramping_method']
+        if deramp == "magnitude":
+            ampcor_obj.derampMethod = 0
+        elif deramp == "complex":
+            ampcor_obj.derampMethod = 1
+        else: # skip deramping
+            ampcor_obj.derampMethod = 2
+
+    if cfg['deramping_axis'] is not None:
+        deramp_axis = cfg['deramping_axis']
+        if deramp_axis == "azimuth":
+            ampcor_obj.derampAxis = 0
+        elif deramp_axis == "range":
+            ampcor_obj.derampAxis = 1
+        elif deramp_axis == "both":
+            ampcor_obj.derampAxis = 2
+        else:
+            raise ValueError(f"invalid {deramp_axis=}")
+
     ampcor_obj.corrStatWindowSize = cfg['correlation_statistics_zoom']
     ampcor_obj.corrSurfaceZoomInWindow = cfg['correlation_surface_zoom']
     ampcor_obj.corrSurfaceOverSamplingFactor = cfg[
@@ -589,7 +608,7 @@ def _write_offsets_covariance_data(infile,
         slant_range_cov_ds.write_direct(slant_range_cov_data_block,
                                         dest_sel=output_slice)
 
-        # Convert the cross covriance pixel offsets covariance to meters^2 using the equation
+        # Convert the cross covariance pixel offsets covariance to meters^2 using the equation
         # cross_offset_covaraince_in_meters =
         # cross_offset_covaraince_in_pixels *
         # slant_range_spacing * ground_track_velocity * zero_doppler_spacing_of_RSLC

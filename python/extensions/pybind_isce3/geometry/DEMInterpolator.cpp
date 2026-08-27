@@ -14,6 +14,8 @@
 #include <isce3/io/Raster.h>
 #include <isce3/product/GeoGridParameters.h>
 
+#include <pybind_isce3/core/Constants.h>
+
 namespace py = pybind11;
 
 using DEMInterp = isce3::geometry::DEMInterpolator;
@@ -53,7 +55,30 @@ void addbinding(pybind11::class_<DEMInterp>& pyDEMInterpolator)
                     py::arg("raster"), py::arg("min_x"), py::arg("max_x"),
                     py::arg("min_y"), py::arg("max_y"), py::arg("raster_band") = 1)
 
-            .def("interpolate_lonlat", &DEMInterp::interpolateLonLat)
+            .def("interpolate_lonlat", &DEMInterp::interpolateLonLat,
+                R"(
+                Interpolate the digital elevation model at a given point.
+
+                Parameters
+                ----------
+                longitude : float
+                    Longitude in radians
+                latitude : float
+                    Geodetic latitude in radians
+
+                Returns
+                -------
+                height : float
+                    DEM value interpolated at requested point, or ref_height
+                    if point is not within the spatial extent of the DEM.
+                    This class does not perform any conversions for units or
+                    vertical datum, though many places in ISCE3 assume the value
+                    represents the height in meters above the ellipsoid
+                    associated with the DEM projection.
+                )",
+                py::arg("longitude"),
+                py::arg("latitude")
+            )
             .def("interpolate_xy", &DEMInterp::interpolateXY)
 
             .def_property("ref_height",
@@ -63,8 +88,9 @@ void addbinding(pybind11::class_<DEMInterp>& pyDEMInterpolator)
             .def_property_readonly("have_stats", &DEMInterp::haveStats)
             .def_property("interp_method",
                     py::overload_cast<>(&DEMInterp::interpMethod, py::const_),
-                    py::overload_cast<isce3::core::dataInterpMethod>(
-                            &DEMInterp::interpMethod))
+                    [](DEMInterp& self, py::object method) {
+                        self.interpMethod(duck_method(method));
+                    })
 
             .def("compute_min_max_mean_height",
                     [](DEMInterp& self) {
@@ -191,4 +217,89 @@ void addbinding_DEM_raster2interpolator(py::module& m)
         DEM interpolator for given DEM raster and geo grid.
         )")
     ;
+}
+
+
+void addbinding_load_dem_from_proj(py::module& m)
+{
+    m.def("load_dem_from_proj",
+        [](isce3::io::Raster &dem_raster,
+            const double x0,
+            const double xf,
+            const double y0,
+            const double yf,
+            const isce3::core::dataInterpMethod dem_interp_method,
+            isce3::core::ProjectionBase* proj,
+            const int dem_margin_x_in_pixels,
+            const int dem_margin_y_in_pixels,
+            const int dem_raster_band,
+            const int n_edge_samples) {
+
+            DEMInterp dem_interp(0, dem_interp_method);
+
+            isce3::geometry::loadDemFromProj(dem_raster,
+                                             x0,
+                                             xf,
+                                             y0,
+                                             yf,
+                                             &dem_interp,
+                                             proj,
+                                             dem_margin_x_in_pixels,
+                                             dem_margin_y_in_pixels,
+                                             dem_raster_band,
+                                             n_edge_samples);
+
+            return dem_interp;
+        },
+        py::arg("dem_raster"),
+        py::arg("x0"),
+        py::arg("xf"),
+        py::arg("y0"),
+        py::arg("yf"),
+        py::arg("dem_interp_method") = isce3::core::BIQUINTIC_METHOD,
+        py::arg("proj") = nullptr,
+        py::arg("dem_margin_x_in_pixels") = 100,
+        py::arg("dem_margin_y_in_pixels") = 200,
+        py::arg("dem_raster_band") = 1,
+        py::arg("n_edge_samples") = 1,
+        R"(
+    Load DEM raster into a DEMInterpolator object around a given bounding box
+    in the same or different coordinate system as the DEM raster
+
+    Parameters
+    ----------
+    dem_raster: isce3.io.Raster
+        Raster of the DEM
+    x0: double
+        Minimum X/easting position of the input bounding box in the coordinate
+        system of `proj`
+    xf: double
+        Maximum X/easting position of the input bounding box in the coordinate
+        system of `proj`
+    min_y: double
+        Minimum Y/northing position of the input bounding box in the coordinate
+        system of `proj`
+    max_y: double
+        Maximum Y/northing position of the input bounding box in the coordinate
+        system of `proj`
+    dem_interp_method: isce3.core.DataInterpMethod
+        DEM interpolation method
+    proj: 
+        Projection object (nullptr to use same DEM projection)
+    dem_margin_x_in_pixels, int
+        DEM X/easting margin in pixels
+    dem_margin_y_in_pixels, int
+        DEM Y/northing margin in pixels
+    dem_raster_band: int
+        DEM raster band (starting from 1)
+    n_edge_samples: int
+        Number of points sampled along each edge of the bounding box when
+        reprojecting. Must be >= 2 to include corners.  Values below 2
+        are clamped to 2. Default: 11.
+
+    Returns
+    -------
+    dem_interp: isce3.geometry.DEMInterpolator
+        DEM interpolator for given DEM raster and geo grid.
+        )");
 }

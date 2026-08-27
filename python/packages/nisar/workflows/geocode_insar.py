@@ -214,7 +214,8 @@ def _project_water_to_geogrid(input_water_path, geogrid):
 
 
 def add_water_to_mask(cfg, freq, geogrid, dst_h5,
-                      input_product_type, fill_vaue = 255):
+                      input_product_type,
+                      fill_vaue = 255):
     """
     Add water mask to mask layer in GUNW and GOFF product.
 
@@ -262,8 +263,9 @@ def add_water_to_mask(cfg, freq, geogrid, dst_h5,
             # Masked water mask to exclude the fill value
             masked_water_mask = water_mask[mask]
             # Add the water mask to the mask layer
-            mask_layer[mask] += (100 * water_mask)[mask].astype(np.uint8)
-            dst_h5[mask_h5_path][...] = mask_layer
+            subswath_mask = mask_layer & 0xFF # get the subswath mask
+            subswath_mask[mask] += (100 * water_mask)[mask].astype(np.uint8)
+            dst_h5[mask_h5_path][...] = mask_layer | subswath_mask
 
             # Update the percentage of the water
             # where the region with fill value is excluded
@@ -313,7 +315,7 @@ def get_raster_lists(all_geocoded_dataset_flags,
         Path to input RUNW or ROFF HDF5
     dst_h5 : h5py.File
         h5py.File object where geocoded data is to be written
-    offset_params: list[tupel[str, isce3.core.DataInterpMethod, float]]
+    offset_params: list[tuple[str, isce3.core.DataInterpMethod, float]]
         List of offset layer geocoding params as tuples. Tuples with each tuple
         consisting of offset layer name, interpolation method, and invalid
         value.
@@ -578,7 +580,7 @@ def cpu_run(cfg, input_hdf5, output_hdf5, input_product_type=InputProduct.RUNW):
     is_iono_method_sideband = iono_method in ['main_side_band',
                                               'main_diff_ms_band']
     freq_pols_iono = iono_args["list_of_frequencies"]
-
+    freq_pol = cfg['processing']['input_subset']['list_of_frequencies']
     slc = SLC(hdf5file=ref_hdf5)
     info_channel = journal.info("geocode.run")
     info_channel.log("starting geocode")
@@ -675,7 +677,9 @@ def cpu_run(cfg, input_hdf5, output_hdf5, input_product_type=InputProduct.RUNW):
                         if az_looks > 1 or rg_looks > 1:
                             radar_grid_iono = radar_grid_iono.multilook(
                                 az_looks, rg_looks)
-                        input_hdf5_iono = f'{scratch_path}/ionosphere/{iono_method}/RUNW.h5'
+                        if 'B' not in freq_pol:
+                            input_hdf5_iono = f'{scratch_path}/ionosphere/{iono_method}/RUNW.h5'
+
                     if is_iono_method_sideband and freq == 'B':
                         geocode_iono_bool = False
 
@@ -980,7 +984,7 @@ def gpu_run(cfg, input_hdf5, output_hdf5, input_product_type=InputProduct.RUNW):
     unwrap_rg_looks = cfg['processing']['phase_unwrap']['range_looks']
     unwrap_az_looks = cfg['processing']['phase_unwrap']['azimuth_looks']
 
-    # Only when the input product is RUNW, then we ajust the range and azimuth looks
+    # Only when the input product is RUNW, then we adjust the range and azimuth looks
     if input_product_type is InputProduct.RUNW:
         if unwrap_rg_looks != 1 or unwrap_az_looks != 1:
             rg_looks = unwrap_rg_looks
@@ -1001,17 +1005,12 @@ def gpu_run(cfg, input_hdf5, output_hdf5, input_product_type=InputProduct.RUNW):
     iono_enabled = iono_args['enabled']
     iono_method = iono_args['spectral_diversity']
     freq_pols_iono = iono_args["list_of_frequencies"]
+    freq_pol = cfg['processing']['input_subset']['list_of_frequencies']
+
     is_iono_method_sideband = iono_method in ['main_side_band',
                                               'main_diff_ms_band']
 
-    if interp_method == 'BILINEAR':
-        interp_method = isce3.core.DataInterpMethod.BILINEAR
-    if interp_method == 'BICUBIC':
-        interp_method = isce3.core.DataInterpMethod.BICUBIC
-    if interp_method == 'NEAREST':
-        interp_method = isce3.core.DataInterpMethod.NEAREST
-    if interp_method == 'BIQUINTIC':
-        interp_method = isce3.core.DataInterpMethod.BIQUINTIC
+    interp_method = isce3.core.normalize_data_interp_method(interp_method)
 
     # Interpolation method for the wrapped interferogram
     wrapped_igram_interp_method = interp_method
@@ -1020,16 +1019,8 @@ def gpu_run(cfg, input_hdf5, output_hdf5, input_product_type=InputProduct.RUNW):
         wrapped_igram_interp_method = cfg["processing"]["geocode"]\
                 ['wrapped_interferogram']['interp_method']
 
-        if wrapped_igram_interp_method == 'SINC':
-            wrapped_igram_interp_method = isce3.core.DataInterpMethod.SINC
-        if wrapped_igram_interp_method == 'BILINEAR':
-            wrapped_igram_interp_method = isce3.core.DataInterpMethod.BILINEAR
-        if wrapped_igram_interp_method == 'BICUBIC':
-            wrapped_igram_interp_method = isce3.core.DataInterpMethod.BICUBIC
-        if wrapped_igram_interp_method == 'NEAREST':
-            wrapped_igram_interp_method = isce3.core.DataInterpMethod.NEAREST
-        if wrapped_igram_interp_method == 'BIQUINTIC':
-            wrapped_igram_interp_method = isce3.core.DataInterpMethod.BIQUINTIC
+        wrapped_igram_interp_method = \
+            isce3.core.normalize_data_interp_method(wrapped_igram_interp_method)
 
     info_channel = journal.info("geocode.run")
     info_channel.log("starting geocode")
@@ -1135,8 +1126,9 @@ def gpu_run(cfg, input_hdf5, output_hdf5, input_product_type=InputProduct.RUNW):
                         # frequencyA. Instead of geocoding ionosphere in the RUNW standard
                         # product (frequencyA), geocode the frequencyB in ionosphere/RUNW.h5
                         # to avoid additional interpolation.
-                        input_hdf5_iono = \
-                            f'{scratch_path}/ionosphere/{iono_method}/RUNW.h5'
+                        if 'B' not in freq_pol:
+                            input_hdf5_iono = f'{scratch_path}/ionosphere/{iono_method}/RUNW.h5'
+
                         if freq == 'A':
                             radar_grid_iono = slc.getRadarGrid('B')
                             if az_looks > 1 or rg_looks > 1:

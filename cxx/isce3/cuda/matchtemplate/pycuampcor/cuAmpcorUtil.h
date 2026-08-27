@@ -46,8 +46,11 @@ void cuArraysC2R(cuArrays<float2> *image1, cuArrays<float> *image2, cudaStream_t
 void cuArraysAbs(cuArrays<float2> *image1, cuArrays<float> *image2, cudaStream_t stream);
 
 // cuDeramp.cu: deramping phase
-void cuDeramp(int method, cuArrays<float2> *images, cudaStream_t stream);
-void cuDerampMethod1(cuArrays<float2> *images, cudaStream_t stream);
+// `cuDeramp` calls a deramp implementation (or does nothing) based on the value of `method`:
+//  `method=1` for cuLinearDeramp, any other value for no-op
+// `cuLinearDeramp` Estimates the phase gradient over the chip and removes it.
+void cuDeramp(const int method, cuArrays<float2> *images, const int axis, cudaStream_t stream);
+void cuLinearDeramp(cuArrays<float2> *images, const int axis, cudaStream_t stream);
 
 // cuArraysPadding.cu: various utilities for oversampling padding
 void cuArraysPadding(cuArrays<float2> *image1, cuArrays<float2> *image2, cudaStream_t stream);
@@ -64,7 +67,7 @@ void cuCorrNormalizeFixed(cuArrays<float> *correlation, cuArrays<float> *referen
 void cuCorrNormalizeSAT(cuArrays<float> *correlation, cuArrays<float> *reference, cuArrays<float> *secondary,
     cuArrays<float> * referenceSum2, cuArrays<float> *secondarySAT, cuArrays<float> *secondarySAT2, cudaStream_t stream);
 
-//in cuOffset.cu: utitilies for determining the max locaiton of cross correlations or the offset
+//in cuOffset.cu: utitilies for determining the max location of cross correlations or the offset
 void cuArraysMaxloc2D(cuArrays<float> *images, cuArrays<int2> *maxloc, cuArrays<float> *maxval, cudaStream_t stream);
 void cuArraysMaxloc2D(cuArrays<float> *images, cuArrays<int2> *maxloc, cudaStream_t stream);
 void cuSubPixelOffset(cuArrays<int2> *offsetInit, cuArrays<int2> *offsetZoomIn, cuArrays<float2> *offsetFinal,

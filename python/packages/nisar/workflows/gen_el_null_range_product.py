@@ -103,6 +103,47 @@ def cmd_line_parser():
                            'The respective quality factors are simply '
                            'set to zero!')
                      )
+    prs.add_argument('--sample-delays', type=int, nargs='*',
+                     help=('Relative integer sample delays of right RX '
+                           'channel wrt left one in ascending RX order for '
+                           'all null pairs of either the selected frequency '
+                           'band ("A" or "B") or the very first of two ("A") '
+                           'if split spectrum. The number of delays shall be '
+                           'equal to the total number of nulls.')
+                     )
+    prs.add_argument('--sample-delays2', type=int, nargs='*',
+                     help=('Relative integer sample delays of right RX '
+                           'channel wrt left one in ascending RX order for '
+                           'all null pairs of the second band ("B") if split '
+                           'spectrum and both bands are processed. The number '
+                           'of delays shall be equal to the total number of '
+                           'nulls.')
+                     )
+    prs.add_argument('--amp-ratio-imbalances', type=float, nargs='*',
+                     help=('Amplitude ratio (linear) of right to left RX '
+                           'channels of all null pairs in ascending RX order. '
+                           'The size shall be equal to the number of nulls. '
+                           'This will be applied to all processed frequency '
+                           'bands. This is an external and separate '
+                           'correction from that of caltone.')
+                     )
+    prs.add_argument('--phase-diff-imbalances', type=float, nargs='*',
+                     help=('Phase difference (degrees) of right and left RX '
+                           'channels of all null pairs in ascending order. '
+                           'The size shall be equal to the number of nulls. '
+                           'This will be applied to all processed frequency '
+                           'bands. This is an external and separate '
+                           'correction from that of caltone.')
+                     )
+    prs.add_argument('--time-start', type=float, default=0.0,
+                     help=('Start time (seconds) of L0B relative to time of '
+                           'the first range line to be processed.')
+                     )
+    prs.add_argument('--time-dur-max', type=float,
+                     help=('Max time duration (seconds) w.r.t `time-start`. '
+                           'Default is entire L0B duration starting from '
+                           '`time-start`.')
+                     )
     return prs.parse_args()
 
 
@@ -177,12 +218,60 @@ def gen_el_null_range_product(args):
         raw_obj, args.freq_band, args.txrx_pol)
     logger.info(f'List of selected frequency bands and TxRx Pols -> {frq_pol}')
 
+    # determine [start, stop] range lines of echo to be processed.
+    freq_band = list(frq_pol.keys())[0]
+    txrx_pol = frq_pol[freq_band][0]
+    _, tm = raw_obj.getPulseTimes(freq_band, txrx_pol[0])
+    tm_rel = tm - tm[0]
+    t_start = args.time_start
+    if t_start < 0 or t_start > tm_rel[-2]:
+        raise ValueError(f'time-start {t_start} is out of valid '
+                         f'range [0, {tm_rel[-2]}] (sec, sec)!')
+    t_end = tm_rel[-1]
+    if args.time_dur_max is not None:
+        if not (args.time_dur_max > 0):
+            raise ValueError(f'"time_dur_max" {args.time_dur_max} '
+                             'must be a positive value!')
+        t_end = min(t_end, t_start + args.time_dur_max)
+    logger.info('Time (start, end) of echo wrt first range line to be '
+                f'processed (sec, sec) -> ({t_start}, {t_end})')
+    idx_start = np.searchsorted(tm_rel, t_start, side='left')
+    idx_stop = np.searchsorted(tm_rel, t_end, side='right')
+    logger.info('Range line (start, stop) 0-based indices of echo to be '
+                f'processed -> ({idx_start}, {idx_stop})')
+    rangeline_limit = (idx_start, idx_stop)
+
+    # check whether there are more than one frequency band
+    # when "sample_delays2" is provided.
+    if args.sample_delays2 is not None and len(frq_pol) == 1:
+        logger.warning('Input "sample-delays2" will be ignored given '
+                       'simply one frequency band will be processed!')
+
     exclude_nulls = args.exclude_nulls
     if exclude_nulls is not None:
         exclude_nulls = set(exclude_nulls)
+
+    # build complex imbalance ratio only if either of
+    # amp or phase is provided
+    rx_imbalances = None
+    if args.amp_ratio_imbalances is not None:
+        rx_imbalances = np.asarray(args.amp_ratio_imbalances, dtype='c8')
+    if args.phase_diff_imbalances is not None:
+        imb_phs = np.exp(1j * np.deg2rad(args.phase_diff_imbalances))
+        if rx_imbalances is None:
+            rx_imbalances = imb_phs
+        else:
+            if imb_phs.size != rx_imbalances.size:
+                raise ValueError(
+                    f'Size mismatch between amplitude {rx_imbalances.size} '
+                    f'and phase {imb_phs.size} imbalances.'
+                )
+            rx_imbalances *= imb_phs
+
     # loop over all desired frequency bands and their respective desired
     # polarizations
-    for freq_band in frq_pol:
+    sample_delays_all = [args.sample_delays, args.sample_delays2]
+    for freq_band, sample_delays in zip(sorted(frq_pol), sample_delays_all):
         for txrx_pol in frq_pol[freq_band]:
             # check if the product is so-called noise-only (NO TX).
             # If no TX then skip that product.
@@ -194,7 +283,9 @@ def gen_el_null_range_product(args):
              mask_valid, _, wavelength) = el_null_range_from_raw_ant(
                  raw_obj, ant_obj, dem_interp=dem_interp_obj, logger=logger,
                  orbit=orbit, attitude=attitude, freq_band=freq_band,
-                 txrx_pol=txrx_pol, **kwargs
+                 txrx_pol=txrx_pol, sample_delays_wrt_left=sample_delays,
+                 imbalances_right2left=rx_imbalances,
+                 rangeline_limit=rangeline_limit, **kwargs
             )
             # check the excluded nulls whose quality factor will be zeroed out
             list_nulls = np.unique(null_num)

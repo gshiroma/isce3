@@ -522,6 +522,13 @@ class GcovWriter(BaseL2WriterSingleInput):
                 self.output_hdf5_obj[axis_path].attrs[
                     "pixel_coordinate_convention"] = np.bytes_('center')
 
+            self.geocode_lut(f'{output_grids_freq_path}',
+                             f'{input_swaths_freq_path}',
+                             output_ds_name_list=['inputDataExceptionMask'],
+                             skip_if_not_present=True,
+                             compute_stats=False,
+                             data_interpolator='nearest')
+
     def populate_processing_information(self):
         """
         Populate the `processingInformation` group of the GCOV product
@@ -551,16 +558,6 @@ class GcovWriter(BaseL2WriterSingleInput):
             f'{parameters_group}/radiometricTerrainCorrectionApplied',
             'processing/geocode/apply_rtc')
 
-        # TODO: read these values from the RSLC metadata once they are
-        # available (the RSLC datasets below are not in the specs)
-        self.copy_from_input(
-            f'{parameters_group}/dryTroposphericGeolocationCorrectionApplied',
-            default=True)
-
-        self.copy_from_input(
-            f'{parameters_group}/wetTroposphericGeolocationCorrectionApplied',
-            default=False)
-
         self.copy_from_runconfig(
             f'{parameters_group}/rangeIonosphericGeolocationCorrectionApplied',
             'processing/geocode/apply_range_ionospheric_delay_correction')
@@ -587,9 +584,21 @@ class GcovWriter(BaseL2WriterSingleInput):
             f'{parameters_group}/shadowMaskingApplied',
             False)
 
-        self.copy_from_runconfig(
+        # Add geocoding algorithm reference
+        flag_symmetrized_runconfig = self.cfg['processing']['input_subset'][
+            'symmetrize_cross_pol_channels']
+
+        flag_has_hv_and_vh = any(
+            "HV" in pol_list and "VH" in pol_list
+            for pol_list in self.input_freq_pols_dict.values()
+        )
+
+        flag_symmetrized = (flag_symmetrized_runconfig and
+                            flag_has_hv_and_vh)
+
+        self.set_value(
             f'{parameters_group}/polarimetricSymmetrizationApplied',
-            'processing/input_subset/symmetrize_cross_pol_channels')
+            flag_symmetrized)
 
         # Populate algorithms parameters
 
@@ -649,22 +658,14 @@ class GcovWriter(BaseL2WriterSingleInput):
             'radiometricTerrainCorrection',
             rtc_algorithm_name)
 
-        input_pol_list = list(self.input_freq_pols_dict.keys())
-        flag_hv_and_vh_in_pol_list = ['HV' in input_pol_list and
-                                      'VH' in input_pol_list]
-
-        flag_symmetrize = (flag_hv_and_vh_in_pol_list and
-                           self.cfg['processing']['input_subset'][
-                            'symmetrize_cross_pol_channels'])
-
         flag_full_covariance = self.cfg['processing']['input_subset'][
             'fullcovariance']
 
-        if flag_symmetrize and not flag_full_covariance:
+        if flag_symmetrized and not flag_full_covariance:
             symmetrization_algorithm = \
                 ('Cross-Polarimetric Channels HV and VH Backscatter Average'
                  ' (Incoherent Average)')
-        elif flag_symmetrize:
+        elif flag_symmetrized:
             symmetrization_algorithm = \
                 ('Cross-Polarimetric Channels HV and VH SLCs Average'
                  ' (Coherent Average)')

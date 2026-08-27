@@ -131,6 +131,9 @@ class InSARBaseWriter(h5py.File):
         # Product information
         self.product_info = InSARProductsInfo.Base()
 
+        # Granule ID
+        self.granule_id = '(NOT SPECIFIED)'
+
         # DEM file
         self.dem_file = \
             self.cfg["dynamic_ancillary_file_group"]["dem_file"]
@@ -138,7 +141,11 @@ class InSARBaseWriter(h5py.File):
         ancillary_group = self.cfg["dynamic_ancillary_file_group"]
         self.dem_source = ancillary_group["dem_file_description"]
         if self.dem_source is None:
-            self.dem_source = "None"
+            self.dem_source = "(NOT SPECIFIED)"
+
+        self.water_mask_source = ancillary_group["water_mask_file_description"]
+        if self.water_mask_source is None:
+            self.water_mask_source = "(NOT SPECIFIED)"
 
         # Check if reference and secondary exists as files
         orbit_files = \
@@ -373,11 +380,20 @@ class InSARBaseWriter(h5py.File):
                                   ' radar modes, "False" otherwise')
         ds_params = [
             DatasetParams(
+                "rfiMitigation",
+                np.bytes_(rfi_mitigation),
+                (
+                    f'Algorithm used for radio frequency interference (RFI) mitigation in ' \
+                      f'the {rslc_name} RSLC, either "ST-EVD" or "FDNF" (or "disabled" if no RFI ' \
+                      'mitigation was applied)'
+                ),
+            ),
+            DatasetParams(
                 "rfiMitigationApplied",
                 rfi_mitigation_flag,
                 (
-                    "Flag to indicate if RFI mitigation has been applied"
-                    f" to {rslc_name} RSLC"
+                    "Flag to indicate if radio frequency interference (RFI) mitigation was applied"
+                    f" during the generation of the {rslc_name} RSLC"
                 ),
             ),
             mixed_mode,
@@ -792,6 +808,11 @@ class InSARBaseWriter(h5py.File):
                 "Description of the input digital elevation model (DEM)",
             ),
             DatasetParams(
+                "waterMaskSource",
+                self.water_mask_source,
+                "Description of the input water mask",
+            ),
+            DatasetParams(
                 "l1ReferenceSlcGranules",
                 to_bytes([os.path.basename(self.ref_h5_slc_file)]),
                 "List of input reference L1 RSLC products used",
@@ -1056,7 +1077,9 @@ class InSARBaseWriter(h5py.File):
                             "absoluteOrbitNumber",
                             "isJointObservation",
                             "plannedObservationId",
-                            "plannedDatatakeId"]
+                            "plannedDatatakeId",
+                            "listOfObservationModes",
+                            "hasInputDataException"]
         cap = lambda x: f"{x[0].upper()}{x[1:]}"
 
         for ds_name in datasets_to_copy:
@@ -1077,21 +1100,21 @@ class InSARBaseWriter(h5py.File):
             # rename the End time to stop
             time_in_description = 'stop' if start_or_stop == 'End' else 'start'
             ds.attrs['description'] = \
-                f"Azimuth {time_in_description} time (in UTC) of {rslc_name} RSLC product in the format YYYY-mm-ddTHH:MM:SS.sssssssss"
+                to_bytes(f"Azimuth {time_in_description} time (in UTC) of {rslc_name} RSLC product in the format YYYY-mm-ddTHH:MM:SS.sssssssss")
 
         for rslc_name in ['reference', 'secondary']:
              # Update descriptions for absolute orbit number, planned datatakes and observation
             ds = dst_id_group[f"{rslc_name}AbsoluteOrbitNumber"]
             ds.attrs['description'] = \
-            f'Absolute orbit number for the {rslc_name} RSLC'
+            to_bytes(f'Absolute orbit number for the {rslc_name} RSLC')
 
             ds = dst_id_group[f"{rslc_name}PlannedDatatakeId"]
             ds.attrs['description'] = \
-            f'List of planned datatakes included in the {rslc_name} RSLC'
+            to_bytes(f'List of planned datatakes included in the {rslc_name} RSLC')
 
             ds = dst_id_group[f"{rslc_name}PlannedObservationId"]
             ds.attrs['description'] = \
-            f'List of planned observations included in the {rslc_name} RSLC'
+            to_bytes(f'List of planned observations included in the {rslc_name} RSLC')
 
             #  Update the description for the isJointObservation
             #  If there is no isJointObservation in the identification group,
@@ -1109,20 +1132,49 @@ class InSARBaseWriter(h5py.File):
                     "False",
                     description))
 
+            # Update the description for the listOfObservationModes
+            ds_name = f"{rslc_name}ListOfObservationModes"
+            description = 'List of observation modes of the L0B granules'+\
+                f' used to generate the {rslc_name} RSLC (one mode per L0B)'
+            if ds_name in dst_id_group:
+                ds = dst_id_group[ds_name]
+                ds.attrs['description'] = to_bytes(description)
+            else:
+                add_dataset_and_attrs(dst_id_group, DatasetParams(
+                    ds_name,
+                    to_bytes(['(NOT SPECIFIED)']),
+                    description))
+
+            # Update the description for the hasInputDataException
+            ds_name = f"{rslc_name}HasInputDataException"
+            description = f'Indication of input {rslc_name} RSLC data exceptions or anomalies.'+\
+                ' Zero when no known exception affects this product,'+\
+                    ' otherwise the bitwise OR of exception codes (2: NISAR LSAR qFSP-H1 sample slip)'
+            if ds_name in dst_id_group:
+                ds = dst_id_group[ds_name]
+                ds.attrs['description'] = to_bytes(description)
+            else:
+                add_dataset_and_attrs(dst_id_group, DatasetParams(
+                    ds_name,
+                    to_bytes(['(NOT SPECIFIED)']),
+                    description))
+
         # Granule ID follows the NISAR filename convention. The partial granule ID
         # has placeholders (curly brackets) which will be filled by the InSAR SAS
         # (Partial Granule ID Example:
         # NISAR_{Level}_PR_{ProductType}_001_001_A_001_003_{MODE}_{PO}_A_{StartDateTime}_{EndDateTime}_D00341_P_C_J_001_.h5)
 
         if partial_granule_id is None:
-            granule_id = "None"
+            self.granule_id = '(NOT SPECIFIED)'
         else:
             # Get the first frequency to process and corresponding polarizations
             frequency = list(self.freq_pols.keys())[0]
-            granule_id = get_insar_granule_id(self.ref_h5_slc_file, self.sec_h5_slc_file,
-                                              partial_granule_id, freq=frequency,
-                                              pol_process=self.freq_pols.get(frequency),
-                                              product_type=self.product_info.ProductType)
+            self.granule_id = get_insar_granule_id(
+                self.ref_h5_slc_file, self.sec_h5_slc_file,
+                partial_granule_id, freq=frequency,
+                pol_process=self.freq_pols.get(frequency),
+                product_type=self.product_info.ProductType)
+
         if product_version is None:
             product_version = \
                 self.product_info.ProductVersion
@@ -1135,12 +1187,12 @@ class InSARBaseWriter(h5py.File):
             ),
             DatasetParams(
                 "granuleId",
-                granule_id,
+                self.granule_id,
                 "Unique granule identification name",
             ),
             DatasetParams(
                 "instrumentName",
-                f"{radar_band_name}SAR",
+                f"{radar_band_name}-SAR",
                 (
                     "Name of the instrument used to collect the remote"
                     " sensing data provided in this product"
@@ -1182,10 +1234,10 @@ class InSARBaseWriter(h5py.File):
                 "productLevel",
                 self.product_info.ProductLevel,
                 (
-                    "Product level. L0A: Unprocessed instrument data; L0B:"
-                    " Reformatted, unprocessed instrument data; L1: Processed"
-                    " instrument data in radar coordinates system; and L2:"
-                    " Processed instrument data in geocoded coordinates system"
+                    'Product level. "L0A": Unprocessed instrument data; "L0B":'
+                    ' Reformatted, unprocessed instrument data; "L1": Processed'
+                    ' instrument data in radar coordinates system; and "L2":'
+                    ' Processed instrument data in geocoded coordinates system'
                 ),
             ),
             DatasetParams(

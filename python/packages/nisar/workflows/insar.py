@@ -4,10 +4,12 @@ import shutil
 import pathlib
 
 import journal
+import isce3
 from nisar.workflows import (bandpass_insar, baseline, crossmul, dense_offsets,
                              filter_interferogram, geo2rdr, geocode_insar,
                              h5_prep, ionosphere, offsets_product,
-                             prepare_insar_hdf5, rdr2geo, resample_slc_v2,
+                             prepare_insar_hdf5, rdr2geo,
+                             resample_slc, resample_slc_v2,
                              rubbersheet, solid_earth_tides, split_spectrum,
                              troposphere, unwrap)
 from nisar.workflows.geocode_insar import InputProduct
@@ -50,7 +52,13 @@ def run(cfg: dict, out_paths: dict, run_steps: dict):
         prepare_insar_hdf5.run(cfg)
 
     if run_steps['coarse_resample']:
-        resample_slc_v2.run(cfg, 'coarse')
+        # Resample SLC V2 doesn't have GPU implemented, so run the old version if
+        # GPU was requested.
+        if isce3.core.gpu_check.use_gpu(cfg['worker']['gpu_enabled'],
+                                           cfg['worker']['gpu_id']):
+            resample_slc.run(cfg, 'coarse')
+        else:
+            resample_slc_v2.run(cfg, 'coarse')
 
     if (run_steps['dense_offsets']) and \
             (cfg['processing']['dense_offsets']['enabled']):
@@ -78,7 +86,13 @@ def run(cfg: dict, out_paths: dict, run_steps: dict):
         and cfg['processing']['fine_resample']['enabled']
         and 'RIFG' in out_paths
     ):
-        resample_slc_v2.run(cfg, 'fine')
+        # Resample SLC V2 doesn't have GPU implemented, so run the old version if
+        # GPU was requested.
+        if isce3.core.gpu_check.use_gpu(cfg['worker']['gpu_enabled'],
+                                           cfg['worker']['gpu_id']):
+            resample_slc.run(cfg, 'fine')
+        else:
+            resample_slc_v2.run(cfg, 'fine')
 
         # Remove the coarse resample scratch folder
         coarse_resample_scratch_path = pathlib.Path(f"{scratch_path}/coarse_resample_slc")

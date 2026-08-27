@@ -53,6 +53,8 @@ def run(cfg: dict, resample_type: str) -> None:
 
     t_all = perf_counter()
 
+    resample_files_dict = {}
+
     for freq in freq_pols.keys():
 
         # Open offsets
@@ -73,7 +75,7 @@ def run(cfg: dict, resample_type: str) -> None:
             raise ValueError(
                 "resample_type must be 'coarse' or 'fine', instead got "
                 f"{resample_type!r}")
-        
+
         az_off_path = offsets_path / "azimuth.off"
         rg_off_path = offsets_path / "range.off"
 
@@ -91,11 +93,11 @@ def run(cfg: dict, resample_type: str) -> None:
 
         # Get polarization list for which resample SLCs
         pol_list = freq_pols[freq]
-        
+
         info_channel.log(f"Resampling SLC for frequency {freq}.")
         t_freq_elapsed = -perf_counter()
 
-        resample_secondary_rslc_onto_reference(
+        freq_output_files_dict = resample_secondary_rslc_onto_reference(
             ref_file_path=ref_file_path,
             sec_file_path=sec_file_path,
             out_path=resample_slc_scratch_path,
@@ -107,6 +109,7 @@ def run(cfg: dict, resample_type: str) -> None:
             block_size_rg=block_width,
             with_gpu=with_gpu,
         )
+        resample_files_dict[freq] = freq_output_files_dict
 
         t_freq_elapsed += perf_counter()
         info_channel.log(f"successfully ran resample for frequency {freq} in "
@@ -114,6 +117,7 @@ def run(cfg: dict, resample_type: str) -> None:
 
     t_all_elapsed = perf_counter() - t_all
     info_channel.log(f"successfully ran resample in {t_all_elapsed:.3f} seconds")
+    return resample_files_dict
 
 
 def resample_secondary_rslc_onto_reference(
@@ -189,6 +193,8 @@ def resample_secondary_rslc_onto_reference(
         mode='r+',
     )
 
+    output_files_dict = {}
+
     # For each polarization being output, create a GDALRaster to write to it.
     out_writers: list[GDALRaster] = []
     for pol in pols:
@@ -228,6 +234,7 @@ def resample_secondary_rslc_onto_reference(
         fill_value=0.0 + 0.0j,
         with_gpu=with_gpu,
     )
+    return output_files_dict
 
 
 if __name__ == "__main__":

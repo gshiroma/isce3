@@ -163,6 +163,10 @@ runconfig:
       # Geographic-to-radar coordinate transforms
       geo2rdr: include('geo2rdr_options', required=False)
 
+      # Calibration and processing information look-up tables (LUTs)
+      # excluding Doppler
+      lookup_tables: include('lookup_tables_options', required=False)
+
       doppler:
         # Offset between quaternion frame and antenna boresight in degrees.
         azimuth_boresight_deg: num(required=False)
@@ -176,6 +180,9 @@ runconfig:
           range: num(min=0.0, required=False)
           # Lookup table Azimuth spacing in s
           azimuth: num(min=0.0, required=False)
+
+        # Extra margin added to the Doppler LUT
+        margin_in_pixels: include('margin_in_pixels_options', required=False)
 
       # Settings for range compression algorithm.
       rangecomp:
@@ -253,6 +260,13 @@ runconfig:
       # If true, fill transmit gaps with zeros to remove loop-back cal pulses.
       zero_fill_gaps: bool(required=False)
 
+      # Length in meters to divide the valid data polygon into before
+      # rasterization.  Ideally smaller than any changes in the location
+      # of the swath due to range timing updates.
+      mask_polygon_segment_length: num(required=False)
+
+      valid_data_mask: include('mask_options', required=False)
+
       caltone: include('caltone_options', required=False)
 
       # Processing stage switches, mostly for debug.
@@ -280,6 +294,27 @@ notch:
   frequency: num()
   bandwidth: num(min=0.0)
   domain: enum('baseband', 'radio_frequency')
+
+mask_options:
+  # Length in meters to divide the valid data polygon into before
+  # rasterization.  Ideally smaller than any changes in the
+  # location of the swath due to range timing updates.
+  polygon_segment_length: num(min=0, required=False)
+
+  # Number of pulses to ignore when calculating the valid data
+  # region at the end of a fixed-PRF observation.  This is
+  # relevant when a fixed-PRF observation is immediately followed
+  # by a dithered observation, as the dithered pulses in the air
+  # will overlap the last few receive windows of the fixed-PRF
+  # one.
+  num_ignore: num(min=0, required=False)
+
+  # Max allowed time (in seconds) between the last pulse of one
+  # observation and the first pulse of the following observation
+  # for the two to be considered seamless.  Larger raw data gaps
+  # may result in a synthetic aperture being marked invalid in the
+  # RSLC.
+  max_observation_gap: num(min=0, required=False)
 
 caltone_options:
   frequency: num(min=0, required=False)
@@ -314,6 +349,23 @@ geo2rdr_options:
   # Latest time in search interval, in s past orbit reference epoch
   # null for automatic selection
   time_end: num(required=False)
+
+lookup_tables_options:
+  # Downsampling factors with respect to the RSLC grid
+  downsampling_factor:
+    # Downsampling factor in azimuth direction
+    azimuth: int(min=1, required=False)
+    # Downsampling factor in range direction
+    range: int(min=1, required=False)
+
+  # Extra margin added to LUTs
+  margin_in_pixels: include('margin_in_pixels_options', required=False)
+
+margin_in_pixels_options:
+  # Extra margin added to lookup table in azimuth, in pixels.
+  azimuth: int(min=0, required=False)
+  # Extra margin added to lookup table in range, in pixels.
+  range: int(min=0, required=False)
 
 nesz_options:
   # supported noise estimator algorithms:
@@ -359,11 +411,14 @@ rfi_options:
   # RFI detection algorithm. Supported values include:
   #   - 'ST-EVD': slow-time eigenvalue decomposition algorithm
   #   - 'FDNF': frequency domain notch filtering algorithm
+  #   - 'tone-rank': detects RFI in the spectral domain using
+  #     a lifted exponential statistical model.
   # Defaults to 'ST-EVD'.
-  mitigation_algorithm: enum('ST-EVD', 'FDNF', required=False)
+  mitigation_algorithm: enum('ST-EVD', 'FDNF', "tone-rank", required=False)
   # Number of subdivisions in range.  Defaults to 1.
   slow_time_evd: include('slow_time_evd_options', required=False)
   freq_notch_filter: include('freq_notch_filter_options', required=False)
+  tone_rank: include('tone_rank_options', required=False)
   # Number of range samples per range block when data blocking
   # is applied in range direction for sample covariance matrix
   # estimation. It is recommended that this parameter is at least
@@ -397,6 +452,18 @@ slow_time_evd_options:
   # Number of slow-time CPIs grouped together for determining and applying a
   # common EV slope threshold.
   num_cpi_per_threshold_block: int(min=2, required=False)
+  # minimum fraction of samples required for cross-variance terms
+  # of sample covariance matrix
+  off_diag_overlap_ratio: num(min=0.0, required=False)
+  # minimum fraction of samples required for co-variance terms
+  # of sample covariance matrix
+  diag_valid_ratio: num(min=0.0, required=False)
+  #This ratio will be used to determine the minimum number of valid Eigenvalues
+  ##required for a CPI. min_ev_valid_idx = int(np.round(min_rank_frac * cpi_len)) - 1
+  min_rank_frac: num(exclusiveMinimum=0.0, max=1.0, required=False)
+  # radar platform receiver dynamic range, e.g. 50 dB. This is applied as a threshold
+  # to determine if the Eigenvalue under test is meaningfully signficant.
+  rx_dynamic_range_db: num(min=0.0, max=100.0, required=False)
   # Parameters used to adaptively determine RFI eigenvalue difference thresholds
   threshold_hyperparameters: include('rfi_threshold_options', required=False)
 
@@ -448,6 +515,29 @@ rfi_threshold_options:
     # extrapolated.
     y: list(num(min=0), min=2, required=False)
 
+tone_rank_options:
+    # Processing block size [azimuth, range] in samples.
+    block_dims: list(int(min=1), min=2, max=2, required=False)
+    # Target false positive rate for RFI detection, in (0, 1).
+    # Lower values result in more conservative detection (fewer false
+    # alarms but potentially missed RFI).
+    nominal_false_positive_rate: num(min=0.0, max=1.0, required=False)
+    # Quantile in [1-bandwidth, 1) used to estimate the rate parameter
+    # of the lifted exponential distribution. Default is 0.5 (median).
+    reference_quantile: num(min=0.0, max=1.0, required=False)
+    # Whether to attempt linear/nearest-neighbor interpolation for RFI samples.
+    # If False, RFI samples are replaced directly with fill_value.
+    interpolate: bool(required=False)
+    # How to generate fallback values for RFI samples when
+    # interpolation fails or is disabled.
+    # "noise": use random Gaussian noise matched to estimated signal level
+    # "zero": fill with zeros
+    fill_value: enum('noise', 'zero', required=False)
+    # Max portion of a row that can be masked by a TX gap before
+    # its spectrum is considered invalid (0.0: any gap invalidates row,
+    # 1.0: ignore gap mask).
+    max_gap_fraction: num(min=0.0, max=1.0, required=False)
+
 qa_options:
   # For descriptions of all QA parameters, see template runconfig (in `defaults` directory)
   workflows: include('workflows_options', required=False)
@@ -475,6 +565,7 @@ qa_validation_options:
 
 qa_reports_options:
   backscatter_img: include('backscatter_img_options', required=False)
+  browse_latlon: include('browse_latlon_options', required=False)
   histogram: include('histogram_options', required=False)
   range_spectra: include('range_spectra_options', required=False)
   azimuth_spectra: include('azimuth_spectra_options', required=False)
@@ -489,6 +580,10 @@ backscatter_img_options:
   nan_color_in_pdf: str(required=False)
   tile_shape: list(int(min=-1), min=2, max=2, required=False)
   output_individual_pngs: bool(required=False)
+
+browse_latlon_options:
+  output_browse_latlon: bool(required=False)
+  resample: enum('sinc', 'bilinear', 'bicubic', 'nearest', 'biquintic', required=False)
 
 histogram_options:
   decimation_ratio: list(int(min=1), min=2, max=2, required=False)

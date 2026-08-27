@@ -1,9 +1,13 @@
 import os
+import pathlib
 
+import isce3
 import numpy as np
 from isce3.core import LUT2d
 from isce3.product import get_radar_grid_nominal_ground_spacing
+from nisar.products.utils import to_bytes
 from nisar.workflows import geo2rdr, rdr2geo
+from nisar.workflows.compute_stats import compute_stats_real_hdf5_dataset
 from nisar.workflows.h5_prep import add_geolocation_grid_cubes_to_hdf5
 from nisar.workflows.helpers import (get_cfg_freq_pols, get_offset_radar_grid,
                                      get_pixel_offsets_dataset_shape,
@@ -13,8 +17,9 @@ from .dataset_params import DatasetParams, add_dataset_and_attrs
 from .InSAR_base_writer import InSARBaseWriter
 from .product_paths import L1GroupsPaths
 from .units import Units
-from .utils import (extract_datetime_from_string, generate_insar_subswath_mask,
-                    get_geolocation_grid_cube_obj)
+from .utils import (extract_datetime_from_string, generate_dem_rdr,
+                    generate_insar_mask,
+                    get_geolocation_grid_cube_obj, save_to_hdf5_ds)
 
 
 class L1InSARWriter(InSARBaseWriter):
@@ -118,15 +123,15 @@ class L1InSARWriter(InSARBaseWriter):
         geolocation_grid_group['epsg'][...] = \
             geolocation_grid_group['epsg'][()].astype(np.uint32)
         geolocation_grid_group['epsg'].attrs['description'] = \
-            np.bytes_("EPSG code corresponding to the coordinate system"
+            to_bytes("EPSG code corresponding to the coordinate system"
                        " used for representing the geolocation grid")
-        geolocation_grid_group['losUnitVectorX'].attrs['units'] = Units.unitless
-        geolocation_grid_group['losUnitVectorY'].attrs['units'] = Units.unitless
+        geolocation_grid_group['losUnitVectorX'].attrs['units'] = to_bytes(Units.unitless)
+        geolocation_grid_group['losUnitVectorY'].attrs['units'] = to_bytes(Units.unitless)
 
         geolocation_grid_group['alongTrackUnitVectorX'].attrs['units'] = \
-            Units.unitless
+            to_bytes(Units.unitless)
         geolocation_grid_group['alongTrackUnitVectorY'].attrs['units'] = \
-            Units.unitless
+            to_bytes(Units.unitless)
         geolocation_grid_group['heightAboveEllipsoid'][...] = \
             geolocation_grid_group['heightAboveEllipsoid'][()].astype(np.float64)
 
@@ -135,7 +140,7 @@ class L1InSARWriter(InSARBaseWriter):
                                                             'seconds since ')
         if zero_dopp_time_units is not None:
             geolocation_grid_group['zeroDopplerTime'].attrs['units']\
-                = np.bytes_(zero_dopp_time_units)
+                = to_bytes(zero_dopp_time_units)
 
     def add_algorithms_to_procinfo_group(self):
         """
@@ -157,7 +162,7 @@ class L1InSARWriter(InSARBaseWriter):
         interferogram_ds_params = [
             DatasetParams(
                 "commonBandRangeFilterApplied",
-                np.bytes_(str(range_filter)),
+                str(range_filter),
                 (
                     "Flag to indicate if common band range filter has been"
                     " applied"
@@ -165,7 +170,7 @@ class L1InSARWriter(InSARBaseWriter):
             ),
             DatasetParams(
                 "commonBandAzimuthFilterApplied",
-                np.bytes_(str(azimuth_filter)),
+                str(azimuth_filter),
                 (
                     "Flag to indicate if common band azimuth filter has been"
                     " applied"
@@ -173,7 +178,7 @@ class L1InSARWriter(InSARBaseWriter):
             ),
             DatasetParams(
                 "ellipsoidalFlatteningApplied",
-                np.bytes_(str(flatten)),
+                str(flatten),
                 (
                     "Flag to indicate if the interferometric phase has been "
                     "flattened with respect to a zero height ellipsoid"
@@ -181,7 +186,7 @@ class L1InSARWriter(InSARBaseWriter):
             ),
             DatasetParams(
                 "topographicFlatteningApplied",
-                np.bytes_(str(flatten)),
+                str(flatten),
                 (
                     "Flag to indicate if the interferometric phase has been "
                     "flattened with respect to topographic height using a DEM"
@@ -228,9 +233,9 @@ class L1InSARWriter(InSARBaseWriter):
                 "azimuthBandwidth",
             )
             igram_group['azimuthBandwidth'].attrs['description'] = \
-                np.bytes_("Processed azimuth bandwidth for frequency " + \
+                to_bytes("Processed azimuth bandwidth for frequency " + \
                            f"{freq} interferometric layers")
-            igram_group['azimuthBandwidth'].attrs['units'] = Units.hertz
+            igram_group['azimuthBandwidth'].attrs['units'] = to_bytes(Units.hertz)
 
             bandwidth_group.copy(
                 "processedRangeBandwidth",
@@ -238,9 +243,9 @@ class L1InSARWriter(InSARBaseWriter):
                 "rangeBandwidth",
             )
             igram_group['rangeBandwidth'].attrs['description'] = \
-                np.bytes_("Processed slant range bandwidth for frequency " + \
+                to_bytes("Processed slant range bandwidth for frequency " + \
                            f"{freq} interferometric layers")
-            igram_group['rangeBandwidth'].attrs['units'] = Units.hertz
+            igram_group['rangeBandwidth'].attrs['units'] = to_bytes(Units.hertz)
 
             for ds_param in interferogram_ds_params:
                 add_dataset_and_attrs(igram_group, ds_param)
@@ -381,11 +386,11 @@ class L1InSARWriter(InSARBaseWriter):
                                                     'seconds since ')
             if time_str is not None:
                 zero_dopp_time_units = time_str
-            
+
             # Get the azimuth spacing and the ground range spacings at the middle
             # of the swath for the offsets radar grid
-            off_da_center, off_dr_center = get_radar_grid_nominal_ground_spacing(off_radargrid, 
-                                                                                 self.ref_rslc.getOrbit())
+            off_da_center, off_dr_center = get_radar_grid_nominal_ground_spacing(off_radargrid,
+                                                                                 self.ref_orbit)
 
             ds_offsets_params = [
                 DatasetParams(
@@ -397,7 +402,7 @@ class L1InSARWriter(InSARBaseWriter):
                 DatasetParams(
                     "zeroDopplerTime",
                     offset_zero_doppler_time,
-                    "Zero Doppler azimuth time since UTC epoch vector",
+                    "Vector of zero Doppler azimuth times measured relative to a UTC epoch",
                     {'units': zero_dopp_time_units},
                 ),
                 DatasetParams(
@@ -442,37 +447,67 @@ class L1InSARWriter(InSARBaseWriter):
                                     shape=(off_length, off_width),
                                     dtype=np.float32,
                                     description=("Digital Elevation Model (DEM) in radar coordinates."
-                                                 " This dataset is produced using Copernicus WorldDEM-30"
-                                                 " Copyright DLR e.V. 2010-2014 and Copyright Airbus Defence and"
-                                                 " Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA;"
-                                                 " all rights reserved. This dataset is generated by referencing the"
-                                                 " Copernicus DEM elevations to the WGS84 ellipsoid and"
-                                                 " projecting them onto a range/Doppler grid"),
+                                                 " This dataset is generated by referencing the input DEM elevations"
+                                                 " to the WGS84 ellipsoid and projecting them onto a slant range/azimuth grid"
+                                                 ),
                                     units=Units.meter)
+            offset_group['digitalElevationModel'].attrs['disclaimer'] = to_bytes(self.dem_source)
 
-            # temporarily add stats attributes to the 'digitalElevationModel' dataset
-            # TODO: remove this placeholder for setting stats values
-            # to 0.0 once the actual values are being computed.
-            for attr in ['mean_value', 'min_value',
-                         'max_value', 'sample_stddev']:
-                offset_group['digitalElevationModel'].attrs[attr] = 0.0
+            if self.dem_file is not None:
+                threshold = self.cfg['processing']['rdr2geo']['threshold']
+                numiter = self.cfg['processing']['rdr2geo']['numiter']
+                extraiter = self.cfg['processing']['rdr2geo']['extraiter']
+                lines_per_block = self.cfg['processing']['rdr2geo']['lines_per_block']
+
+                scratch_path = pathlib.Path(self.cfg['product_path_group']['scratch_path'])
+                # create seperate directory within scratch dir for rdr2geo run
+                rdr2geo_scratch_path = scratch_path / 'rdr2geo' / f'freq{freq}'
+                rdr2geo_scratch_path.mkdir(parents=True, exist_ok=True)
+                out_dem_rdr_path = rdr2geo_scratch_path / f'{self.product_info.ProductType}_offsets_dem.rdr'
+
+                # check if gpu ok to use
+                use_gpu = isce3.core.gpu_check.use_gpu(self.cfg['worker']['gpu_enabled'],
+                                                       self.cfg['worker']['gpu_id'])
+                if use_gpu:
+                    # Set the current CUDA device.
+                    device = isce3.cuda.core.Device(self.cfg['worker']['gpu_id'])
+                    isce3.cuda.core.set_device(device)
+
+                generate_dem_rdr(off_radargrid, self.ref_orbit, self.dem_file,
+                                 out_dem_rdr_path=str(out_dem_rdr_path),
+                                 use_gpu=use_gpu,threshold=threshold,
+                                 numiter=numiter,
+                                 extraiter=extraiter,
+                                 lines_per_block=lines_per_block)
+                save_to_hdf5_ds(str(out_dem_rdr_path),
+                                offset_group['digitalElevationModel'],
+                                lines_per_block)
+                # Compute the stats
+                compute_stats_real_hdf5_dataset(offset_group['digitalElevationModel'])
+            else:
+                for attr in ['mean_value', 'min_value',
+                            'max_value', 'sample_stddev']:
+                    offset_group['digitalElevationModel'].attrs[attr] = 0.0
 
             # add the subswath mask layer to the pixel offset group
             self._create_2d_dataset(offset_group,
                                     'mask',
                                     shape=(off_length, off_width),
-                                    dtype=np.uint8,
-                                    description=("Mask indicating the subswaths of valid samples in the reference RSLC"
-                                                 " and geometrically-coregistered secondary RSLC."
-                                                 " Each pixel value is a two-digit number:"
-                                                 " the least significant digit represents the"
-                                                 " subswath number of that pixel in the secondary RSLC,"
-                                                 " and the most significant digit represents"
-                                                 " the subswath number of that pixel in the reference RSLC."
-                                                 " A value of '0' in either digit indicates an invalid sample"
-                                                 " in the corresponding RSLC"),
+                                    dtype=np.uint32,
+                                    description=("Mask indicating the subswaths of valid samples and data anomalies"
+                                                 " in the reference RSLC and the geometrically coregistered secondary RSLC."
+                                                 " Each pixel value is encoded as a 32-bit unsigned integer."
+                                                 " Bits 0-7 represent subswath encoding,"
+                                                 " where the most significant digit corresponds to the subswath number of the reference RSLC"
+                                                 " and the least significant digit corresponds to the subswath number of the secondary RSLC;"
+                                                 " a value of 0 in either digit indicates an invalid sample in the corresponding RSLC."
+                                                 " Bits 8-15 represent bitwise anomaly flags for the secondary RSLC,"
+                                                 " and bits 16-23 represent bitwise anomaly flags for the reference RSLC,"
+                                                 " with each bit corresponding to a specific anomaly condition."
+                                                 " A value of 0 in the anomaly bits indicates that no anomaly is detected in the corresponding RSLC."
+                                                 " Bits 24-31 are reserved for future use"),
                                     fill_value=255)
-            offset_group['mask'].attrs['long_name'] = np.bytes_("Valid samples subswath mask")
+            offset_group['mask'].attrs['long_name'] = to_bytes("Valid samples subswath and data anomaly mask")
             offset_group['mask'].attrs['valid_min'] = 0
 
             range_offset_path = \
@@ -497,18 +532,20 @@ class L1InSARWriter(InSARBaseWriter):
                                for az in offset_zero_doppler_time])
 
             offset_group['mask'][...] = \
-                generate_insar_subswath_mask(self.ref_rslc,
-                                             self.sec_rslc,
-                                             range_offset_path,
-                                             azimuth_offset_path,
-                                             freq,
-                                             az_idx,
-                                             rg_idx)
+                generate_insar_mask(self.ref_rslc,
+                                    self.sec_rslc,
+                                    self.ref_h5py_file_obj,
+                                    self.sec_h5py_file_obj,
+                                    range_offset_path,
+                                    azimuth_offset_path,
+                                    freq,
+                                    az_idx,
+                                    rg_idx)
 
         # add the datasets to pixel offsets group
         self._add_datasets_to_pixel_offset_group()
 
-    def add_interferogram_to_swaths_group(self):
+    def add_interferogram_to_swaths_group(self, is_unwrapped=False):
         """
         Add the interferogram group to the swaths group
         """
@@ -559,11 +596,11 @@ class L1InSARWriter(InSARBaseWriter):
                                                     'seconds since ')
             if time_str is not None:
                 zero_dopp_time_units = time_str
-            
+
             # Get the azimuth spacing and the ground range spacings at the middle
             # of the swath for the interferogram radar grid
-            igram_da_center, igram_dr_center = get_radar_grid_nominal_ground_spacing(igram_radargrid, 
-                                                                                     self.ref_rslc.getOrbit())
+            igram_da_center, igram_dr_center = get_radar_grid_nominal_ground_spacing(igram_radargrid,
+                                                                                     self.ref_orbit)
 
             ds_igram_params = [
                 DatasetParams(
@@ -575,7 +612,7 @@ class L1InSARWriter(InSARBaseWriter):
                 DatasetParams(
                     "zeroDopplerTime",
                     igram_zero_doppler_time,
-                    "Zero Doppler azimuth time since UTC epoch vector",
+                    "Vector of zero Doppler azimuth times measured relative to a UTC epoch",
                     {'units': zero_dopp_time_units},
                 ),
                 DatasetParams(
@@ -628,38 +665,81 @@ class L1InSARWriter(InSARBaseWriter):
                                     shape=igram_shape,
                                     dtype=np.float32,
                                     description=("Digital Elevation Model (DEM) in radar coordinates."
-                                                 " This dataset is produced using Copernicus WorldDEM-30"
-                                                 " Copyright DLR e.V. 2010-2014 and Copyright Airbus Defence and"
-                                                 " Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA;"
-                                                 " all rights reserved. This dataset is generated by referencing the"
-                                                 " Copernicus DEM elevations to the WGS84 ellipsoid and"
-                                                 " projecting them onto a range/Doppler grid"),
+                                                 " This dataset is generated by referencing the input DEM elevations"
+                                                 " to the WGS84 ellipsoid and projecting them onto a slant range/azimuth grid"
+                                                 ),
                                     units=Units.meter)
+            igram_group['digitalElevationModel'].attrs['disclaimer'] = to_bytes(self.dem_source)
 
-            # temporarily add stats attributes to the 'digitalElevationModel' dataset
-            # TODO: remove this placeholder for setting stats values
-            # to 0.0 once the actual values are being computed.
-            for attr in ['mean_value', 'min_value',
-                         'max_value', 'sample_stddev']:
-                igram_group['digitalElevationModel'].attrs[attr] = 0.0
+            if self.dem_file is not None:
+                threshold = self.cfg['processing']['rdr2geo']['threshold']
+                numiter = self.cfg['processing']['rdr2geo']['numiter']
+                extraiter = self.cfg['processing']['rdr2geo']['extraiter']
+                lines_per_block = self.cfg['processing']['rdr2geo']['lines_per_block']
+
+                scratch_path = pathlib.Path(self.cfg['product_path_group']['scratch_path'])
+                # create seperate directory within scratch dir for rdr2geo run
+                rdr2geo_scratch_path = scratch_path / 'rdr2geo' / f'freq{freq}'
+                rdr2geo_scratch_path.mkdir(parents=True, exist_ok=True)
+                out_dem_rdr_path = rdr2geo_scratch_path / f'{self.product_info.ProductType}_ifgram_dem.rdr'
+
+                # check if gpu ok to use
+                use_gpu = isce3.core.gpu_check.use_gpu(self.cfg['worker']['gpu_enabled'],
+                                                       self.cfg['worker']['gpu_id'])
+                if use_gpu:
+                    # Set the current CUDA device.
+                    device = isce3.cuda.core.Device(self.cfg['worker']['gpu_id'])
+                    isce3.cuda.core.set_device(device)
+
+                generate_dem_rdr(igram_radargrid, self.ref_orbit, self.dem_file,
+                                 out_dem_rdr_path=str(out_dem_rdr_path),
+                                 use_gpu=use_gpu, threshold=threshold,
+                                 numiter=numiter,
+                                 extraiter=extraiter,
+                                 lines_per_block=lines_per_block)
+                save_to_hdf5_ds(str(out_dem_rdr_path),
+                                igram_group['digitalElevationModel'],
+                                lines_per_block)
+                # Compute the stats
+                compute_stats_real_hdf5_dataset(igram_group['digitalElevationModel'])
+            else:
+                for attr in ['mean_value', 'min_value',
+                            'max_value', 'sample_stddev']:
+                    igram_group['digitalElevationModel'].attrs[attr] = 0.0
+
+            mask_description_common = (
+                "Mask indicating the subswaths of valid samples and data anomalies"
+                " in the reference RSLC and the geometrically coregistered secondary RSLC."
+                " Each pixel value is encoded as a 32-bit unsigned integer."
+                " Bits 0-7 represent subswath encoding,"
+                " where the most significant digit corresponds to the subswath number of the reference RSLC"
+                " and the least significant digit corresponds to the subswath number of the secondary RSLC;"
+                " a value of 0 in either digit indicates an invalid sample in the corresponding RSLC."
+                " Bits 8-15 represent bitwise anomaly flags for the secondary RSLC,"
+                " and bits 16-23 represent bitwise anomaly flags for the reference RSLC,"
+                " with each bit corresponding to a specific anomaly condition."
+                " A value of 0 in the anomaly bits indicates that no anomaly is detected in the corresponding RSLC."
+            )
+            mask_description_no_iono =  " Bits 24-31 are reserved for future use"
+            mask_description_iono = (
+                " Bit 24 indicates a bit mask for ionospheric phase mask used during filtering of ionospheric phase."
+                " This ionospheric phase mask indicates pixels which were masked out and filled with interpolated data."
+                " Bits 25-31 are reserved for future use")
+
+            mask_description = (
+                mask_description_common + mask_description_iono
+                if is_unwrapped else mask_description_common + mask_description_no_iono
+            )
 
             # add the subswath mask layer to the interferogram group
             self._create_2d_dataset(igram_group,
                                     'mask',
                                     shape=igram_shape,
-                                    dtype=np.uint8,
-                                    description=("Mask indicating the subswaths of valid samples in the reference RSLC"
-                                                 " and geometrically-coregistered secondary RSLC."
-                                                 " Each pixel value is a two-digit number:"
-                                                 " the least significant digit represents the"
-                                                 " subswath number of that pixel in the secondary RSLC,"
-                                                 " and the most significant digit represents"
-                                                 " the subswath number of that pixel in the reference RSLC."
-                                                 " A value of '0' in either digit indicates an invalid sample"
-                                                 " in the corresponding RSLC"),
+                                    dtype=np.uint32,
+                                    description=mask_description,
                                     fill_value=255)
             igram_group['mask'].attrs['valid_min'] = 0
-            igram_group['mask'].attrs['long_name'] = np.bytes_("Valid samples subswath mask")
+            igram_group['mask'].attrs['long_name'] = to_bytes("Valid samples subswath and data anomaly mask")
 
             range_offset_path = \
                 os.path.join(self.topo_path,
@@ -683,13 +763,15 @@ class L1InSARWriter(InSARBaseWriter):
                                for az in igram_zero_doppler_time])
 
             igram_group['mask'][...] = \
-                generate_insar_subswath_mask(self.ref_rslc,
-                                             self.sec_rslc,
-                                             range_offset_path,
-                                             azimuth_offset_path,
-                                             freq,
-                                             az_idx,
-                                             rg_idx)
+                generate_insar_mask(self.ref_rslc,
+                                    self.sec_rslc,
+                                    self.ref_h5py_file_obj,
+                                    self.sec_h5py_file_obj,
+                                    range_offset_path,
+                                    azimuth_offset_path,
+                                    freq,
+                                    az_idx,
+                                    rg_idx)
 
             # add the interferogram and pixelOffsets groups to the polarization group
             for pol in pol_list:
@@ -735,7 +817,7 @@ class L1InSARWriter(InSARBaseWriter):
 
             list_of_pols = DatasetParams(
                 "listOfPolarizations",
-                np.bytes_(pol_list),
+                to_bytes(pol_list),
                 f"List of processed polarization layers with frequency {freq}",
             )
             add_dataset_and_attrs(swaths_freq_group, list_of_pols)
@@ -750,8 +832,8 @@ class L1InSARWriter(InSARBaseWriter):
 
             # Add the description and units
             cfreq = swaths_freq_group["centerFrequency"]
-            cfreq.attrs['description'] = np.bytes_("Center frequency of"
+            cfreq.attrs['description'] = to_bytes("Center frequency of"
                                                     " the processed image in hertz")
-            cfreq.attrs['units'] = Units.hertz
+            cfreq.attrs['units'] = to_bytes(Units.hertz)
 
         self.add_pixel_offsets_to_swaths_group()

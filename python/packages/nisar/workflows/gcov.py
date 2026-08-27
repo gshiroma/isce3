@@ -447,6 +447,15 @@ def _run(cfg, raster_scratch_dir):
 
     orbit = None
 
+    # dictionary to store timing corrections, which will be later saved in the
+    # metadata
+    timing_corrections_dict = {
+        'az_correction': {},
+        'rg_correction': {},
+    }
+
+    rslc = SLC(hdf5file=input_hdf5)
+
     for frequency, input_pol_list in freq_pols.items():
 
         # do no processing if no polarizations specified for current frequency
@@ -555,10 +564,10 @@ def _run(cfg, raster_scratch_dir):
         # get azimuth ionospheric delay LUTs (if applicable)
         center_freq = \
             slc.getSwathMetadata(frequency).processed_center_frequency
-
         if apply_azimuth_ionospheric_delay_correction:
             az_correction = tec_lut2d_from_json_az(tec_file, center_freq,
                                                    orbit, radar_grid)
+            timing_corrections_dict['az_correction'][frequency] = az_correction
             optional_geo_kwargs['az_time_correction'] = az_correction
 
         # get slant-range ionospheric delay LUTs (if applicable)
@@ -566,9 +575,10 @@ def _run(cfg, raster_scratch_dir):
             rg_correction = tec_lut2d_from_json_srg(tec_file, center_freq,
                                                     orbit, radar_grid,
                                                     zero_doppler, dem_file)
+            timing_corrections_dict['rg_correction'][frequency] = rg_correction
             optional_geo_kwargs['slant_range_correction'] = rg_correction
 
-        root_ds = f'/science/LSAR/GCOV/grids/frequency{frequency}'
+        root_ds = f'{rslc.RootPath}/GCOV/grids/frequency{frequency}'
 
         optional_geo_kwargs['geogrid_upsampling'] = geogrid_upsampling
         optional_geo_kwargs['abs_cal_factor'] = abs_cal_factor
@@ -622,7 +632,7 @@ def _run(cfg, raster_scratch_dir):
                 length=int(radar_grid_cubes_geogrid.length),
                 epsg=radar_grid_cubes_geogrid.epsg)
 
-            cube_group_name = '/science/LSAR/GCOV/metadata/radarGrid'
+            cube_group_name = f'{rslc.RootPath}/GCOV/metadata/radarGrid'
             native_doppler = slc.getDopplerCentroid()
             '''
             The native-Doppler LUT bounds error is turned off to
@@ -659,7 +669,7 @@ def _run(cfg, raster_scratch_dir):
                 compression_level=radar_grid_cubes_compression_level,
                 shuffle_filter=radar_grid_cubes_shuffle_filter)
 
-    return output_files_list, orbit
+    return output_files_list, orbit, timing_corrections_dict
 
 
 if __name__ == "__main__":
@@ -677,9 +687,12 @@ if __name__ == "__main__":
     if os.path.isfile(sas_output_file):
         os.remove(sas_output_file)
 
-    output_files_list, orbit = run(gcov_runconfig.cfg)
+    output_files_list, orbit, timing_corrections_dict = \
+        run(gcov_runconfig.cfg)
 
-    with GcovWriter(runconfig=gcov_runconfig, orbit=orbit) as gcov_obj:
+    with GcovWriter(runconfig=gcov_runconfig, orbit=orbit,
+                    timing_corrections_dict=timing_corrections_dict) \
+            as gcov_obj:
         gcov_obj.populate_metadata()
 
     info_channel.log('output file(s):')

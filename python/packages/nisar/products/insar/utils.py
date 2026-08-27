@@ -3,6 +3,8 @@ from datetime import datetime
 from typing import Optional
 
 import h5py
+import isce3
+import journal
 import numpy as np
 from isce3.core import crop_external_orbit
 from nisar.products.readers import SLC
@@ -370,16 +372,140 @@ def _compute_subswath_mask_id(azi_idx,
 
     return subswath_mask_id
 
-def generate_insar_subswath_mask(ref_rslc_obj,
-                                 sec_rslc_obj,
-                                 range_offset_path,
-                                 azimuth_offset_path,
-                                 freq,
-                                 azi_idx_arr,
-                                 rg_idx_arr):
+def save_to_hdf5_ds(input_file_path,
+                    hdf5_ds_obj,
+                    lines_per_block = 1000):
+    """
+    Save the data to the HDF5 dataset
+
+    Parameters
+    ---------
+    input_file_path : str
+        Path of the input file
+    hdf5_ds_obj : h5py.Dataset
+        The HDF5 dataset object
+    lines_per_block : integer (default: 1000)
+         Lines per block to write the data to the hard drive
+    """
+
+    input_src = gdal.Open(input_file_path)
+    width = input_src.RasterXSize
+    length = input_src.RasterYSize
+
+    # Write data block by block
+    for line in range(0, length, lines_per_block):
+        line_blocks = lines_per_block
+        if (line + lines_per_block) > length:
+            line_blocks = length - line
+        data = input_src.GetRasterBand(1).ReadAsArray(0,line, width, line_blocks)
+        hdf5_ds_obj.write_direct(data,
+                                 dest_sel=np.s_[line : line + line_blocks, : width])
+
+    input_src = None
+
+def generate_dem_rdr(radar_grid_obj,
+                     orbit_obj,
+                     dem_file,
+                     out_dem_rdr_path,
+                     use_gpu = True,
+                     dem_interp_method = 'BIQUINTIC',
+                     threshold = 1.0e-7,
+                     numiter = 25,
+                     extraiter = 10,
+                     lines_per_block = 1000):
+    """
+    Generate the DEM in radar grid
+
+    Parameters
+    ---------
+    radar_grid_obj : isce3.product.RadarGridParameters
+        The radar grid object for the reference RSLC
+    orbit_obj : isce3.core.Orbit
+        The SLC object for the secondary RSLC
+    dem_file  : str
+        Input DEM file in geocoded coordinates
+    out_dem_rdr_path : str
+        output path of the DEM in radar grid
+    use_gpu : boolean (default: True)
+        Indicator to use the GPU for rdr2geo computations
+    dem_interp_method : str (default: BIQUINTIC)
+        DEM interpolation method, one of 'BILINEAR', 'BICUBIC', 'NEAREST', and 'BIQUINTIC'
+    threshold : float (default: 1.0e-7)
+        The rdr2geo absolute slant range convergence tolerance (m)
+    numiter : integer (default: 25)
+        Maximum number of primary Newton-Raphson iterations
+    extraiter : integer (default: 10)
+         Maximum number of secondary iterations
+    lines_per_block : integer (default: 1000)
+         Lines per block to run rdr2geo
+    """
+
+    error_journal = journal.error('utils.generate_insar_dem')
+    grid_doppler = isce3.core.LUT2d()
+
+    dem_raster = isce3.io.Raster(dem_file)
+    if dem_raster is None:
+        err_str = f'Can not open the DEM file {dem_raster}'
+        error_journal.log(err_str)
+        raise ValueError(err_str)
+    epsg = dem_raster.get_epsg()
+    proj = isce3.core.make_projection(epsg)
+    ellipsoid = proj.ellipsoid
+
+    try:
+         interp_method = getattr(isce3.core.DataInterpMethod, dem_interp_method)
+    except AttributeError:
+         err_str = f"invalid interpolation method: {dem_interp_method}"
+         error_journal.log(err_str)
+         raise ValueError(err_str)
+
+    # Use the GPU or CPU version
+    if use_gpu:
+        Rdr2Geo = isce3.cuda.geometry.Rdr2Geo
+    else:
+        Rdr2Geo = isce3.geometry.Rdr2Geo
+
+    # Create the DEM in the range Doppler coordinates
+    dem_src = isce3.io.Raster(out_dem_rdr_path,
+                              radar_grid_obj.width,
+                              radar_grid_obj.length, 1,
+                              gdal.GDT_Float32, 'ENVI')
+
+    # Build the Rdr2Geo object
+    rdr2geo_obj = Rdr2Geo(radar_grid_obj, orbit_obj, ellipsoid, grid_doppler,
+                          dem_interp_method=interp_method,
+                          threshold=threshold, numiter=numiter,
+                          extraiter=extraiter,
+                          lines_per_block=lines_per_block)
+
+    x_raster, y_raster, incidence_raster,\
+        heading_raster, local_incidence_raster, local_psi_raster,\
+            simulated_amplitude_raster, shadow_raster,\
+                ground_to_sat_x_ratser, ground_to_sat_y_raster= [None] * 10
+    rdr2geo_obj.topo(dem_raster, x_raster, y_raster, dem_src,
+                     incidence_raster, heading_raster, local_incidence_raster,
+                     local_psi_raster, simulated_amplitude_raster,
+                     shadow_raster,
+                     ground_to_sat_x_ratser, ground_to_sat_y_raster)
+
+    # Clean the memory
+    dem_raster = None
+    rdr2geo_obj = None
+    dem_src = None
+
+
+def generate_insar_mask(ref_rslc_obj,
+                        sec_rslc_obj,
+                        ref_rslc_h5_obj,
+                        sec_rslc_h5_obj,
+                        range_offset_path,
+                        azimuth_offset_path,
+                        freq,
+                        azi_idx_arr,
+                        rg_idx_arr):
 
     """
-    Generate the InSAR subswath 2d array mask
+    Generate the InSAR 2d array mask
 
     Parameters
     ---------
@@ -401,11 +527,12 @@ def generate_insar_subswath_mask(ref_rslc_obj,
     Returns
     ----------
     numpy.ndarray
-        subswath mask at a given frequency
+        mask at a given frequency
     """
 
     # Reference and Secondary RSLC files
     ref_swath = ref_rslc_obj.getSwathMetadata(freq)
+    sec_swath = sec_rslc_obj.getSwathMetadata(freq)
     ref_subswaths = ref_rslc_obj.getSwathMetadata(freq).sub_swaths()
     sec_subswaths = sec_rslc_obj.getSwathMetadata(freq).sub_swaths()
 
@@ -416,7 +543,22 @@ def generate_insar_subswath_mask(ref_rslc_obj,
     range_offset_band = src_range_offset.GetRasterBand(1)
     azimuth_offset_band = src_azimuth_offset.GetRasterBand(1)
 
-    subswath_mask = []
+    # Load the input data exception mask
+    input_exception_mask_path = \
+        lambda swath: f"{swath}/frequency{freq}/inputDataExceptionMask"
+    def _load_exception_mask(h5_obj, rslc_obj, swath):
+        path = input_exception_mask_path(rslc_obj.SwathPath)
+        return h5_obj[path][()].astype(np.uint8) if path in h5_obj \
+            else np.zeros((swath.lines, swath.samples), dtype=np.uint8)
+
+    ref_input_exception_mask = _load_exception_mask(ref_rslc_h5_obj,
+                                                    ref_rslc_obj,
+                                                    ref_swath)
+    sec_input_exception_mask = _load_exception_mask(sec_rslc_h5_obj,
+                                                    sec_rslc_obj,
+                                                    sec_swath)
+
+    mask = []
     for i in azi_idx_arr:
         # Check if the azimuth index is within the radar grid
         if i >= 0 and i < ref_swath.lines:
@@ -431,8 +573,13 @@ def generate_insar_subswath_mask(ref_rslc_obj,
                                                 ref_swath.samples,
                                                 1)
             for j in rg_idx_arr:
-                # Initialize the subswath mask id to be 0
+
+                # Initialize the all mask ids to be 0
+                mask_id = 0
                 subswath_mask_id = 0
+                ref_input_exception_mask_id = 0
+                sec_input_exception_mask_id = 0
+
                 # Check if the range index is within the swath
                 if j >= 0 and j < ref_swath.samples:
                     subswath_mask_id =  _compute_subswath_mask_id(int(i),int(j),
@@ -440,12 +587,30 @@ def generate_insar_subswath_mask(ref_rslc_obj,
                                             range_off[0,int(j)],
                                             ref_subswaths,
                                             sec_subswaths)
-                subswath_mask.append(subswath_mask_id)
+
+                    # reference RSLC input exception mask id
+                    ref_input_exception_mask_id = ref_input_exception_mask[int(i),int(j)] << 16
+
+                    # secondary RSLC input  exception mask id
+                    sec_i = round(i + azimuth_off[0,int(j)])
+                    sec_j = round(j + range_off[0,int(j)])
+                    if ((sec_i >=0 and sec_i < sec_swath.lines) and
+                        (sec_j >=0 and sec_j < sec_swath.samples)):
+                        sec_input_exception_mask_id = sec_input_exception_mask[sec_i,sec_j] << 8
+
+                    # mask id
+                    mask_id = subswath_mask_id | ref_input_exception_mask_id | sec_input_exception_mask_id
+
+                # append the mask id
+                mask.append(mask_id)
+
         # The azimuth index is not in the radar grid meaning no subswath mask
         else:
-            subswath_mask += [0] * len(rg_idx_arr)
+            mask += [0] * len(rg_idx_arr)
 
-    return np.array(subswath_mask).reshape(
+    del ref_input_exception_mask
+    del sec_input_exception_mask
+
+    return np.array(mask).reshape(
         (len(azi_idx_arr),
-         len(rg_idx_arr))).astype(np.uint8)
-
+         len(rg_idx_arr))).astype(np.uint32)

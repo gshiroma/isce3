@@ -10,6 +10,7 @@
 
 #include <isce3/core/Projections.h>
 #include <isce3/io/Raster.h>
+#include <iostream>
 
 /** Set EPSG code for input DEM */
 void isce3::geometry::DEMInterpolator::epsgCode(int epsgcode) {
@@ -55,6 +56,10 @@ isce3::error::ErrorCode isce3::geometry::DEMInterpolator::loadDEM(
     int epsgcode = demRaster.getEPSG();
     _epsgcode = epsgcode;
     _proj = isce3::core::makeProjection(epsgcode);
+
+    std::cout << "55555 (inside loadDEM())" << x0 << std::endl;
+    std::cout << "dem_y0: " << dem_y0 << std::endl;
+    std::cout << "dem_x0: " << dem_x0 << std::endl;
 
     /* If DEM in geographic coordinates (i.e. EPSG is 4326),
        we need to check for DEM file discontinuity (DFD) around dateline
@@ -124,9 +129,17 @@ isce3::error::ErrorCode isce3::geometry::DEMInterpolator::loadDEM(
         }
     }
 
+    std::cout << "7777777 (calling loadDEM())" << x0 << std::endl;
+    std::cout << "min_x: " << min_x << std::endl;
+    std::cout << "max_x: " << max_x << std::endl;
+
     // Compute ending coordinate at pixels edge
     const double dem_yf = dem_y0 + demRaster.length() * delta_y;
     const double dem_xf = dem_x0 + demRaster.width() * delta_x;
+
+    std::cout << "888888 (inside loadDEM())" << x0 << std::endl;
+    std::cout << "dem_yf: " << dem_yf << std::endl;
+    std::cout << "dem_xf: " << dem_xf << std::endl;
 
     /*
         Next, we make sure that the user-provided and DEM longitudes

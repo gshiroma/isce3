@@ -231,6 +231,8 @@ isce3::error::ErrorCode loadDemFromProj(
         }
     }
 
+    std::cout << std::setprecision(17);
+
     std::cout << "2222222222222 (before adding margin)" << std::endl;
     std::cout << "min_x: " << min_x << std::endl;
     std::cout << "max_x: " << max_x << std::endl;

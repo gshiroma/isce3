@@ -39,6 +39,8 @@ isce3::error::ErrorCode isce3::geometry::DEMInterpolator::loadDEM(
     double geotransform[6];
     demRaster.getGeoTransform(geotransform);
 
+    std::cout << std::setprecision(17);
+
     std::cout << "55555 (inside loadDEM())" << std::endl;
     std::cout << "geotransform[0]: " << geotransform[0]<< std::endl;
     std::cout << "geotransform[1]: " << geotransform[1]<< std::endl;
@@ -131,8 +133,12 @@ isce3::error::ErrorCode isce3::geometry::DEMInterpolator::loadDEM(
         std::cout << "ccccc (inside loadDEM())" << std::endl;
         std::cout << "min_x: " << min_x << std::endl;
         std::cout << "max_x: " << max_x << std::endl;
-        // make sure that both coordinates are greater than -180 - delta_x
-        if (min_x < -180 - delta_x || max_x < -180 - delta_x) {
+
+        // Shift both coordinates by 360 degrees if needed to make them
+        // greater than -180 - delta_x, but only if the shifted range
+        // intersects the DEM extent (`dem_xf`).
+        if (((min_x < -180 - delta_x) && (min_x + 360 < dem_xf))
+            || max_x < -180 - delta_x) {
             min_x += 360;
             max_x += 360;
         }

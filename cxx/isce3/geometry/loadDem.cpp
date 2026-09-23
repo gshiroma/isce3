@@ -231,7 +231,7 @@ isce3::error::ErrorCode loadDemFromProj(
         }
     }
 
-    std::cout << "2222222222222 (before adding margin)" << x0 << std::endl;
+    std::cout << "2222222222222 (before adding margin)" << std::endl;
     std::cout << "min_x: " << min_x << std::endl;
     std::cout << "max_x: " << max_x << std::endl;
     std::cout << "min_y: " << min_y << std::endl;
@@ -245,7 +245,7 @@ isce3::error::ErrorCode loadDemFromProj(
     min_x -= margin_x;
     max_x += margin_x;
 
-    std::cout << "3333333333 (after adding margin)" << x0 << std::endl;
+    std::cout << "3333333333 (after adding margin)" << std::endl;
     std::cout << "min_x: " << min_x << std::endl;
     std::cout << "max_x: " << max_x << std::endl;
     std::cout << "min_y: " << min_y << std::endl;
@@ -258,7 +258,7 @@ isce3::error::ErrorCode loadDemFromProj(
         max_y = std::clamp(max_y, -90.0, 90.0);
     }
 
-    std::cout << "4444444 (calling loadDEM())" << x0 << std::endl;
+    std::cout << "4444444 (calling loadDEM())" << std::endl;
     std::cout << "min_x: " << min_x << std::endl;
     std::cout << "max_x: " << max_x << std::endl;
     std::cout << "min_y: " << min_y << std::endl;

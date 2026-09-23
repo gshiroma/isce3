@@ -57,7 +57,7 @@ isce3::error::ErrorCode isce3::geometry::DEMInterpolator::loadDEM(
     _epsgcode = epsgcode;
     _proj = isce3::core::makeProjection(epsgcode);
 
-    std::cout << "55555 (inside loadDEM())" << x0 << std::endl;
+    std::cout << "55555 (inside loadDEM())" << std::endl;
     std::cout << "dem_y0: " << dem_y0 << std::endl;
     std::cout << "dem_x0: " << dem_x0 << std::endl;
 
@@ -129,7 +129,7 @@ isce3::error::ErrorCode isce3::geometry::DEMInterpolator::loadDEM(
         }
     }
 
-    std::cout << "7777777 (calling loadDEM())" << x0 << std::endl;
+    std::cout << "7777777 (calling loadDEM())" << std::endl;
     std::cout << "min_x: " << min_x << std::endl;
     std::cout << "max_x: " << max_x << std::endl;
 
@@ -137,7 +137,7 @@ isce3::error::ErrorCode isce3::geometry::DEMInterpolator::loadDEM(
     const double dem_yf = dem_y0 + demRaster.length() * delta_y;
     const double dem_xf = dem_x0 + demRaster.width() * delta_x;
 
-    std::cout << "888888 (inside loadDEM())" << x0 << std::endl;
+    std::cout << "888888 (inside loadDEM())" << std::endl;
     std::cout << "dem_yf: " << dem_yf << std::endl;
     std::cout << "dem_xf: " << dem_xf << std::endl;
 

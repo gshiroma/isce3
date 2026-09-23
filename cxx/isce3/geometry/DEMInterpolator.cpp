@@ -77,6 +77,8 @@ isce3::error::ErrorCode isce3::geometry::DEMInterpolator::loadDEM(
     std::cout << "55555 (inside loadDEM())" << std::endl;
     std::cout << "dem_y0: " << dem_y0 << std::endl;
     std::cout << "dem_x0: " << dem_x0 << std::endl;
+    std::cout << "dem_yf: " << dem_yf << std::endl;
+    std::cout << "dem_xf: " << dem_xf << std::endl;
 
     /* If DEM in geographic coordinates (i.e. EPSG is 4326),
        we need to check for DEM file discontinuity (DFD) around dateline

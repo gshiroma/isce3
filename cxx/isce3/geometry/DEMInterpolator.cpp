@@ -65,6 +65,10 @@ isce3::error::ErrorCode isce3::geometry::DEMInterpolator::loadDEM(
     const double dem_y0 = geotransform[3];
     double dem_x0 = geotransform[0];
 
+    // Compute ending coordinate at pixels edge
+    const double dem_yf = dem_y0 + demRaster.length() * delta_y;
+    const double dem_xf = dem_x0 + demRaster.width() * delta_x;
+
     //Initialize projection
     int epsgcode = demRaster.getEPSG();
     _epsgcode = epsgcode;
@@ -170,10 +174,6 @@ isce3::error::ErrorCode isce3::geometry::DEMInterpolator::loadDEM(
     std::cout << "7777777 (calling loadDEM())" << std::endl;
     std::cout << "min_x: " << min_x << std::endl;
     std::cout << "max_x: " << max_x << std::endl;
-
-    // Compute ending coordinate at pixels edge
-    const double dem_yf = dem_y0 + demRaster.length() * delta_y;
-    const double dem_xf = dem_x0 + demRaster.width() * delta_x;
 
     std::cout << "888888 (inside loadDEM())" << std::endl;
     std::cout << "dem_yf: " << dem_yf << std::endl;

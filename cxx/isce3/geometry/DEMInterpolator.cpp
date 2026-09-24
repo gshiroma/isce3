@@ -129,9 +129,13 @@ isce3::error::ErrorCode isce3::geometry::DEMInterpolator::loadDEM(
         std::cout << "max_x: " << max_x << std::endl;
 
         /* Wrap equally `min_x` and `max_x` so that `max_x` is within
-        longitudes [-180 - delta_x, 360 + delta_x] */
-        if (min_x < -180 - delta_x || max_x < -180 - delta_x ||
-                max_x > 360 + delta_x) {
+        longitudes [-180 - delta_x, 360 + delta_x].
+        
+        For `min_x < -180 - delta_x`, only wrap if the wrapped range intersects
+        the DEM extent.
+        */
+        if (((min_x < -180 - delta_x) && (min_x + 360 < dem_xf)) ||
+                max_x < -180 - delta_x || max_x > 360 + delta_x) {
             double n_wraps = std::floor(max_x / 360);
             min_x -= n_wraps * 360;
             max_x -= n_wraps * 360;
@@ -143,8 +147,8 @@ isce3::error::ErrorCode isce3::geometry::DEMInterpolator::loadDEM(
         // Shift both coordinates by 360 degrees if needed to make them
         // greater than -180 - delta_x, but only if the shifted range
         // intersects the DEM extent (`dem_xf`).
-        if (((min_x < -180 - delta_x) && (min_x + 360 < dem_xf))
-            || max_x < -180 - delta_x) {
+        if (((min_x < -180 - delta_x) && (min_x + 360 < dem_xf)) ||
+                max_x < -180 - delta_x) {
             min_x += 360;
             max_x += 360;
         }

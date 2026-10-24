@@ -42,6 +42,7 @@ geocode/geocode.cpp
 geocode/GeocodeSlc.cpp
 geometry/boundingbox.cpp
 geometry/DEMInterpolator.cpp
+geometry/ProjectSlantRange.cpp
 geocode/GeocodeCov.cpp
 geocode/GeocodePolygon.cpp
 geometry/geometry.cpp

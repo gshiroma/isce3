@@ -47,6 +47,7 @@ geocode/geocodeSlc.cpp
 geometry/DEMInterpolator.cpp
 geometry/loadDem.cpp
 geometry/Geo2rdr.cpp
+geometry/ProjectSlantRange.cpp
 geocode/GeocodeCov.cpp
 geocode/GeocodePolygon.cpp
 geometry/geo2rdr_roots.cpp

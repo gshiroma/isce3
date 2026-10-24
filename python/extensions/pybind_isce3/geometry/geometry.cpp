@@ -12,6 +12,7 @@
 #include "ltpcoordinates.h"
 #include "pntintersect.h"
 #include "lookIncFromSr.h"
+#include "ProjectSlantRange.h"
 
 namespace py = pybind11;
 
@@ -32,6 +33,14 @@ void addsubmodule_geometry(py::module & m)
         pyGeo2RdrParams(geometry, "Geo2RdrParams");
     py::class_<isce3::geometry::detail::Rdr2GeoParams>
         pyRdr2GeoParams(geometry, "Rdr2GeoParams");
+    py::class_<isce3::geometry::ProjectSlantRange<float>>
+        pyProjectSlantRangeFloat32(geometry, "ProjectSlantRangeFloat32");
+    py::class_<isce3::geometry::ProjectSlantRange<double>>
+        pyProjectSlantRangeFloat64(geometry, "ProjectSlantRangeFloat64");
+    py::class_<isce3::geometry::ProjectSlantRange<std::complex<float>>>
+        pyProjectSlantRangeCFloat32(geometry, "ProjectSlantRangeCFloat32");
+    py::class_<isce3::geometry::ProjectSlantRange<std::complex<double>>>
+        pyProjectSlantRangeCFloat64(geometry, "ProjectSlantRangeCFloat64");
 
     // forward declare bound enums
     py::enum_<isce3::geometry::rtcInputTerrainRadiometry>
@@ -57,6 +66,11 @@ void addsubmodule_geometry(py::module & m)
     addbinding(pyRadarGridBoundingBox);
     addbinding(pyGeo2RdrParams);
     addbinding(pyRdr2GeoParams);
+
+    addbinding(pyProjectSlantRangeFloat32);
+    addbinding(pyProjectSlantRangeFloat64);
+    addbinding(pyProjectSlantRangeCFloat32);
+    addbinding(pyProjectSlantRangeCFloat64);
 
     addbinding_apply_rtc(geometry);
     addbinding_compute_rtc(geometry);
